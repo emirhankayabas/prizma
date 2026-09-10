@@ -1,0 +1,17 @@
+# Satır sonlarını depoda LF tut — Windows'ta çalışırken çalışma kopyası CRLF kalır,
+# ama depoda tutarlı olur ve dosyalar başka makinede baştan sona "değişmiş" görünmez.
+* text=auto eol=lf
+
+# Unity YAML dosyaları (sahne, prefab, asset, meta) metin olarak ele alınsın.
+*.unity   text eol=lf
+*.prefab  text eol=lf
+*.asset   text eol=lf
+*.mat     text eol=lf
+*.meta    text eol=lf
+*.cs      text eol=lf diff=csharp
+
+# İkili dosyalar — dokunma.
+*.ttf     binary
+*.otf     binary
+*.png     binary
+*.wlt     binary

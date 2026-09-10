@@ -1,0 +1,56 @@
+# ---------------------------------------------------------------- Unity
+# Üretilen/önbellek klasörleri: Unity bunları projeden yeniden kurar.
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+/[Mm]emoryCaptures/
+/[Rr]ecordings/
+
+# Asset paketleri ve otomatik indirilen araçlar
+/[Aa]ssets/AssetStoreTools*
+/[Aa]ssets/Plugins/Editor/JetBrains*
+
+# ---------------------------------------------------------------- IDE
+.vs/
+.vscode/
+.idea/
+.gradle/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# ---------------------------------------------------------------- OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------- Build ciktilari
+*.apk
+*.aab
+*.unitypackage
+*.app
+crashlytics-build.properties
+/[Ss]treamingAssets/aa.meta
+/[Ss]treamingAssets/aa/*
+
+# Unity'nin cokme/tani ciktilari
+sysinfo.txt
+
+# ---------------------------------------------------------------- Claude Code
+# Makineye özel ayarlar. Paylaşılacak ayar varsa .claude/settings.json kullan.
+.claude/settings.local.json
