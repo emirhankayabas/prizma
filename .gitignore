@@ -59,3 +59,7 @@ sysinfo.txt
 /Builds/
 /.utmp/
 *.slnx
+
+# Build sirasinda test paketinin urettigi gecici dosyalar
+/Assets/Resources/PerformanceTestRunInfo.json*
+/Assets/Resources/PerformanceTestRunSettings.json*
