@@ -29,7 +29,7 @@ namespace BlockPuzzle.Game
             title.rectTransform.anchoredPosition = new Vector2(0f, Design.Space4);
             UiBuilder.TextShadow(title, 0.4f, -0.3f, 0.45f);
 
-            var tagline = UiBuilder.Label(_titleGroup, "Tagline", GameTagline, Design.Label, Design.TextTertiary,
+            var tagline = UiBuilder.Label(_titleGroup, "Tagline", GameTagline, Design.Label, Design.TextOnGround,
                 Design.FontMedium, tracking: Design.TrackingLabel);
             tagline.rectTransform.anchoredPosition = new Vector2(0f, -Design.Space5);
 
@@ -141,8 +141,9 @@ namespace BlockPuzzle.Game
 
             var close = UiBuilder.Button(content, "Close", new Vector2(420f, 140f), UiButton.Style.Primary,
                 "TAMAM", Design.Headline);
-            close.Rect.anchoredPosition = new Vector2(0f, -370f);
             close.Clicked += () => { Audio.PlayClick(); App.CloseModal(); };
+
+            ModalCard.StackFromBottom(content, Design.Space3, close.Rect);
         }
 
         /// <summary>Builds an icon plus label, and returns the icon so callers can swap it later.</summary>
@@ -213,18 +214,17 @@ namespace BlockPuzzle.Game
 
             var resume = UiBuilder.Button(content, "Resume", new Vector2(600f, 156f), UiButton.Style.Primary,
                 "DEVAM ET", Design.Headline);
-            resume.Rect.anchoredPosition = new Vector2(0f, 40f);
             resume.Clicked += () => { Audio.PlayClick(); App.CloseModal(); };
 
             var settings = UiBuilder.Button(content, "Settings", new Vector2(600f, 136f), UiButton.Style.Secondary,
                 "AYARLAR", Design.Body);
-            settings.Rect.anchoredPosition = new Vector2(0f, -125f);
             settings.Clicked += () => { Audio.PlayClick(); App.OpenSettings(); };
 
             var quit = UiBuilder.Button(content, "Quit", new Vector2(600f, 136f), UiButton.Style.Secondary,
                 "ANA SAYFAYA DÖN", Design.Body);
-            quit.Rect.anchoredPosition = new Vector2(0f, -280f);
             quit.Clicked += () => { Audio.PlayClick(); App.ShowMenu(); };
+
+            ModalCard.StackFromBottom(content, Design.Space3, resume.Rect, settings.Rect, quit.Rect);
         }
     }
 
@@ -254,8 +254,9 @@ namespace BlockPuzzle.Game
 
             var close = UiBuilder.Button(content, "Close", new Vector2(420f, 140f), UiButton.Style.Primary,
                 "KAPAT", Design.Headline);
-            close.Rect.anchoredPosition = new Vector2(0f, -520f);
             close.Clicked += () => { Audio.PlayClick(); App.CloseModal(); };
+
+            ModalCard.StackFromBottom(content, Design.Space3, close.Rect);
         }
 
         protected override void OnShow() => Populate();
@@ -318,7 +319,7 @@ namespace BlockPuzzle.Game
     {
         public static RectTransform Build(RectTransform root, string heading, Vector2 size, out RectTransform content)
         {
-            var scrim = UiBuilder.Image(root, "Scrim", Art.Panel(0f), new Color(0.02f, 0.02f, 0.05f, 0.76f));
+            var scrim = UiBuilder.Image(root, "Scrim", Art.Panel(0f), Design.Scrim);
             scrim.type = Image.Type.Simple;
             UiBuilder.Stretch(scrim.rectTransform);
 
@@ -334,6 +335,23 @@ namespace BlockPuzzle.Game
 
             content = holder;
             return holder;
+        }
+
+        /// <summary>
+        /// Stacks items up from the bottom edge of the card, last one first, so the space under the
+        /// bottom item is <see cref="Design.CardPadding"/> instead of whatever the hand-written
+        /// offsets happened to leave over. Items are passed in the order they read, top to bottom.
+        /// </summary>
+        public static void StackFromBottom(RectTransform card, float gap, params RectTransform[] items)
+        {
+            float edge = -card.sizeDelta.y * 0.5f + Design.CardPadding;
+
+            for (int i = items.Length - 1; i >= 0; i--)
+            {
+                var rect = items[i];
+                rect.anchoredPosition = new Vector2(rect.anchoredPosition.x, edge + rect.sizeDelta.y * 0.5f);
+                edge += rect.sizeDelta.y + gap;
+            }
         }
     }
 }

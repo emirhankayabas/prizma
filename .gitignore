@@ -54,3 +54,8 @@ sysinfo.txt
 # ---------------------------------------------------------------- Claude Code
 # Makineye özel ayarlar. Paylaşılacak ayar varsa .claude/settings.json kullan.
 .claude/settings.local.json
+
+# Build ciktilari ve arac gecicileri
+/Builds/
+/.utmp/
+*.slnx

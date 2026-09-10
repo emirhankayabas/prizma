@@ -14,9 +14,17 @@ namespace BlockPuzzle.Game
     {
         const float BoardPadding = 20f;
         const float BoardGap = 10f;
+        const float HudHeight = 440f;
         const float TrayHeight = 300f;
         const float TrayBottomOffset = 100f;
-        const float BoardCenterY = 30f;
+
+        /// <summary>
+        /// The board is centred in the band the HUD and the tray leave behind, not on the canvas.
+        /// Written as a difference so it follows those two when they move, and because the canvas
+        /// is taller than 1920 on a long phone — the surplus has to split evenly above and below
+        /// the board instead of pooling under it.
+        /// </summary>
+        public const float BoardCenterY = (TrayBottomOffset + TrayHeight - HudHeight) * 0.5f;
 
         GameSession _session;
 
@@ -89,7 +97,7 @@ namespace BlockPuzzle.Game
             var hud = UiBuilder.Node(Root, "Hud");
             hud.anchorMin = hud.anchorMax = new Vector2(0.5f, 1f);
             hud.pivot = new Vector2(0.5f, 1f);
-            hud.sizeDelta = new Vector2(1080f, 440f);
+            hud.sizeDelta = new Vector2(1080f, HudHeight);
 
             // Best score, marked with a gem rather than the crown the genre usually reaches for.
             var gem = UiBuilder.Image(hud, "Gem", Icons.Gem, Design.Gold);
@@ -162,7 +170,7 @@ namespace BlockPuzzle.Game
             _overPanel = UiBuilder.Node(Root, "GameOver");
             UiBuilder.Stretch(_overPanel);
 
-            _overScrim = UiBuilder.Image(_overPanel, "Scrim", Art.Panel(0f), new Color(0.02f, 0.02f, 0.05f, 0.8f));
+            _overScrim = UiBuilder.Image(_overPanel, "Scrim", Art.Panel(0f), Design.Scrim);
             _overScrim.type = Image.Type.Simple;
             UiBuilder.Stretch(_overScrim.rectTransform);
 

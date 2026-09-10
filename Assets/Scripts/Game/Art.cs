@@ -21,6 +21,9 @@ namespace BlockPuzzle.Game
         static Sprite _sparkle;
         static Sprite _disc;
         static Sprite _grain;
+        static Sprite _grid;
+        static Sprite _vignette;
+        static Sprite _verticalFade;
 
         static readonly Dictionary<int, Sprite> Panels = new Dictionary<int, Sprite>();
         static readonly Dictionary<int, Sprite> Strokes = new Dictionary<int, Sprite>();
@@ -135,6 +138,27 @@ namespace BlockPuzzle.Game
         public static Sprite Grain
         {
             get { if (_grain == null) _grain = BuildGrain(); return _grain; }
+        }
+
+        /// <summary>
+        /// A perspective grid receding to a vanishing point in the middle: rays out to the edges
+        /// crossed by rectangles that close in on the centre. Stretched over the whole page.
+        /// </summary>
+        public static Sprite Grid
+        {
+            get { if (_grid == null) _grid = BuildGrid(); return _grid; }
+        }
+
+        /// <summary>Clear in the middle, solid at the rim. Darkens the corners of the page.</summary>
+        public static Sprite Vignette
+        {
+            get { if (_vignette == null) _vignette = BuildVignette(); return _vignette; }
+        }
+
+        /// <summary>Transparent at the top, solid at the bottom. Fades one ground colour into another.</summary>
+        public static Sprite VerticalFade
+        {
+            get { if (_verticalFade == null) _verticalFade = BuildVerticalFade(); return _verticalFade; }
         }
 
         // ------------------------------------------------------------------ builders
@@ -309,6 +333,90 @@ namespace BlockPuzzle.Game
             });
 
             return raster.ToSprite("Pool");
+        }
+
+        static Sprite BuildGrid()
+        {
+            const int width = 512;
+            const int height = 910;
+            const int Rays = 32;
+            const float RingStep = 1.34f;   // each rectangle this much larger than the last
+            const float LineHalf = 1.1f;    // half thickness, in sprite pixels
+
+            var raster = new Raster(width, height);
+            float cx = width * 0.5f;
+            float cy = height * 0.5f;
+            float raySpacing = Mathf.PI * 2f / Rays;
+            float ringSpacing = Mathf.Log(RingStep);
+
+            // Drawn analytically in a single pass. The stroke helpers each walk the whole canvas
+            // with supersampling, and sixty of those passes would take long enough to hang the
+            // Editor — here every pixel decides for itself whether a line runs through it.
+            raster.Paint((x, y) =>
+            {
+                float dx = x - cx;
+                float dy = y - cy;
+
+                float radius = Mathf.Sqrt(dx * dx + dy * dy);
+                if (radius < 1f) return new Color(1f, 1f, 1f, 0f);
+
+                // Rays: constant angle apart, so their spacing on screen opens up with distance.
+                float steps = Mathf.Atan2(dy, dx) / raySpacing;
+                float rayGap = Mathf.Abs(steps - Mathf.Round(steps)) * raySpacing * radius;
+                float ray = 1f - Mathf.Clamp01(rayGap / LineHalf);
+
+                // Rings: rectangles, not circles, so the ground reads as a room rather than a
+                // tunnel. A geometric progression is what makes them look like even spacing
+                // receding into the distance.
+                float reach = Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy));
+                float rings = Mathf.Log(Mathf.Max(reach, 1f)) / ringSpacing;
+                float ringGap = Mathf.Abs(rings - Mathf.Round(rings)) * ringSpacing * reach;
+                float ring = 1f - Mathf.Clamp01(ringGap / LineHalf);
+
+                // Everything dissolves as it approaches the vanishing point, where the lines would
+                // otherwise pile into a solid blot.
+                float fade = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(radius / (cx * 0.95f)));
+
+                return new Color(1f, 1f, 1f, Mathf.Max(ray, ring) * fade);
+            });
+
+            return raster.ToSprite("Grid");
+        }
+
+        static Sprite BuildVignette()
+        {
+            const int size = 256;
+            var raster = new Raster(size, size);
+            float half = size * 0.5f;
+
+            raster.Paint((x, y) =>
+            {
+                float u = (x - half) / half;
+                float v = (y - half) / half;
+                float d = Mathf.Sqrt(u * u + v * v) / 1.414f;
+
+                // Nothing at all across the middle, then a long soft climb into the corners.
+                float a = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((d - 0.34f) / 0.66f));
+                return new Color(1f, 1f, 1f, a * a);
+            });
+
+            return raster.ToSprite("Vignette");
+        }
+
+        static Sprite BuildVerticalFade()
+        {
+            const int width = 8;
+            const int height = 256;
+            var raster = new Raster(width, height);
+
+            raster.Paint((x, y) =>
+            {
+                // y counts up from the bottom of the texture, so this lands solid at the bottom.
+                float a = Mathf.SmoothStep(0f, 1f, 1f - y / height);
+                return new Color(1f, 1f, 1f, a);
+            });
+
+            return raster.ToSprite("VerticalFade");
         }
 
         static Sprite BuildSparkle()

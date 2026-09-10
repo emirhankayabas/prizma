@@ -71,9 +71,11 @@ namespace BlockPuzzle.Game
             var scaler = canvasGo.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(ReferenceWidth, ReferenceHeight);
-            // Matching height keeps the square board fully visible on tall and short phones alike.
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-            scaler.matchWidthOrHeight = 1f;
+            // Expand never crops: it takes the smaller of the two axis ratios, so the whole
+            // 1080x1920 reference area is on screen whatever the aspect and the surplus becomes
+            // margin. Matching height instead looked right at 16:9 and cut 52 units off each side
+            // of the board on a 20:9 phone — along with the best-score readout and the pause button.
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
 
             _root = (RectTransform)canvasGo.transform;
         }

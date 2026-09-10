@@ -41,6 +41,9 @@ namespace BlockPuzzle.Game
         /// <summary>Minimum comfortable touch target.</summary>
         public const float TouchTarget = 120f;
 
+        /// <summary>Padding between a modal card's edge and the content inside it.</summary>
+        public const float CardPadding = 56f;
+
         // ------------------------------------------------------------------ shape
 
         public const float RadiusSm = 20f;
@@ -49,48 +52,76 @@ namespace BlockPuzzle.Game
 
         // ------------------------------------------------------------------ colour
 
-        public static readonly Color BgBase = Hex("#08080F");
-        public static readonly Color BgPoolA = Hex("#2E1F78");
-        public static readonly Color BgPoolB = Hex("#0A3C4C");
-        public static readonly Color BgPoolC = Hex("#3E1550");
+        // The page is bright: a saturated blue ground with a perspective grid running across it.
+        // Everything the player reads sits on a deep indigo panel cut into that ground — the board,
+        // the cards, the buttons — so white text keeps its contrast everywhere and the block
+        // colours stay the loudest thing on screen.
 
-        public static readonly Color Surface = Hex("#14141F");
-        public static readonly Color SurfaceHigh = Hex("#1E1E2C");
+        /// <summary>Top of the ground, behind the score.</summary>
+        public static readonly Color BgTop = Hex("#57A6F5");
+
+        /// <summary>Bottom of the ground, behind the tray.</summary>
+        public static readonly Color BgBottom = Hex("#3A6BDB");
+
+        /// <summary>A soft lift behind the board, so the ground is never a flat field.</summary>
+        public static readonly Color BgGlow = Hex("#8CCBFF");
+
+        /// <summary>Where the vignette settles, in the corners.</summary>
+        public static readonly Color BgVignette = Hex("#1B3F8F");
+
+        /// <summary>The perspective grid drawn over the ground.</summary>
+        public static readonly Color BgGrid = new Color(1f, 1f, 1f, 0.16f);
+
+        public static readonly Color Surface = Hex("#26305E");
+        public static readonly Color SurfaceHigh = Hex("#2E3A6E");
 
         /// <summary>Darker than the general surface so the block colours carry the contrast.</summary>
-        public static readonly Color BoardSurface = Hex("#0C0C14");
+        public static readonly Color BoardSurface = Hex("#1E2650");
 
-        // The project renders in Linear colour space, where a low-alpha white over a dark ground
-        // composites far brighter than the sRGB arithmetic suggests — 7% white reads closer to 25%.
-        // Surfaces are therefore given explicit opaque values instead of translucent white, so what
-        // is authored is what ships. Only hairlines stay translucent, where the lift is wanted.
+        // The project renders in Linear colour space, where a low-alpha white composites far
+        // brighter than the sRGB arithmetic suggests — 7% white reads closer to 25%. Surfaces are
+        // therefore given explicit opaque values instead of translucent white, so what is authored
+        // is what ships. Only hairlines stay translucent, where the lift is wanted.
 
         /// <summary>Secondary buttons.</summary>
-        public static readonly Color SurfaceButton = Hex("#23232F");
+        public static readonly Color SurfaceButton = Hex("#38447F");
 
         /// <summary>Slider tracks and toggle backgrounds.</summary>
-        public static readonly Color SurfaceTrack = Hex("#22222E");
+        public static readonly Color SurfaceTrack = Hex("#2C3768");
 
         /// <summary>Recessed areas: empty board cells, badges.</summary>
-        public static readonly Color SurfaceInset = Hex("#191922");
+        public static readonly Color SurfaceInset = Hex("#28315C");
 
 
         /// <summary>The leader row in the scores table.</summary>
-        public static readonly Color SurfaceLeader = Hex("#332918");
+        public static readonly Color SurfaceLeader = Hex("#4A3C1E");
 
-        public static readonly Color Hairline = new Color(1f, 1f, 1f, 0.07f);
+        public static readonly Color Hairline = new Color(1f, 1f, 1f, 0.10f);
 
         public static readonly Color TextPrimary = Color.white;
-        public static readonly Color TextSecondary = new Color(1f, 1f, 1f, 0.62f);
-        public static readonly Color TextTertiary = new Color(1f, 1f, 1f, 0.36f);
 
-        public static readonly Color AccentA = Hex("#7B5CFF");
-        public static readonly Color AccentB = Hex("#4B3BE0");
+        /// <summary>
+        /// Quiet text sitting directly on the bright ground rather than on a panel. Translucent
+        /// white disappears there — going darker than the ground is what reads as secondary.
+        /// </summary>
+        public static readonly Color TextOnGround = Hex("#1B3A80");
+
+        public static readonly Color TextSecondary = new Color(1f, 1f, 1f, 0.70f);
+        public static readonly Color TextTertiary = new Color(1f, 1f, 1f, 0.45f);
+
+        public static readonly Color AccentA = Hex("#8B5CFF");
+        public static readonly Color AccentB = Hex("#5F32E8");
         public static readonly Color Gold = Hex("#FFC24B");
         public static readonly Color Mint = Hex("#38D39F");
 
         /// <summary>Text that sits on top of a light or vivid fill.</summary>
         public static readonly Color OnAccent = Color.white;
+
+        /// <summary>
+        /// Behind a modal. Tinted with the ground rather than black: on a bright page a black
+        /// scrim reads as the lights going out, which is far more drama than pausing deserves.
+        /// </summary>
+        public static readonly Color Scrim = Hex("#0C1636").WithAlpha(0.72f);
 
         /// <summary>
         /// Colour of the pre-clear preview, escalating with how many lines a drop would take.
@@ -134,13 +165,13 @@ namespace BlockPuzzle.Game
         // from under the element, which reads as a hard lip rather than a cast shadow.
 
         /// <summary>Resting cards.</summary>
-        public static readonly Elevation E1 = new Elevation(6f, 40f, 0.32f);
+        public static readonly Elevation E1 = new Elevation(6f, 40f, 0.26f);
 
         /// <summary>Buttons and raised surfaces.</summary>
-        public static readonly Elevation E2 = new Elevation(10f, 60f, 0.38f);
+        public static readonly Elevation E2 = new Elevation(10f, 60f, 0.30f);
 
         /// <summary>Modals lifted off the page.</summary>
-        public static readonly Elevation E3 = new Elevation(18f, 96f, 0.5f);
+        public static readonly Elevation E3 = new Elevation(18f, 96f, 0.42f);
 
         // ------------------------------------------------------------------ fonts
 
