@@ -135,7 +135,19 @@ namespace BlockPuzzle.Game
             data.requiresDepthOption = CameraOverrideOption.Off;
             data.requiresColorOption = CameraOverrideOption.Off;
             data.volumeLayerMask = 0;
-            cam.SetVolumeFrameworkUpdateMode(VolumeFrameworkUpdateMode.ViaScripting);
+
+            // Not from Awake: the volume system is set up by the render pipeline, which may not
+            // exist yet this early, and URP logs an error if the mode is set before it does.
+            StartCoroutine(StopVolumeUpdatesWhenReady(cam));
+        }
+
+        static System.Collections.IEnumerator StopVolumeUpdatesWhenReady(Camera cam)
+        {
+            for (int i = 0; i < 60 && !UnityEngine.Rendering.VolumeManager.instance.isInitialized; i++)
+                yield return null;
+
+            if (cam != null && UnityEngine.Rendering.VolumeManager.instance.isInitialized)
+                cam.SetVolumeFrameworkUpdateMode(VolumeFrameworkUpdateMode.ViaScripting);
         }
 
         T CreateScreen<T>(string name, RectTransform layer) where T : AppScreen
