@@ -37,6 +37,14 @@ namespace BlockPuzzle.Core
         public bool Step(GameSession session)
         {
             if (session.State == SessionState.Stuck) return UsePower(session);
+
+            if (session.State == SessionState.OutOfMoves)
+            {
+                if (session.TryBuyMoves()) return true;
+                session.Concede();
+                return false;
+            }
+
             if (session.State != SessionState.Playing) return false;
 
             _moves.Clear();

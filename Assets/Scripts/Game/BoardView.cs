@@ -48,8 +48,8 @@ namespace BlockPuzzle.Game
 
         static readonly Color EmptyCellColor = Design.SurfaceInset;
         static readonly Color GlyphColor = new Color(0f, 0f, 0f, 0.30f);
-        static readonly Color BombHot = new Color(1f, 0.55f, 0.28f, 0.38f);
-        static readonly Color BombCold = new Color(1f, 0.55f, 0.28f, 0.12f);
+        static readonly Color BombHot = new Color(1f, 0.55f, 0.28f, 0.5f);
+        static readonly Color BombCold = new Color(1f, 0.55f, 0.28f, 0.16f);
 
         public float CellSize => _cellSize;
         public float Gap => _gap;

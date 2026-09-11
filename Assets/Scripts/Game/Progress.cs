@@ -39,6 +39,7 @@ namespace BlockPuzzle.Game
             public int Theme;
             public bool ColorBlind;
             public bool TutorialSeen;
+            public bool PowersHinted;
         }
 
         static Data _data;
@@ -226,6 +227,18 @@ namespace BlockPuzzle.Game
             {
                 if (D.TutorialSeen == value) return;
                 D.TutorialSeen = value;
+                Save();
+            }
+        }
+
+        /// <summary>The hand has shown the powers once, at the first jam they could have rescued.</summary>
+        public static bool PowersHinted
+        {
+            get => D.PowersHinted;
+            set
+            {
+                if (D.PowersHinted == value) return;
+                D.PowersHinted = value;
                 Save();
             }
         }

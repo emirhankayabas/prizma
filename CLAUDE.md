@@ -97,6 +97,12 @@ Girdi tek yoldan: `PointerRouter` her kare `Pointer.current` okur. Widget'lar (`
    `CompilationPipeline.GetAssemblies` listesinde yoktular). `Refresh` çözmedi; **dosya adını
    değiştirmek** çözdü. Bir tip "bulunamıyor" ama dosya diskteyse önce bunu kontrol et.
 
+8. **Modal arkasındaki butonlara dokunulabiliyordu.** `PointerRouter` widget'ları yalnız kayıt
+   sırasına göre tarıyordu; ayarlar kartının yanına dokunmak arkadaki "OYNA"yı çalıştırıyordu.
+   Artık her modal ve sonuç kartı `PointerRouter.PushBlocker` ile işaretli; en üstteki görünür
+   engelleyicinin dışındaki hiçbir widget (ve tahta) dokunma almaz. Yeni bir kaplayan yüzey
+   eklersen onu da engelleyici yap.
+
 7. **Dağıtıcı çok güçlü olursa oyun hiç bitmez.** Bir kez yardımı tavansız bıraktım; yetkin bir
    oyuncuyla tahta hiç dolmadı, test döngüsü sonsuza girdi ve **Unity'yi kilitledi**.
    `PieceDealer.AssistCeiling` bu yüzden var — silme.
@@ -172,6 +178,11 @@ yerinde "BİTİR" çıkar. Kurtarmak ya da bitirmek oyuncunun kararı.
 Tek renk satır ("prizma satırı"): baştan sona tek renk temizlenen satır +120 × combo ve prizma
 süpürmesi (`BoardView.PlayPrismSweep`). Tepsi renkleri rastgele olduğundan hedeflenebilir ama bedava değil.
 
+Öğretim yine yazısız: güçlerin kurtarabileceği **ilk** sıkışmada sürükleme öğreticisinin eli zar
+butonuna dokunur (`GameScreen.MaybeHintPowers`), bir güç kullanılınca `Progress.PowersHinted` ile
+bir daha çıkmaz. Bölüm kazanınca yıldızlar bir temanın eşiğini geçtiyse sonuç kartının not satırı
+"YENİ TEMA: …" olur.
+
 | `PowerRules` | Değer | Anlamı |
 |---|---|---|
 | `StartCharges` | 1 | Klasik/günlük başlangıç. Casual oyuncunun gerçekten kullandığı kurtarış |
@@ -202,6 +213,9 @@ bir sütun, ilk buz. Yazı yok — tahta, doğru hamle bariz olacak şekilde kur
 - **Kristal** (`BoardModel` katmanı): hücresi temizlenince toplanır, HUD'daki sayaca uçar.
 - **Buz**: her temizleme bir kat kırar, blok ancak buz bitince gider (1 veya 2 kat). Bomba ikisini de alır.
 - Hedefler: kristal (çoğu) / satır (her 6. bölüm) / puan (6k+3). 1-3 yıldız artan hamleye göre.
+- Hamle biterken 2 şarj varsa tur hemen bitmez (`SessionState.OutOfMoves`): sonuç kartı
+  **+5 hamle** teklif eder, bölüm denemesi başına bir kez. Ek hamleyle bitirilen bölüm **1 yıldız** —
+  kurtarış, en iyi skora kestirme değil. Şarjların prizma dışındaki tek harcama yeri.
 
 **Hamle bütçesi tahmin değil, ölçüm:** taslak bot (skill 0.62) ile 15 kez oynanır, %75'lik dilimdeki
 hamle sayısı × pay (1.40 → 1.15, zorlukla azalır), ilk 10 bölüme +6. Bot %60'tan az kazanıyorsa taslak

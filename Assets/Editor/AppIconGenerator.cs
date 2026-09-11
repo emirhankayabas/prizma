@@ -78,15 +78,20 @@ namespace BlockPuzzle.EditorTools
             var foreground = AssetDatabase.LoadAssetAtPath<Texture2D>(ForegroundPath);
             if (full == null || round == null || background == null || foreground == null) return;
 
+            bool dirty = false;
+
             var current = PlayerSettings.GetIcons(NamedBuildTarget.Unknown, IconKind.Any);
             if (current == null || current.Length == 0 || current[0] != full)
+            {
                 PlayerSettings.SetIcons(NamedBuildTarget.Unknown, new[] { full }, IconKind.Any);
+                dirty = true;
+            }
 
 #if UNITY_ANDROID
             // Unity 6 builds Android icons from the adaptive layers alone; the old round and
             // legacy kinds are gone. Launchers without adaptive support fall back to the default
             // icon set above.
-            SetAndroid(UnityEditor.Android.AndroidPlatformIconKind.Adaptive, background, foreground);
+            dirty |= SetAndroid(UnityEditor.Android.AndroidPlatformIconKind.Adaptive, background, foreground);
 #endif
 
             // The splash sits in the game's own blue rather than Unity's charcoal, so launching
@@ -96,11 +101,24 @@ namespace BlockPuzzle.EditorTools
             {
                 PlayerSettings.SplashScreen.backgroundColor = splash;
                 PlayerSettings.SplashScreen.unityLogoStyle = PlayerSettings.SplashScreen.UnityLogoStyle.LightOnDark;
+                dirty = true;
             }
+
+            // Written to ProjectSettings now, not whenever the project next happens to be saved,
+            // so the assignment is in version control with the icons it points at. The file on
+            // disk is checked too: an assignment made in an earlier session can sit in memory,
+            // unchanged and therefore not "dirty" here, without ever having been written.
+            if (dirty || !OnDisk(AssetDatabase.AssetPathToGUID(FullPath))) AssetDatabase.SaveAssets();
+        }
+
+        static bool OnDisk(string guid)
+        {
+            const string settings = "ProjectSettings/ProjectSettings.asset";
+            return string.IsNullOrEmpty(guid) || !File.Exists(settings) || File.ReadAllText(settings).Contains(guid);
         }
 
 #if UNITY_ANDROID
-        static void SetAndroid(PlatformIconKind kind, params Texture2D[] layers)
+        static bool SetAndroid(PlatformIconKind kind, params Texture2D[] layers)
         {
             var icons = PlayerSettings.GetPlatformIcons(NamedBuildTarget.Android, kind);
             bool changed = false;
@@ -117,6 +135,7 @@ namespace BlockPuzzle.EditorTools
             }
 
             if (changed) PlayerSettings.SetPlatformIcons(NamedBuildTarget.Android, kind, icons);
+            return changed;
         }
 #endif
     }

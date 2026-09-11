@@ -71,6 +71,7 @@ namespace BlockPuzzle.Game
 
         Image _hand;
         Coroutine _tutorial;
+        Coroutine _powerHint;
 
         readonly List<TextMeshProUGUI> _popupPool = new List<TextMeshProUGUI>();
         readonly List<Image> _flyPool = new List<Image>();
@@ -163,6 +164,7 @@ namespace BlockPuzzle.Game
             CancelDrag();
             CancelAim();
             StopTutorial();
+            StopPowerHint();
             SaveRun();
         }
 
@@ -221,6 +223,7 @@ namespace BlockPuzzle.Game
             _session.Moved += OnMoved;
             _session.PowerUsed += OnPowerUsed;
             _session.Stuck += OnStuck;
+            _session.OutOfMoves += OnOutOfMoves;
             _session.GameOver += OnGameOver;
             _session.LevelWon += OnLevelWon;
 
@@ -242,6 +245,10 @@ namespace BlockPuzzle.Game
 
             RunStore.Save(session);
             MaybeStartTutorial();
+
+            // A run saved at a decision point comes back to the same decision.
+            if (session.State == SessionState.OutOfMoves) OnOutOfMoves();
+            else if (session.State == SessionState.Stuck) MaybeHintPowers();
         }
 
         void Detach()
@@ -251,6 +258,7 @@ namespace BlockPuzzle.Game
             _session.Moved -= OnMoved;
             _session.PowerUsed -= OnPowerUsed;
             _session.Stuck -= OnStuck;
+            _session.OutOfMoves -= OnOutOfMoves;
             _session.GameOver -= OnGameOver;
             _session.LevelWon -= OnLevelWon;
         }
@@ -322,7 +330,13 @@ namespace BlockPuzzle.Game
                 if (result.ComboStreak > 1) Audio.PlayCombo(result.ComboStreak);
                 else Audio.PlayClear();
 
-                if (clear.LinesCleared > 1 || clear.PerfectClear) App.Vibrate();
+                if (clear.LinesCleared > 1 || clear.PerfectClear)
+                {
+                    // The board itself takes the hit: a small swell that grows with the clear.
+                    float punch = clear.PerfectClear ? 0.045f : 0.012f * Mathf.Min(clear.LinesCleared, 4);
+                    StartCoroutine(Tween.Punch(_board.transform, punch, 0.24f));
+                    App.Vibrate();
+                }
             }
             else
             {
@@ -528,6 +542,12 @@ namespace BlockPuzzle.Game
             _aiming = null;
             _bombHeld = false;
 
+            if (_powerHint != null || !Progress.PowersHinted)
+            {
+                StopPowerHint();
+                Progress.PowersHinted = true;
+            }
+
             switch (result.Kind)
             {
                 case PowerKind.Rotate:
@@ -544,6 +564,7 @@ namespace BlockPuzzle.Game
                     _board.HideGhost();
                     _board.Refresh();
                     _board.PlayBlast(result.Blast, result.Column, result.Row);
+                    StartCoroutine(Tween.Punch(_board.transform, 0.035f, 0.26f));
                     if (result.Blast.CollectedGems.Count > 0) FlyCrystals(result.Blast.CollectedGems);
                     Audio.PlayBomb();
                     App.Vibrate();
@@ -561,6 +582,79 @@ namespace BlockPuzzle.Game
             CancelDrag();
             Audio.PlayStuck();
             SyncState();
+            MaybeHintPowers();
+        }
+
+        /// <summary>
+        /// The first jam that a charge could rescue is where the powers are taught: the same hand
+        /// as the drag tutorial taps the reroll button until the player uses a power. Once.
+        /// </summary>
+        void MaybeHintPowers()
+        {
+            if (Progress.PowersHinted || _session == null || !_session.CanReroll()) return;
+
+            StopTutorial();
+            StopPowerHint();
+            _powerHint = StartCoroutine(PowerHintRoutine(_powers.ButtonPosition(PowerKind.Reroll)));
+        }
+
+        void StopPowerHint()
+        {
+            if (_powerHint == null) return;
+            StopCoroutine(_powerHint);
+            _powerHint = null;
+            _hand.gameObject.SetActive(false);
+            _hand.rectTransform.localScale = Vector3.one;
+        }
+
+        IEnumerator PowerHintRoutine(Vector3 target)
+        {
+            yield return new WaitForSecondsRealtime(0.6f);
+
+            _hand.rectTransform.SetAsLastSibling();
+            _hand.rectTransform.position = target;
+            _hand.color = Color.white;
+            _hand.gameObject.SetActive(true);
+
+            while (true)
+            {
+                // A tap: press in, release, pause. Motion, not a blink.
+                yield return Tween.Scale(_hand.rectTransform, Vector3.one, Vector3.one * 0.84f, 0.16f, Ease.OutQuad);
+                yield return Tween.Scale(_hand.rectTransform, Vector3.one * 0.84f, Vector3.one, 0.22f, Ease.OutBack);
+                yield return new WaitForSecondsRealtime(0.7f);
+            }
+        }
+
+        /// <summary>
+        /// A level ran out of moves with charges to spare: the card offers more moves for two of
+        /// them. The price sits where the note goes, as crystals — the same currency as the prism.
+        /// </summary>
+        void OnOutOfMoves()
+        {
+            CancelDrag();
+            CancelAim();
+            SyncState();
+
+            var session = _session;
+            int left = Mathf.Max(0, session.Level.Target - session.GoalProgress);
+
+            _resultPrimary = () =>
+            {
+                if (!_session.TryBuyMoves()) return;
+
+                _result.Hide();
+                Audio.PlayCharge();
+                _hud.Refresh(_displayedScore);
+                StartCoroutine(Tween.Punch(_hud.Readout, 0.12f, 0.24f));
+                SyncState();
+                SaveRun();
+            };
+            _resultSecondary = () => _session.Concede();
+
+            _result.Show(this, "Hamle Bitti", left.ToString(), $"{PowerRules.ExtraMovesCost} ŞARJ", Design.Prism, Art.Crystal,
+                -1, $"+{PowerRules.ExtraMoves} HAMLE", "BİTİR");
+            Audio.PlayStuck();
+            SaveRun();
         }
 
         // ------------------------------------------------------------------ endings
@@ -570,6 +664,7 @@ namespace BlockPuzzle.Game
             CancelDrag();
             CancelAim();
             StopTutorial();
+            StopPowerHint();
 
             var session = _session;
             RunStore.Clear(session.Mode);
@@ -638,7 +733,9 @@ namespace BlockPuzzle.Game
             int n = session.Level.Number;
             int stars = session.StarsEarned;
 
+            int starsBefore = Progress.TotalStars;
             Progress.RecordLevel(n, stars);
+            var unlocked = NewlyUnlockedTheme(starsBefore, Progress.TotalStars);
             Progress.RecordRun(session);
             RunStore.Clear(GameMode.Level);
             SyncState();
@@ -648,13 +745,32 @@ namespace BlockPuzzle.Game
 
             _resultPrimary = () => App.PlayLevel(n + 1);
             _resultSecondary = App.ShowLevelSelect;
-            _result.Show(this, $"Bölüm {n}", session.Score.ToString(),
-                $"{session.MovesLeft} HAMLE ARTTI", Design.Mint, Icons.Check, stars, "SONRAKİ", "HARİTA",
-                i => Audio.PlayStar(i));
+
+            // A theme crossing its star threshold is news worth the note line; otherwise the moves saved.
+            if (unlocked != null)
+            {
+                _result.Show(this, $"Bölüm {n}", session.Score.ToString(),
+                    "YENİ TEMA: " + unlocked.Name.ToUpper(new System.Globalization.CultureInfo("tr-TR")),
+                    Design.Gold, Icons.Palette, stars, "SONRAKİ", "HARİTA", i => Audio.PlayStar(i));
+            }
+            else
+            {
+                _result.Show(this, $"Bölüm {n}", session.Score.ToString(),
+                    $"{session.MovesLeft} HAMLE ARTTI", Design.Mint, Icons.Check, stars, "SONRAKİ", "HARİTA",
+                    i => Audio.PlayStar(i));
+            }
 
             _board.PlayBoardWave();
             Audio.PlayFanfare();
             App.Vibrate(strong: true);
+        }
+
+        static Themes.Theme NewlyUnlockedTheme(int before, int after)
+        {
+            foreach (var theme in Themes.All)
+                if (theme.StarsToUnlock > before && theme.StarsToUnlock <= after)
+                    return theme;
+            return null;
         }
 
         static Sprite GoalSprite(GoalKind goal)
@@ -905,8 +1021,23 @@ namespace BlockPuzzle.Game
         // ------------------------------------------------------------------ automation
 
 #if PRIZMA_AUTOTEST
-        /// <summary>Test hook: plays one move the way the computer player would.</summary>
-        public bool AutoStep(Autoplayer bot) => _session != null && bot.Step(_session);
+        /// <summary>
+        /// Test hook: plays one move the way the computer player would. The bot places straight
+        /// into the session, so the tray view drops the pieces a finger would have carried off.
+        /// </summary>
+        public bool AutoStep(Autoplayer bot)
+        {
+            if (_session == null) return false;
+            bool moved = bot.Step(_session);
+
+            for (int i = 0; i < _session.Tray.Length; i++)
+            {
+                if (!_session.Tray[i].Used || _tray.Piece(i) == null) continue;
+                Destroy(_tray.TakePiece(i).gameObject);
+            }
+
+            return moved;
+        }
 
         /// <summary>Test hook: taps a power button.</summary>
         public void AutoPower(PowerKind kind) => OnPowerClicked(kind);

@@ -141,5 +141,15 @@ namespace BlockPuzzle.Game
         }
 
         public Vector3 CrystalPosition(int index) => _crystals[Mathf.Clamp(index, 0, _crystals.Length - 1)].rectTransform.position;
+
+        public Vector3 ButtonPosition(PowerKind kind)
+        {
+            switch (kind)
+            {
+                case PowerKind.Rotate: return _rotate.Rect.position;
+                case PowerKind.Bomb: return _bomb.Rect.position;
+                default: return _reroll.Rect.position;
+            }
+        }
     }
 }

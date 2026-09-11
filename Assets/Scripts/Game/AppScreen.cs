@@ -17,6 +17,9 @@ namespace BlockPuzzle.Game
 
         public bool IsVisible => Root != null && Root.gameObject.activeSelf;
 
+        /// <summary>The screen's root, for things outside it that need to know its bounds.</summary>
+        public RectTransform RootRect => Root;
+
         /// <summary>True for screens that float over another page and swallow board input.</summary>
         public virtual bool IsModal => false;
 

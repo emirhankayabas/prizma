@@ -51,7 +51,12 @@ namespace BlockPuzzle.Core
         public bool IsGameOver => State == SessionState.Lost;
         public bool IsFinished => State == SessionState.Won || State == SessionState.Lost;
 
-        public int MovesLeft => Level == null ? int.MaxValue : Math.Max(0, Level.MoveLimit - MovesUsed);
+        /// <summary>Moves bought when a level's budget ran out. Zero until then; at most one purchase.</summary>
+        public int BonusMoves { get; private set; }
+
+        public int MovesLeft => Level == null ? int.MaxValue : Math.Max(0, Level.MoveLimit + BonusMoves - MovesUsed);
+
+        public bool CanBuyMoves => State == SessionState.OutOfMoves && BonusMoves == 0 && Charges >= PowerRules.ExtraMovesCost;
 
         /// <summary>How far the level goal has come. Zero outside the level mode.</summary>
         public int GoalProgress
@@ -77,6 +82,7 @@ namespace BlockPuzzle.Core
         public event Action TrayRefilled;
         public event Action<PowerResult> PowerUsed;
         public event Action Stuck;
+        public event Action OutOfMoves;
         public event Action GameOver;
         public event Action LevelWon;
 
@@ -304,13 +310,28 @@ namespace BlockPuzzle.Core
             });
         }
 
-        /// <summary>Gives up from the stuck state rather than spending the remaining charges.</summary>
+        /// <summary>Gives up from a rescuable state rather than spending the remaining charges.</summary>
         public void Concede()
         {
-            if (State != SessionState.Stuck) return;
+            if (State != SessionState.Stuck && State != SessionState.OutOfMoves) return;
 
             State = SessionState.Lost;
             GameOver?.Invoke();
+        }
+
+        /// <summary>Spends charges on <see cref="PowerRules.ExtraMoves"/> more moves. Returns false when not on offer.</summary>
+        public bool TryBuyMoves()
+        {
+            if (!CanBuyMoves) return false;
+
+            Charges -= PowerRules.ExtraMovesCost;
+            BonusMoves += PowerRules.ExtraMoves;
+            PowersUsed++;
+
+            var before = State;
+            Evaluate();
+            RaiseStateChange(before);
+            return true;
         }
 
         PowerResult FinishPower(PowerResult result)
@@ -370,7 +391,9 @@ namespace BlockPuzzle.Core
 
             if (Level != null && MovesLeft <= 0)
             {
-                State = SessionState.Lost;
+                State = Config.PowersEnabled && BonusMoves == 0 && Charges >= PowerRules.ExtraMovesCost
+                    ? SessionState.OutOfMoves
+                    : SessionState.Lost;
                 return;
             }
 
@@ -390,12 +413,21 @@ namespace BlockPuzzle.Core
             switch (State)
             {
                 case SessionState.Stuck: Stuck?.Invoke(); break;
+                case SessionState.OutOfMoves: OutOfMoves?.Invoke(); break;
                 case SessionState.Lost: GameOver?.Invoke(); break;
                 case SessionState.Won: LevelWon?.Invoke(); break;
             }
         }
 
-        public int StarsEarned => State == SessionState.Won && Level != null ? Level.StarsFor(MovesLeft) : 0;
+        /// <summary>Stars for a won level. Finishing on bought moves is always one star.</summary>
+        public int StarsEarned
+        {
+            get
+            {
+                if (State != SessionState.Won || Level == null) return 0;
+                return BonusMoves > 0 ? 1 : Level.StarsFor(MovesLeft);
+            }
+        }
 
         TrayPiece GetPlayablePiece(int trayIndex)
         {
@@ -445,6 +477,7 @@ namespace BlockPuzzle.Core
                 Charges = Charges,
                 ChargeProgress = ChargeProgress,
                 ChargesEarned = ChargesEarned,
+                BonusMoves = BonusMoves,
                 MovesUsed = MovesUsed,
                 LinesCleared = LinesCleared,
                 GemsCollected = GemsCollected,
@@ -552,6 +585,7 @@ namespace BlockPuzzle.Core
             session.Charges = s.Charges;
             session.ChargeProgress = s.ChargeProgress;
             session.ChargesEarned = s.ChargesEarned;
+            session.BonusMoves = s.BonusMoves;
             session.MovesUsed = s.MovesUsed;
             session.LinesCleared = s.LinesCleared;
             session.GemsCollected = s.GemsCollected;

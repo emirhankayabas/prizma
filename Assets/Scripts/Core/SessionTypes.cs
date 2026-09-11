@@ -23,7 +23,13 @@ namespace BlockPuzzle.Core
         Stuck = 1,
 
         Won = 2,
-        Lost = 3
+        Lost = 3,
+
+        /// <summary>
+        /// A level's moves ran out short of the goal, but there are charges enough to buy more.
+        /// The player chooses: spend them, or give up.
+        /// </summary>
+        OutOfMoves = 4
     }
 
     public enum PowerKind
@@ -194,6 +200,7 @@ namespace BlockPuzzle.Core
         public int Charges;
         public int ChargeProgress;
         public int ChargesEarned;
+        public int BonusMoves;
         public int MovesUsed;
         public int LinesCleared;
         public int GemsCollected;

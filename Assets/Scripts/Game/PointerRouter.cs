@@ -31,6 +31,13 @@ namespace BlockPuzzle.Game
     {
         static readonly List<IPointerWidget> Widgets = new List<IPointerWidget>();
 
+        /// <summary>
+        /// Surfaces that own the pointer outright — an open modal, the result card. While one is up,
+        /// only widgets inside it can be pressed. Without this a tap beside a modal's buttons fell
+        /// through to whatever sat behind the scrim: "play" under the settings card started a run.
+        /// </summary>
+        static readonly List<RectTransform> Blockers = new List<RectTransform>();
+
         public static IPointerFallback Fallback;
 
         IPointerWidget _captured;
@@ -42,6 +49,30 @@ namespace BlockPuzzle.Game
         }
 
         public static void Unregister(IPointerWidget widget) => Widgets.Remove(widget);
+
+        public static void PushBlocker(RectTransform root)
+        {
+            if (root == null) return;
+            Blockers.Remove(root);
+            Blockers.Add(root);
+        }
+
+        public static void PopBlocker(RectTransform root) => Blockers.Remove(root);
+
+        /// <summary>The topmost blocker still on screen. Hidden ones are skipped rather than trusted to pop.</summary>
+        static RectTransform TopBlocker
+        {
+            get
+            {
+                for (int i = Blockers.Count - 1; i >= 0; i--)
+                {
+                    var blocker = Blockers[i];
+                    if (blocker != null && blocker.gameObject.activeInHierarchy) return blocker;
+                }
+
+                return null;
+            }
+        }
 
         void Update()
         {
@@ -82,12 +113,15 @@ namespace BlockPuzzle.Game
 
         void Begin(Vector2 position)
         {
+            var blocker = TopBlocker;
+
             // Later registrations sit on top, so walk backwards and take the first hit.
             for (int i = Widgets.Count - 1; i >= 0; i--)
             {
                 var widget = Widgets[i];
                 if (widget == null || !widget.Interactable) continue;
                 if (widget.Rect == null || !widget.Rect.gameObject.activeInHierarchy) continue;
+                if (blocker != null && !widget.Rect.IsChildOf(blocker)) continue;
                 if (!Contains(widget, position)) continue;
 
                 _captured = widget;
@@ -95,7 +129,7 @@ namespace BlockPuzzle.Game
                 return;
             }
 
-            if (Fallback != null)
+            if (blocker == null && Fallback != null)
             {
                 _fallbackActive = true;
                 Fallback.OnPointerDown(position);

@@ -102,6 +102,13 @@ namespace BlockPuzzle.Core
         /// <summary>Square radius of the bomb: 1 means a 3x3 blast.</summary>
         public const int BombRadius = 1;
 
+        /// <summary>
+        /// Moves a level sells when its budget runs out, and what they cost. Once per attempt, and
+        /// a level finished on bought moves earns one star — a rescue, not a way to the top score.
+        /// </summary>
+        public const int ExtraMoves = 5;
+        public const int ExtraMovesCost = 2;
+
         public static int Cost(PowerKind kind) => kind == PowerKind.Bomb ? 2 : 1;
     }
 }

@@ -115,6 +115,32 @@ static class Program
             Check(PowerRules.LinesForCharge(1) > PowerRules.LinesForCharge(0), "each charge costs more than the last");
         }
 
+        Console.WriteLine("== extra moves");
+        {
+            var def = new LevelDefinition { Number = 99, Seed = 3, Goal = GoalKind.Lines, Target = 999, MoveLimit = 6, StartCharges = 3 };
+            var s = GameSession.NewLevelRun(def, 8, 7);
+            var bot = new Autoplayer(1, 1f);
+            int guard = 0;
+            while (s.State == SessionState.Playing && guard++ < 50) bot.Step(s);
+            Check(s.State == SessionState.OutOfMoves && s.MovesLeft == 0, "running out offers more moves");
+
+            int charges = s.Charges;
+            Check(s.TryBuyMoves() && s.MovesLeft == PowerRules.ExtraMoves && s.Charges == charges - PowerRules.ExtraMovesCost,
+                "extra moves cost two charges");
+
+            var restored = GameSession.Restore(s.CreateSnapshot());
+            Check(restored.MovesLeft == s.MovesLeft && restored.BonusMoves == s.BonusMoves, "bought moves survive a save");
+
+            guard = 0;
+            while (s.State == SessionState.Playing && guard++ < 50) bot.Step(s);
+            Check(s.State == SessionState.Lost, "only once per attempt");
+
+            var poor = GameSession.NewLevelRun(new LevelDefinition { Number = 98, Seed = 4, Goal = GoalKind.Lines, Target = 999, MoveLimit = 4, StartCharges = 0 }, 8, 7);
+            guard = 0;
+            while (poor.State == SessionState.Playing && guard++ < 50) bot.Step(poor);
+            Check(poor.State == SessionState.Lost, "without charges it is simply over");
+        }
+
         Console.WriteLine("== level");
         {
             var sw = Stopwatch.StartNew();

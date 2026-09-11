@@ -128,6 +128,9 @@ namespace BlockPuzzle.Game
             _panel.SetAsLastSibling();
             _panel.gameObject.SetActive(true);
 
+            // The card owns the pointer: the pause button and the powers behind the scrim stay inert.
+            PointerRouter.PushBlocker(_panel);
+
             host.StartCoroutine(Tween.FadeGraphic(_scrim, 0f, Design.Scrim.a, 0.25f));
             host.StartCoroutine(Tween.Scale(_card, Vector3.one * 0.86f, Vector3.one, 0.32f, Ease.OutBack));
 
@@ -155,7 +158,9 @@ namespace BlockPuzzle.Game
 
         public void Hide()
         {
-            if (_panel != null) _panel.gameObject.SetActive(false);
+            if (_panel == null) return;
+            _panel.gameObject.SetActive(false);
+            PointerRouter.PopBlocker(_panel);
         }
     }
 }

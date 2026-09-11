@@ -107,14 +107,21 @@ namespace BlockPuzzle.Game
             yield return Wait(0.8f);
             yield return Shot("11_level12");
 
+            _game.Begin(OutOfMovesSession());
+            yield return Wait(0.8f);
+            yield return Shot("11b_out_of_moves");
+
             _app.PlayLevel(3);
             yield return Wait(0.8f);
             yield return Shot("12_level3_ice");
 
+            // The computer used a power in the first classic run, which retires the hint for good;
+            // bring it back so the jam shows what a first-time player sees.
+            Progress.PowersHinted = false;
             _app.PlayClassic(fresh: true);
             yield return Frames(5);
             _game.Begin(StuckSession());
-            yield return Wait(0.6f);
+            yield return Wait(1.2f);
             yield return Shot("13_stuck");
 
             _game.AutoPower(PowerKind.Bomb);
@@ -185,6 +192,17 @@ namespace BlockPuzzle.Game
         {
             File.WriteAllBytes(Path.Combine(_out, name + ".png"), texture.EncodeToPNG());
             Destroy(texture);
+        }
+
+        /// <summary>Level 12 with its whole budget spent and two charges left: the "more moves" offer.</summary>
+        static GameSession OutOfMovesSession()
+        {
+            var level = LevelGenerator.Generate(12, Design.PaletteSize);
+            var snap = GameSession.NewLevelRun(level, 8, Design.PaletteSize).CreateSnapshot();
+            snap.MovesUsed = snap.LevelMoveLimit;
+            snap.Charges = PowerRules.ExtraMovesCost;
+            snap.State = (int)SessionState.OutOfMoves;
+            return GameSession.Restore(snap);
         }
 
         IEnumerator Shot(string name)

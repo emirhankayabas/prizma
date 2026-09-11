@@ -239,6 +239,7 @@ namespace BlockPuzzle.Game
 
             int top = _modals.Count - 1;
             _modals[top].Hide();
+            PointerRouter.PopBlocker(_modals[top].RootRect);
             _modals.RemoveAt(top);
 
             if (_modals.Count > 0)
@@ -255,7 +256,10 @@ namespace BlockPuzzle.Game
         void CloseAllModals()
         {
             for (int i = _modals.Count - 1; i >= 0; i--)
+            {
                 _modals[i].Hide();
+                PointerRouter.PopBlocker(_modals[i].RootRect);
+            }
 
             _modals.Clear();
         }
@@ -277,11 +281,12 @@ namespace BlockPuzzle.Game
 
             if (_modals.Count > 0) _modals[_modals.Count - 1].Hide();
 
-            // A modal owns the pointer outright: the board must not react behind it.
+            // A modal owns the pointer outright: neither the board nor any button behind it reacts.
             PointerRouter.Fallback = null;
 
             _modals.Add(modal);
             modal.Show();
+            PointerRouter.PushBlocker(modal.RootRect);
         }
 
         // ------------------------------------------------------------------ platform
@@ -308,7 +313,28 @@ namespace BlockPuzzle.Game
                 if (_modals.Count > 0) CloseModal();
                 else if (_currentPage == _game) { if (!_game.HandleBack()) OpenPause(); }
                 else if (_currentPage == _levels) ShowMenu();
+                else if (_currentPage == _menu) SendToBackground();
             }
+        }
+
+        /// <summary>
+        /// Back on the title page leaves the app the way Android expects: sent to the background,
+        /// not killed, so returning to it is instant and nothing is lost.
+        /// </summary>
+        static void SendToBackground()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
+                    activity.Call<bool>("moveTaskToBack", true);
+            }
+            catch (System.Exception)
+            {
+                Application.Quit();
+            }
+#endif
         }
     }
 }
