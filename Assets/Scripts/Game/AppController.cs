@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.UI;
 
 namespace BlockPuzzle.Game
@@ -11,6 +12,12 @@ namespace BlockPuzzle.Game
     {
         const float ReferenceWidth = 1080f;
         const float ReferenceHeight = 1920f;
+
+        /// <summary>
+        /// Android runs an app at 30 fps unless it asks for more — this line is the difference
+        /// between a drag that follows the finger and one that trails it.
+        /// </summary>
+        const int TargetFrameRate = 60;
 
         [Header("Setup")]
         [SerializeField] int _boardSize = 8;
@@ -39,6 +46,10 @@ namespace BlockPuzzle.Game
 
         void Awake()
         {
+            QualitySettings.vSyncCount = 0;
+            Application.targetFrameRate = TargetFrameRate;
+
+            ConfigureCamera();
             BuildCanvas();
 
             Audio = gameObject.AddComponent<AudioKit>();
@@ -78,6 +89,40 @@ namespace BlockPuzzle.Game
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
 
             _root = (RectTransform)canvasGo.transform;
+        }
+
+        /// <summary>
+        /// The whole game is an overlay canvas, so the camera's only job is to clear the screen.
+        /// Left at its defaults it drew a skybox into an HDR buffer at 80% scale, ran bloom,
+        /// tonemapping and the rest of the post stack over it, then upscaled the result — every
+        /// frame, entirely hidden behind the backdrop. Now it clears to the ground colour, which
+        /// also stands in for the backdrop's bottom layer.
+        /// </summary>
+        void ConfigureCamera()
+        {
+            var cam = Camera.main;
+            if (cam == null)
+            {
+                var go = new GameObject("Camera");
+                go.transform.SetParent(transform, false);
+                cam = go.AddComponent<Camera>();
+            }
+
+            cam.clearFlags = CameraClearFlags.SolidColor;
+            cam.backgroundColor = Design.BgTop;
+            cam.cullingMask = 0;
+            cam.allowHDR = false;
+            cam.allowMSAA = false;
+            cam.useOcclusionCulling = false;
+
+            var data = cam.GetUniversalAdditionalCameraData();
+            data.renderPostProcessing = false;
+            data.renderShadows = false;
+            data.antialiasing = AntialiasingMode.None;
+            data.requiresDepthOption = CameraOverrideOption.Off;
+            data.requiresColorOption = CameraOverrideOption.Off;
+            data.volumeLayerMask = 0;
+            cam.SetVolumeFrameworkUpdateMode(VolumeFrameworkUpdateMode.ViaScripting);
         }
 
         T CreateScreen<T>(string name, RectTransform layer) where T : AppScreen

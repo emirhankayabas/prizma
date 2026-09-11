@@ -51,6 +51,11 @@ namespace BlockPuzzle.Game
         int _dragSlot = -1;
         bool _dragging;
 
+        // The cell the ghost is currently drawn at, so it is only rebuilt when that changes.
+        int _hoverCol;
+        int _hoverRow;
+        bool _hoverKnown;
+
         int _displayedScore;
         int _linesThisRun;
         float _liftPixels;
@@ -74,6 +79,10 @@ namespace BlockPuzzle.Game
 
             _popupLayer = UiBuilder.Child(Root, "Popups");
             _dragLayer = UiBuilder.Child(Root, "DragLayer");
+
+            // The held piece moves every frame; on its own canvas that re-batches one piece
+            // instead of the board, the HUD and the tray along with it.
+            _dragLayer.gameObject.AddComponent<Canvas>();
 
             BuildGameOver();
         }
@@ -450,6 +459,7 @@ namespace BlockPuzzle.Game
 
             _dragSlot = slot;
             _dragging = true;
+            _hoverKnown = false;
             Audio.PlayPickup();
 
             _dragPiece.Rect.SetParent(_dragLayer, false);
@@ -466,6 +476,14 @@ namespace BlockPuzzle.Game
             // Out-of-range coordinates are still worth testing: CanPlace rejects them and the ghost
             // then shows the shape hanging off the edge in its invalid tint.
             _board.TryGetCellFromScreenPoint(_dragPiece.OriginCellScreenPoint, out int col, out int row);
+
+            // The board cannot change mid-drag, so the ghost and the preview only change when the
+            // anchor crosses into another cell. Rebuilding them every frame toggled a dozen images
+            // on and off and dirtied the canvas for nothing.
+            if (_hoverKnown && col == _hoverCol && row == _hoverRow) return;
+            _hoverCol = col;
+            _hoverRow = row;
+            _hoverKnown = true;
 
             bool valid = _session.CanPlace(_dragSlot, col, row);
             _board.ShowGhost(_dragPiece.Shape, col, row, valid);

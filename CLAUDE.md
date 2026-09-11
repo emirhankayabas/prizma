@@ -145,6 +145,33 @@ iyi oyuncuya daha az dokunuyor. Doğru şekil bu.
 
 ---
 
+## Kare hızı (60 FPS) — bunları geri alma
+
+İlk APK telefonda 20-30 FPS'te döndü. Sebepler ve düzeltmeler:
+
+- **Android, `Application.targetFrameRate` ayarlanmazsa 30'a kilitler.** `AppController.Awake`
+  60 istiyor. En büyük etken buydu.
+- **Kamera boşa çalışıyordu.** Tüm oyun Overlay canvas; kamera sadece ekranı temizliyor. Varsayılan
+  hâli skybox'ı HDR tampona %80 ölçekte çizip bloom/tonemap/post yığınını çalıştırıp büyütüyordu —
+  hepsi backdrop'un arkasında, görünmez. `AppController.ConfigureCamera` bunu kapatıyor.
+  `Mobile_RPAsset`: HDR kapalı, render scale 1 (1'in altı ara doku + büyütme geçişi demek).
+- **Backdrop'un "Field" katmanı yok**: kameranın temizleme rengi zaten `Design.BgTop`. Tam ekran
+  yarı saydam bir katman eksik. Zemin rengini değiştirirsen kamera da onu kullanıyor, ayrıca bir şey
+  yapma.
+- **İç içe canvas'lar**: `Backdrop` (glow her kare nefes alıyor) ve `DragLayer` (tutulan parça her
+  kare hareket ediyor) kendi `Canvas`'ında. Paylaşılan canvas'ta her kare **tüm UI** yeniden
+  batch'leniyordu. Her kare hareket eden yeni bir şey eklersen ona da kendi canvas'ını ver.
+- **Hayalet/önizleme sadece hücre değişince yenileniyor** (`GameScreen._hover*`). Önceden her kare
+  ~12 görüntüyü kapatıp açıyordu.
+- **`Assets/Editor/AndroidPerformanceSettings`**: Optimized Frame Pacing (Swappy) açık, Blit Type
+  Auto. Editor açılışında ve her Android build'inden önce uygulanıyor. Development Build açıksa
+  uyarı veriyor — FPS'i development build'de ölçme.
+
+Hâlâ 60 tutmazsa sıradaki aday: backdrop'un 5 tam ekran katmanını (Deep/Glow/Grid/Vignette/Grain)
+tek bir RenderTexture'a bir kez çizmek. Görünüm birebir kalmalı — Linear renk uzayında sRGB RT şart.
+
+---
+
 ## Tasarım dili
 
 `Design.cs` **tek kaynak**. Çağrı yerinde ham sayı yazma; token ekle.

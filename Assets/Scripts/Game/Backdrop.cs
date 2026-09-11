@@ -30,12 +30,14 @@ namespace BlockPuzzle.Game
             root.SetParent(parent, false);
             UiBuilder.Stretch(root);
 
-            // The field, then the deeper blue faded in from the bottom. Two flat layers rather than
-            // a gradient texture, so the colours stay editable as tokens.
-            var field = UiBuilder.Image(root, "Field", Art.Panel(0f), Design.BgTop);
-            field.type = Image.Type.Simple;
-            UiBuilder.Stretch(field.rectTransform);
+            // Its own canvas: the glow breathes every frame, and on the shared canvas that
+            // re-batched the whole UI every frame too. Nested this way only these few layers do.
+            gameObject.AddComponent<Canvas>();
 
+            // The field itself is the camera's clear colour (AppController.ConfigureCamera) — the
+            // same Design.BgTop, but a clear is free where a full-screen blended layer is not.
+            // Then the deeper blue faded in from the bottom, as a flat layer rather than a
+            // gradient texture, so the colours stay editable as tokens.
             var deep = UiBuilder.Image(root, "Deep", Art.VerticalFade, Design.BgBottom);
             deep.type = Image.Type.Simple;
             UiBuilder.Stretch(deep.rectTransform);
