@@ -161,6 +161,39 @@ namespace BlockPuzzle.Game
             get { if (_verticalFade == null) _verticalFade = BuildVerticalFade(); return _verticalFade; }
         }
 
+        static Sprite _crystal;
+        static Sprite _ice1;
+        static Sprite _ice2;
+        static readonly Sprite[] Glyphs = new Sprite[8];
+
+        /// <summary>
+        /// The crystal a level asks the player to free: a faceted prism, drawn in white with the
+        /// facets as alpha steps so a single tint shades it. Sits on top of a block.
+        /// </summary>
+        public static Sprite Crystal
+        {
+            get { if (_crystal == null) _crystal = BuildCrystal(); return _crystal; }
+        }
+
+        /// <summary>Frost over a block. Two layers look different so a cracked cell reads as weaker.</summary>
+        public static Sprite Ice(int layers)
+        {
+            if (layers >= 2) { if (_ice2 == null) _ice2 = BuildIce(true); return _ice2; }
+            if (_ice1 == null) _ice1 = BuildIce(false);
+            return _ice1;
+        }
+
+        /// <summary>
+        /// A small distinct mark per block colour, for the colour-blind setting: two blocks that
+        /// look alike in colour still look different in shape.
+        /// </summary>
+        public static Sprite Glyph(int colorIndex)
+        {
+            int i = ((colorIndex % Glyphs.Length) + Glyphs.Length) % Glyphs.Length;
+            if (Glyphs[i] == null) Glyphs[i] = BuildGlyph(i);
+            return Glyphs[i];
+        }
+
         // ------------------------------------------------------------------ builders
 
         static Sprite BuildPanel(int radius)
@@ -418,6 +451,103 @@ namespace BlockPuzzle.Game
 
             return raster.ToSprite("VerticalFade");
         }
+
+        static Sprite BuildCrystal()
+        {
+            const int Base = 96;
+            int s = Base * Super;
+            var raster = new Raster(s, s);
+
+            // A cut gem seen from the front: a table on top, a crown, and a long pavilion point.
+            var top = new[] { V(s, 0.30f, 0.84f), V(s, 0.70f, 0.84f), V(s, 0.90f, 0.62f), V(s, 0.10f, 0.62f) };
+            var leftPavilion = new[] { V(s, 0.10f, 0.62f), V(s, 0.50f, 0.62f), V(s, 0.50f, 0.08f) };
+            var rightPavilion = new[] { V(s, 0.50f, 0.62f), V(s, 0.90f, 0.62f), V(s, 0.50f, 0.08f) };
+            var table = new[] { V(s, 0.38f, 0.84f), V(s, 0.62f, 0.84f), V(s, 0.70f, 0.62f), V(s, 0.30f, 0.62f) };
+
+            raster.FillPolygon(top, new Color(1f, 1f, 1f, 0.80f));
+            raster.FillPolygon(table, Color.white);
+            raster.FillPolygon(leftPavilion, new Color(1f, 1f, 1f, 0.92f));
+            raster.FillPolygon(rightPavilion, new Color(1f, 1f, 1f, 0.66f));
+
+            return raster.Downsample(Super).ToSprite("Crystal");
+        }
+
+        static Sprite BuildIce(bool thick)
+        {
+            const int Base = 160;
+            int s = Base * Super;
+            var raster = new Raster(s, s);
+            float radius = s * 0.235f;
+
+            float rim = s * 0.07f;
+
+            raster.Paint((x, y) =>
+            {
+                if (!Raster.SquircleInside(x, y, s, s, radius, 4.5f)) return Color.clear;
+
+                // Mostly opaque: a thin wash let the block colour through, and ice over a red block
+                // read as a pink stain rather than as ice.
+                float k = (x / s + y / s) * 0.5f;
+                float a = (thick ? 0.80f : 0.62f) + 0.10f * k;
+
+                // A brighter rim, like the edge of a slab of ice catching light.
+                if (!Raster.SquircleInside(x - rim, y - rim, s - rim * 2f, s - rim * 2f, radius - rim, 4.5f)) a += 0.2f;
+
+                // Diagonal glints.
+                float band = Mathf.Repeat((x + (s - y)) / s * 2.4f, 1f);
+                if (band < 0.06f) a += 0.18f;
+
+                return new Color(1f, 1f, 1f, Mathf.Clamp01(a));
+            });
+
+            // The thinner layer is cracked, so "hit once" is visible at a glance. The crack is cut
+            // out of the frost, so it shows the block beneath as a dark line.
+            if (!thick)
+            {
+                float t = s * 0.03f;
+                var crack = new Color(0.55f, 0.72f, 0.85f, 1f);
+                raster.Line(V(s, 0.16f, 0.74f), V(s, 0.44f, 0.52f), t, crack);
+                raster.Line(V(s, 0.44f, 0.52f), V(s, 0.38f, 0.22f), t, crack);
+                raster.Line(V(s, 0.44f, 0.52f), V(s, 0.80f, 0.42f), t, crack);
+                raster.Line(V(s, 0.62f, 0.47f), V(s, 0.70f, 0.70f), t * 0.8f, crack);
+            }
+
+            return raster.Downsample(Super).ToSprite(thick ? "Ice2" : "Ice1", 0.34f);
+        }
+
+        static Sprite BuildGlyph(int index)
+        {
+            const int Base = 64;
+            int s = Base * Super;
+            var raster = new Raster(s, s);
+            var white = Color.white;
+            float c = s * 0.5f;
+
+            switch (index)
+            {
+                case 0: raster.FillCircle(c, c, s * 0.30f, white); break;
+                case 1: raster.FillPolygon(new[] { V(s, 0.5f, 0.84f), V(s, 0.84f, 0.20f), V(s, 0.16f, 0.20f) }, white); break;
+                case 2: raster.FillRect(s * 0.22f, s * 0.22f, s * 0.56f, s * 0.56f, white); break;
+                case 3: raster.FillPolygon(new[] { V(s, 0.5f, 0.88f), V(s, 0.88f, 0.5f), V(s, 0.5f, 0.12f), V(s, 0.12f, 0.5f) }, white); break;
+                case 4:
+                    raster.Line(V(s, 0.22f, 0.22f), V(s, 0.78f, 0.78f), s * 0.16f, white);
+                    raster.Line(V(s, 0.78f, 0.22f), V(s, 0.22f, 0.78f), s * 0.16f, white);
+                    break;
+                case 5: raster.StrokeCircle(c, c, s * 0.32f, s * 0.13f, white); break;
+                case 6:
+                    raster.FillRect(s * 0.42f, s * 0.14f, s * 0.16f, s * 0.72f, white);
+                    raster.FillRect(s * 0.14f, s * 0.42f, s * 0.72f, s * 0.16f, white);
+                    break;
+                default:
+                    raster.FillRect(s * 0.16f, s * 0.24f, s * 0.68f, s * 0.14f, white);
+                    raster.FillRect(s * 0.16f, s * 0.62f, s * 0.68f, s * 0.14f, white);
+                    break;
+            }
+
+            return raster.Downsample(Super).ToSprite("Glyph" + index);
+        }
+
+        static Vector2 V(int s, float x, float y) => new Vector2(s * x, s * y);
 
         static Sprite BuildSparkle()
         {

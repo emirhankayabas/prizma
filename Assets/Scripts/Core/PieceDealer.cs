@@ -47,18 +47,20 @@ namespace BlockPuzzle.Core
         const float FatigueScore = 3500f;
         const float FatigueMax = 0.5f;
 
-        readonly Random _random;
-
-        float _drift;
+        readonly Rng _random;
 
         // Reused across every candidate so a deal allocates almost nothing.
         BoardModel _scratch;
         readonly List<PieceShape> _remaining = new List<PieceShape>(4);
+        readonly List<int> _slots = new List<int>(4);
 
-        public PieceDealer(Random random)
+        public PieceDealer(Rng random)
         {
             _random = random ?? throw new ArgumentNullException(nameof(random));
         }
+
+        /// <summary>The correlated random walk behind the assist. Part of a saved run.</summary>
+        public float Drift { get; set; }
 
         /// <summary>How strongly the last deal was steered. Exposed for tuning and tests.</summary>
         public float LastAssist { get; private set; }
@@ -80,9 +82,19 @@ namespace BlockPuzzle.Core
             }
         }
 
-        /// <summary>Fills the tray in place.</summary>
-        public void Deal(BoardModel board, TrayPiece[] tray, int paletteSize, int score)
+        /// <summary>
+        /// Fills the tray in place. With <paramref name="onlyUnused"/> it deals only into the slots
+        /// still holding a piece — the reroll power — and leaves spent slots spent.
+        /// </summary>
+        public void Deal(BoardModel board, TrayPiece[] tray, int paletteSize, int score, bool onlyUnused = false)
         {
+            _slots.Clear();
+            for (int i = 0; i < tray.Length; i++)
+                if (!onlyUnused || !tray[i].Used)
+                    _slots.Add(i);
+
+            if (_slots.Count == 0) return;
+
             float assist = ComputeAssist(board, score);
             LastAssist = assist;
 
@@ -90,7 +102,7 @@ namespace BlockPuzzle.Core
 
             for (int i = 0; i < CandidateCount; i++)
             {
-                var shapes = new PieceShape[tray.Length];
+                var shapes = new PieceShape[_slots.Count];
                 for (int s = 0; s < shapes.Length; s++)
                     shapes[s] = PieceLibrary.PickWeighted(_random);
 
@@ -101,17 +113,18 @@ namespace BlockPuzzle.Core
             candidates.Sort((a, b) => b.Score.CompareTo(a.Score));
 
             var chosen = Choose(candidates, assist);
-            LastFullyPlayable = chosen.Placed == tray.Length;
+            LastFullyPlayable = chosen.Placed == _slots.Count;
 
-            for (int i = 0; i < tray.Length; i++)
+            for (int i = 0; i < _slots.Count; i++)
             {
-                tray[i].Shape = chosen.Shapes[i];
-                tray[i].ColorIndex = _random.Next(paletteSize);
-                tray[i].Used = false;
+                var piece = tray[_slots[i]];
+                piece.Shape = chosen.Shapes[i];
+                piece.ColorIndex = _random.Next(paletteSize);
+                piece.Used = false;
             }
 
             // Three identical colours looks like a bug rather than a coincidence.
-            if (tray.Length >= 3 && paletteSize > 1 &&
+            if (_slots.Count == tray.Length && tray.Length >= 3 && paletteSize > 1 &&
                 tray[0].ColorIndex == tray[1].ColorIndex && tray[1].ColorIndex == tray[2].ColorIndex)
             {
                 tray[2].ColorIndex = (tray[2].ColorIndex + 1 + _random.Next(paletteSize - 1)) % paletteSize;
@@ -133,9 +146,9 @@ namespace BlockPuzzle.Core
             float fatigue = Clamp01(score / FatigueScore) * FatigueMax;
 
             // A correlated random walk, so runs of generosity and runs of hardship both happen.
-            _drift = _drift * DriftMemory + (float)(_random.NextDouble() - 0.5d) * DriftAmount;
+            Drift = Drift * DriftMemory + (float)(_random.NextDouble() - 0.5d) * DriftAmount;
 
-            float assist = BaseAssist + fromPressure * (1f - BaseAssist) - fatigue + _drift;
+            float assist = BaseAssist + fromPressure * (1f - BaseAssist) - fatigue + Drift;
             return Clamp01(assist) * AssistCeiling;
         }
 

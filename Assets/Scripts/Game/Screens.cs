@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using BlockPuzzle.Core;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -7,8 +8,9 @@ using UnityEngine.UI;
 namespace BlockPuzzle.Game
 {
     /// <summary>
-    /// Title page. One primary action, one secondary, and settings tucked into the corner where
-    /// the game screen also keeps it.
+    /// Title page. One primary action — play — then the two other ways to play as cards beneath
+    /// it, and the collection pages as a quiet row at the bottom. Settings sit in the corner where
+    /// the game screen also keeps its one control.
     /// </summary>
     public sealed class MainMenuScreen : AppScreen
     {
@@ -17,12 +19,16 @@ namespace BlockPuzzle.Game
 
         TextMeshProUGUI _best;
         RectTransform _titleGroup;
+        UiButton _play;
+        TextMeshProUGUI _levelNote;
+        TextMeshProUGUI _dailyNote;
+        Image _dailyIcon;
 
         protected override void Build()
         {
             _titleGroup = UiBuilder.Node(Root, "TitleGroup");
             _titleGroup.sizeDelta = new Vector2(1080f, 400f);
-            _titleGroup.anchoredPosition = new Vector2(0f, 420f);
+            _titleGroup.anchoredPosition = new Vector2(0f, 540f);
 
             var title = UiBuilder.Label(_titleGroup, "Title", GameName, Design.Display, Design.TextPrimary,
                 Design.FontDisplay, tracking: Design.TrackingDisplay);
@@ -35,18 +41,20 @@ namespace BlockPuzzle.Game
 
             BuildBestBadge();
 
-            // Both actions sit low on the screen, inside comfortable thumb reach on a phone.
-            var play = UiBuilder.Button(Root, "Play", new Vector2(640f, 180f), UiButton.Style.Primary,
+            // The main action sits low on the screen, inside comfortable thumb reach on a phone.
+            _play = UiBuilder.Button(Root, "Play", new Vector2(660f, 180f), UiButton.Style.Primary,
                 "OYNA", Design.Title);
-            play.Rect.anchoredPosition = new Vector2(0f, -300f);
-            play.Clicked += () => { Audio.PlayClick(); App.StartGame(); };
+            _play.Rect.anchoredPosition = new Vector2(0f, 40f);
+            _play.Clicked += () => { Audio.PlayClick(); App.PlayClassic(); };
 
-            // No icon here: pairing a glyph with a centred label on a wide button leaves the two
-            // reading as separate elements. Icons are reserved for icon-only controls.
-            var scores = UiBuilder.Button(Root, "Scores", new Vector2(640f, 144f), UiButton.Style.Secondary,
-                "SKORLAR", Design.Headline);
-            scores.Rect.anchoredPosition = new Vector2(0f, -510f);
-            scores.Clicked += () => { Audio.PlayClick(); App.OpenScores(); };
+            _levelNote = BuildModeCard("Adventure", Icons.Flag, Design.TextPrimary, "MACERA", -170f, out _,
+                () => { Audio.PlayClick(); App.ShowLevelSelect(); });
+            _dailyNote = BuildModeCard("Daily", Icons.Calendar, Design.Mint, "GÜNLÜK", 170f, out _dailyIcon,
+                () => { Audio.PlayClick(); App.PlayDaily(); });
+
+            BuildShortcut("Scores", Icons.List, "SKORLAR", -220f, () => { Audio.PlayClick(); App.OpenScores(); });
+            BuildShortcut("Stats", Icons.Chart, "İSTATİSTİK", 0f, () => { Audio.PlayClick(); App.OpenStats(); });
+            BuildShortcut("Themes", Icons.Palette, "TEMALAR", 220f, () => { Audio.PlayClick(); App.OpenThemes(); });
 
             var settings = UiBuilder.Button(Root, "Settings", new Vector2(112f, 112f), UiButton.Style.Icon,
                 null, Design.Body, Icons.Gear);
@@ -60,7 +68,7 @@ namespace BlockPuzzle.Game
         {
             var size = new Vector2(420f, 104f);
             var badge = UiBuilder.Panel(Root, "BestBadge", size, Design.SurfaceInset, 52f);
-            badge.rectTransform.anchoredPosition = new Vector2(0f, 170f);
+            badge.rectTransform.anchoredPosition = new Vector2(0f, 290f);
             UiBuilder.Hairline(badge.rectTransform, "Hairline", size, 52f);
 
             var gem = UiBuilder.Image(badge.rectTransform, "Gem", Icons.Gem, Design.Gold);
@@ -74,9 +82,64 @@ namespace BlockPuzzle.Game
             _best.rectTransform.anchoredPosition = new Vector2(46f, 0f);
         }
 
+        /// <summary>A tall secondary button: an icon, the mode's name, and one line of status under it.</summary>
+        TextMeshProUGUI BuildModeCard(string name, Sprite icon, Color iconColor, string label, float x,
+            out Image iconImage, System.Action onClick)
+        {
+            var size = new Vector2(316f, 236f);
+            var card = UiBuilder.Button(Root, name, size, UiButton.Style.Secondary, null, Design.Body);
+            card.Rect.anchoredPosition = new Vector2(x, -230f);
+            card.Clicked += onClick;
+
+            iconImage = UiBuilder.Image(card.Content, "Icon", icon, iconColor);
+            iconImage.type = Image.Type.Simple;
+            iconImage.rectTransform.sizeDelta = new Vector2(64f, 64f);
+            iconImage.rectTransform.anchoredPosition = new Vector2(0f, 58f);
+
+            var title = UiBuilder.Label(card.Content, "Label", label, Design.Headline, Design.TextPrimary, Design.FontDisplay);
+            title.rectTransform.sizeDelta = new Vector2(size.x, 64f);
+            title.rectTransform.anchoredPosition = new Vector2(0f, -12f);
+
+            var note = UiBuilder.Label(card.Content, "Note", "", Design.Caption, Design.TextSecondary,
+                Design.FontMedium, tracking: Design.TrackingLabel * 0.5f);
+            note.rectTransform.sizeDelta = new Vector2(size.x, 44f);
+            note.rectTransform.anchoredPosition = new Vector2(0f, -70f);
+            return note;
+        }
+
+        void BuildShortcut(string name, Sprite icon, string caption, float x, System.Action onClick)
+        {
+            var button = UiBuilder.Button(Root, name, new Vector2(128f, 128f), UiButton.Style.Icon, null, Design.Body, icon);
+            button.Rect.anchoredPosition = new Vector2(x, -520f);
+            button.Clicked += onClick;
+
+            var label = UiBuilder.Label(Root, name + "Caption", caption, Design.Caption, Design.TextOnGround,
+                Design.FontMedium, tracking: Design.TrackingLabel * 0.5f);
+            label.rectTransform.sizeDelta = new Vector2(220f, 44f);
+            label.rectTransform.anchoredPosition = new Vector2(x, -618f);
+        }
+
         protected override void OnShow()
         {
             _best.text = HighScores.Best.ToString();
+
+            // A run left mid-way is waiting: the main button says so.
+            _play.Label.text = RunStore.Has(GameMode.Classic) ? "DEVAM ET" : "OYNA";
+
+            _levelNote.text = $"BÖLÜM {Progress.UnlockedLevel}";
+
+            int streak = Progress.DailyStreak;
+            if (Progress.PlayedDailyToday)
+            {
+                _dailyNote.text = $"{streak} GÜN SERİ";
+                _dailyNote.color = Design.Gold;
+            }
+            else
+            {
+                _dailyNote.text = streak > 0 ? $"SERİ {streak} · BUGÜN?" : "YENİ BULMACA";
+                _dailyNote.color = Design.TextSecondary;
+            }
+
             StartCoroutine(BreatheTitle());
         }
 
@@ -94,7 +157,7 @@ namespace BlockPuzzle.Game
         }
     }
 
-    /// <summary>Audio and haptics, opened over whatever page is showing.</summary>
+    /// <summary>Audio, haptics and accessibility, opened over whatever page is showing.</summary>
     public sealed class SettingsScreen : AppScreen
     {
         public override bool IsModal => true;
@@ -103,6 +166,7 @@ namespace BlockPuzzle.Game
         UiSlider _sfx;
         UiToggle _haptics;
         UiToggle _mute;
+        UiToggle _colorBlind;
         Image _muteIcon;
 
         readonly List<Graphic> _audioRowGraphics = new List<Graphic>();
@@ -110,12 +174,12 @@ namespace BlockPuzzle.Game
 
         protected override void Build()
         {
-            ModalCard.Build(Root, "Ayarlar", new Vector2(900f, 960f), out var content);
+            ModalCard.Build(Root, "Ayarlar", new Vector2(900f, 1120f), out var content);
 
             // Master mute first: it is the control someone reaches for in a hurry.
-            _muteIcon = BuildLabelRow(content, "Mute", "SESİ KAPAT", Icons.SpeakerMuted, 290f, track: false);
+            _muteIcon = BuildLabelRow(content, "Mute", "SESİ KAPAT", Icons.SpeakerMuted, 360f, track: false);
             _mute = UiToggle.Create(content, "MuteToggle", 156f, 88f, GameSettings.Muted);
-            _mute.Rect.anchoredPosition = new Vector2(280f, 290f);
+            _mute.Rect.anchoredPosition = new Vector2(280f, 360f);
             _mute.ValueChanged += v =>
             {
                 GameSettings.Muted = v;
@@ -123,21 +187,26 @@ namespace BlockPuzzle.Game
                 Audio.PlayClick(); // silent when muting, audible when unmuting
             };
 
-            _music = BuildSliderRow(content, "Music", "MÜZİK", Icons.Speaker, 94f, GameSettings.MusicVolume);
+            _music = BuildSliderRow(content, "Music", "MÜZİK", Icons.Speaker, 164f, GameSettings.MusicVolume);
             _music.ValueChanged += v => GameSettings.MusicVolume = v;
 
-            _sfx = BuildSliderRow(content, "Sfx", "EFEKTLER", Icons.Speaker, -76f, GameSettings.SfxVolume);
+            _sfx = BuildSliderRow(content, "Sfx", "EFEKTLER", Icons.Speaker, -6f, GameSettings.SfxVolume);
             _sfx.ValueChanged += v =>
             {
                 GameSettings.SfxVolume = v;
                 Audio.PlayClick(); // immediate feedback at the new level
             };
 
-            BuildLabelRow(content, "Haptic", "TİTREŞİM", Icons.Vibrate, -200f, track: false);
-
+            BuildLabelRow(content, "Haptic", "TİTREŞİM", Icons.Vibrate, -130f, track: false);
             _haptics = UiToggle.Create(content, "HapticToggle", 156f, 88f, GameSettings.Haptics);
-            _haptics.Rect.anchoredPosition = new Vector2(280f, -200f);
+            _haptics.Rect.anchoredPosition = new Vector2(280f, -130f);
             _haptics.ValueChanged += v => { GameSettings.Haptics = v; Audio.PlayClick(); };
+
+            // Colour-blind mode marks every block colour with its own small shape.
+            BuildLabelRow(content, "ColorBlind", "RENK KÖRÜ MODU", Icons.Palette, -250f, track: false);
+            _colorBlind = UiToggle.Create(content, "ColorBlindToggle", 156f, 88f, Progress.ColorBlind);
+            _colorBlind.Rect.anchoredPosition = new Vector2(280f, -250f);
+            _colorBlind.ValueChanged += v => { Progress.ColorBlind = v; Audio.PlayClick(); };
 
             var close = UiBuilder.Button(content, "Close", new Vector2(420f, 140f), UiButton.Style.Primary,
                 "TAMAM", Design.Headline);
@@ -156,8 +225,8 @@ namespace BlockPuzzle.Game
 
             var text = UiBuilder.Label(parent, name + "Label", label, Design.Label, Design.TextSecondary,
                 Design.FontMedium, TextAlignmentOptions.Left, Design.TrackingLabel);
-            text.rectTransform.sizeDelta = new Vector2(420f, 56f);
-            text.rectTransform.anchoredPosition = new Vector2(-60f, y);
+            text.rectTransform.sizeDelta = new Vector2(440f, 56f);
+            text.rectTransform.anchoredPosition = new Vector2(-50f, y);
 
             // Volume rows dim while muted, so the sliders read as parked rather than broken.
             if (track)
@@ -196,13 +265,15 @@ namespace BlockPuzzle.Game
             _sfx.Value = GameSettings.SfxVolume;
             _haptics.IsOn = GameSettings.Haptics;
             _mute.IsOn = GameSettings.Muted;
+            _colorBlind.IsOn = Progress.ColorBlind;
             ApplyMuteState();
         }
     }
 
     /// <summary>
-    /// Mid-run menu. Opening it is the only way to reach settings or leave a game, so a player
-    /// never has to guess whether tapping something will cost them their run.
+    /// Mid-run menu. Opening it is the only way to reach settings, restart or leave a game, so a
+    /// player never has to guess whether tapping something will cost them their run. Leaving
+    /// keeps the run: it is saved and waiting on the title page.
     /// </summary>
     public sealed class PauseScreen : AppScreen
     {
@@ -210,11 +281,15 @@ namespace BlockPuzzle.Game
 
         protected override void Build()
         {
-            ModalCard.Build(Root, "Duraklatıldı", new Vector2(880f, 700f), out var content);
+            ModalCard.Build(Root, "Duraklatıldı", new Vector2(880f, 860f), out var content);
 
             var resume = UiBuilder.Button(content, "Resume", new Vector2(600f, 156f), UiButton.Style.Primary,
                 "DEVAM ET", Design.Headline);
             resume.Clicked += () => { Audio.PlayClick(); App.CloseModal(); };
+
+            var restart = UiBuilder.Button(content, "Restart", new Vector2(600f, 136f), UiButton.Style.Secondary,
+                "YENİDEN BAŞLA", Design.Body);
+            restart.Clicked += () => { Audio.PlayClick(); App.RestartRun(); };
 
             var settings = UiBuilder.Button(content, "Settings", new Vector2(600f, 136f), UiButton.Style.Secondary,
                 "AYARLAR", Design.Body);
@@ -222,9 +297,9 @@ namespace BlockPuzzle.Game
 
             var quit = UiBuilder.Button(content, "Quit", new Vector2(600f, 136f), UiButton.Style.Secondary,
                 "ANA SAYFAYA DÖN", Design.Body);
-            quit.Clicked += () => { Audio.PlayClick(); App.ShowMenu(); };
+            quit.Clicked += () => { Audio.PlayClick(); App.LeaveRun(); };
 
-            ModalCard.StackFromBottom(content, Design.Space3, resume.Rect, settings.Rect, quit.Rect);
+            ModalCard.StackFromBottom(content, Design.Space3, resume.Rect, restart.Rect, settings.Rect, quit.Rect);
         }
     }
 
@@ -313,7 +388,7 @@ namespace BlockPuzzle.Game
 
     /// <summary>
     /// The shared modal chrome: a scrim, an elevated card with a hairline, and a heading.
-    /// Having one builder for it is what keeps the two modals looking like the same product.
+    /// Having one builder for it is what keeps the modals looking like the same product.
     /// </summary>
     static class ModalCard
     {

@@ -23,7 +23,7 @@ namespace BlockPuzzle.Game
 
         public float Pitch => _cellSize + _gap;
 
-        public void Build(PieceShape shape, int colorIndex, Color color, float cellSize, float gap)
+        public void Build(PieceShape shape, int colorIndex, Color color, float cellSize, float gap, bool glyphs = false)
         {
             Shape = shape;
             ColorIndex = colorIndex;
@@ -46,6 +46,13 @@ namespace BlockPuzzle.Game
                 image.rectTransform.sizeDelta = new Vector2(cellSize, cellSize);
                 image.rectTransform.anchoredPosition = LocalCellPosition(cell.X, cell.Y);
                 _blocks.Add(image);
+
+                if (glyphs)
+                {
+                    var glyph = UiBuilder.Image(image.rectTransform, "Glyph", Art.Glyph(colorIndex), new Color(0f, 0f, 0f, 0.30f));
+                    glyph.type = Image.Type.Simple;
+                    glyph.rectTransform.sizeDelta = new Vector2(cellSize * 0.34f, cellSize * 0.34f);
+                }
             }
         }
 

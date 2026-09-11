@@ -134,16 +134,23 @@ namespace BlockPuzzle.Game
             return Mint;
         }
 
-        public static readonly Color[] Blocks =
-        {
-            Hex("#FF5A7E"), // rose
-            Hex("#FFB13C"), // amber
-            Hex("#38D39F"), // mint
-            Hex("#3AA9FF"), // azure
-            Hex("#9B6BFF"), // violet
-            Hex("#FF7C4D"), // coral
-            Hex("#26C9C3")  // teal
-        };
+        /// <summary>
+        /// The block colours of the chosen theme (<see cref="Themes"/>). Every theme has the same
+        /// number of colours, so a saved run keeps its colour indices whatever the theme.
+        /// </summary>
+        public static Color[] Blocks => Themes.Current.Blocks;
+
+        /// <summary>How many colours the rules deal. Fixed, independent of the theme.</summary>
+        public const int PaletteSize = 7;
+
+        /// <summary>Crystals: a pale cyan, cooler than any block colour, so they never read as a block.</summary>
+        public static readonly Color Crystal = Hex("#E8FBFF");
+
+        /// <summary>Ice sits over a block as a cold frost, blue enough never to read as white paint.</summary>
+        public static readonly Color Ice = Hex("#C9E9FF");
+
+        /// <summary>The prism charge meter and everything that belongs to the powers.</summary>
+        public static readonly Color Prism = Hex("#7FE7FF");
 
         // ------------------------------------------------------------------ elevation
 

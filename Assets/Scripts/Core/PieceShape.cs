@@ -23,8 +23,9 @@ namespace BlockPuzzle.Core
 
     /// <summary>
     /// Immutable cell layout of a placeable piece, normalized so its bounding box starts at (0,0).
-    /// Pieces never rotate at runtime — every rotation the game uses is authored as its own shape,
-    /// which is what keeps the Block Blast style of planning ahead meaningful.
+    /// Pieces do not rotate on their own — every rotation the dealer uses is authored as its own
+    /// shape, which is what keeps the Block Blast style of planning ahead meaningful. The rotate
+    /// power is the one exception, and it maps back onto those authored shapes.
     /// </summary>
     public sealed class PieceShape
     {
@@ -56,6 +57,50 @@ namespace BlockPuzzle.Core
         {
             if (localX < 0 || localX >= Width || localY < 0 || localY >= Height) return false;
             return _mask[localX, localY];
+        }
+
+        /// <summary>True when both shapes cover exactly the same cells, whatever their ids.</summary>
+        public bool SameCells(PieceShape other)
+        {
+            if (other == null || other.Width != Width || other.Height != Height || other.CellCount != CellCount)
+                return false;
+
+            foreach (var cell in Cells)
+                if (!other.Contains(cell.X, cell.Y)) return false;
+
+            return true;
+        }
+
+        /// <summary>The same piece turned a quarter turn clockwise.</summary>
+        public PieceShape RotatedClockwise()
+        {
+            var cells = new CellOffset[Cells.Length];
+            for (int i = 0; i < Cells.Length; i++)
+                cells[i] = new CellOffset(Height - 1 - Cells[i].Y, Cells[i].X);
+
+            return new PieceShape(Id + "_cw", cells);
+        }
+
+        /// <summary>Rows joined by '/', e.g. "XX./.XX". Round-trips through <see cref="FromCompact"/>.</summary>
+        public string ToCompact()
+        {
+            var rows = new string[Height];
+            var chars = new char[Width];
+
+            for (int y = 0; y < Height; y++)
+            {
+                for (int x = 0; x < Width; x++)
+                    chars[x] = _mask[x, y] ? 'X' : '.';
+                rows[y] = new string(chars);
+            }
+
+            return string.Join("/", rows);
+        }
+
+        public static PieceShape FromCompact(string id, string compact)
+        {
+            if (string.IsNullOrEmpty(compact)) throw new ArgumentException("Empty pattern.", nameof(compact));
+            return FromPattern(id, compact.Split('/'));
         }
 
         /// <summary>

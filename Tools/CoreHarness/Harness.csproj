@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Compiles Assets/Scripts/Core on its own (it has no Unity dependency) and runs the rule
+    tests, the balance simulation and the level curve from the command line:
+
+      dotnet build -c Release
+      dotnet bin/Release/net8.0/Harness.dll tests
+      dotnet bin/Release/net8.0/Harness.dll balance 40
+      dotnet bin/Release/net8.0/Harness.dll levels 1 60
+
+    Unity's own SDK works: "<Unity>/Editor/Data/DotNetSdk/dotnet.exe".
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <LangVersion>9.0</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\Assets\Scripts\Core\*.cs" />
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+</Project>

@@ -33,8 +33,29 @@ namespace BlockPuzzle.Game
 
         Coroutine _press;
         float _shadowAlpha;
+        Color _restFill;
+        CanvasGroup _group;
 
         public event Action Clicked;
+
+        /// <summary>Swaps the fill colour, for a button that stays "on" — a power waiting for its target.</summary>
+        public void SetHighlighted(bool on, Color color)
+        {
+            if (_fill != null) _fill.color = on ? color : _restFill;
+        }
+
+        /// <summary>Greys the button out and stops it taking presses. Distinct from hiding it.</summary>
+        public void SetEnabled(bool enabled)
+        {
+            Interactable = enabled;
+            if (_group == null) _group = gameObject.AddComponent<CanvasGroup>();
+            _group.alpha = enabled ? 1f : 0.35f;
+        }
+
+        public Image Icon => _icon;
+
+        /// <summary>The part that sinks on press. Custom content added here moves with the button.</summary>
+        public RectTransform Content => _content;
 
         public RectTransform Rect => _rect;
         public bool Interactable { get; set; } = true;
@@ -86,6 +107,8 @@ namespace BlockPuzzle.Game
                     UiBuilder.Hairline(_content, "Hairline", size, radius);
                     break;
             }
+
+            _restFill = _fill.color;
 
             if (icon != null)
             {

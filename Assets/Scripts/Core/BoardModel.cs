@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace BlockPuzzle.Core
 {
-    /// <summary>What a single placement did to the board.</summary>
+    /// <summary>What a single placement (or a blast) did to the board.</summary>
     public sealed class ClearResult
     {
         public readonly List<int> ClearedRows = new List<int>();
@@ -12,13 +12,36 @@ namespace BlockPuzzle.Core
         /// <summary>Every cell that got wiped, de-duplicated across intersecting rows and columns.</summary>
         public readonly List<CellOffset> ClearedCells = new List<CellOffset>();
 
+        /// <summary>Crystals freed by this clear. Each one also appears in <see cref="ClearedCells"/>.</summary>
+        public readonly List<CellOffset> CollectedGems = new List<CellOffset>();
+
+        /// <summary>Iced cells whose ice took a hit. They stay on the board, one layer thinner.</summary>
+        public readonly List<CellOffset> CrackedIce = new List<CellOffset>();
+
+        /// <summary>Cleared lines that were a single colour end to end.</summary>
+        public int MonoLines;
+
+        /// <summary>Which of the cleared rows and columns were single-colour, for the view.</summary>
+        public readonly List<int> MonoRows = new List<int>();
+        public readonly List<int> MonoColumns = new List<int>();
+
+        /// <summary>The clear left the board completely empty.</summary>
+        public bool PerfectClear;
+
         public int LinesCleared => ClearedRows.Count + ClearedColumns.Count;
         public bool Any => LinesCleared > 0;
+
+        /// <summary>Cells the clear touched in any way — wiped or cracked. This is what scores.</summary>
+        public int AffectedCells => ClearedCells.Count + CrackedIce.Count;
     }
 
     /// <summary>
     /// The playfield. Pure logic, no Unity types, so the rules can be unit tested and the view can
     /// stay a dumb renderer. Cells hold a colour index, or <see cref="Empty"/> when free.
+    ///
+    /// Two optional layers sit on top of occupied cells, used by the level mode:
+    /// a crystal (collected when its cell is cleared) and ice (each clear knocks off one layer,
+    /// and the block underneath only goes once the ice is gone).
     ///
     /// Per-row and per-column occupancy tallies are maintained as cells change. The dealer probes
     /// thousands of hypothetical placements per tray, and rescanning the grid for each one was the
@@ -29,6 +52,8 @@ namespace BlockPuzzle.Core
         public const int Empty = -1;
 
         readonly int[,] _cells;
+        readonly bool[,] _gems;
+        readonly int[,] _ice;
         readonly int[] _rowCount;
         readonly int[] _colCount;
 
@@ -44,6 +69,8 @@ namespace BlockPuzzle.Core
 
             Size = size;
             _cells = new int[size, size];
+            _gems = new bool[size, size];
+            _ice = new int[size, size];
             _rowCount = new int[size];
             _colCount = new int[size];
             _rowAdd = new int[size];
@@ -54,15 +81,21 @@ namespace BlockPuzzle.Core
 
         public int OccupiedCount { get; private set; }
 
+        /// <summary>Crystals still on the board.</summary>
+        public int GemCount { get; private set; }
+
         public void Clear()
         {
             for (int y = 0; y < Size; y++)
             for (int x = 0; x < Size; x++)
                 _cells[x, y] = Empty;
 
+            Array.Clear(_gems, 0, _gems.Length);
+            Array.Clear(_ice, 0, _ice.Length);
             Array.Clear(_rowCount, 0, Size);
             Array.Clear(_colCount, 0, Size);
             OccupiedCount = 0;
+            GemCount = 0;
         }
 
         /// <summary>A detached copy, for looking ahead without touching the live board.</summary>
@@ -79,9 +112,12 @@ namespace BlockPuzzle.Core
                 throw new ArgumentException("Boards must be the same size to copy.", nameof(other));
 
             Array.Copy(other._cells, _cells, _cells.Length);
+            Array.Copy(other._gems, _gems, _gems.Length);
+            Array.Copy(other._ice, _ice, _ice.Length);
             Array.Copy(other._rowCount, _rowCount, Size);
             Array.Copy(other._colCount, _colCount, Size);
             OccupiedCount = other.OccupiedCount;
+            GemCount = other.GemCount;
         }
 
         public bool InBounds(int col, int row) => col >= 0 && col < Size && row >= 0 && row < Size;
@@ -94,8 +130,33 @@ namespace BlockPuzzle.Core
 
         public bool IsOccupied(int col, int row) => _cells[col, row] != Empty;
 
+        public bool HasGem(int col, int row) => InBounds(col, row) && _gems[col, row];
+
+        /// <summary>Layers of ice on a cell; 0 for none.</summary>
+        public int IceAt(int col, int row) => InBounds(col, row) ? _ice[col, row] : 0;
+
         public int RowCount(int row) => _rowCount[row];
         public int ColumnCount(int col) => _colCount[col];
+
+        /// <summary>
+        /// Puts a pre-placed block on the board — how a level lays out its starting position and
+        /// how a saved run is restored. Crystals and ice only ever sit on an occupied cell.
+        /// </summary>
+        public void SetPrefill(int col, int row, int colorIndex, bool gem = false, int ice = 0)
+        {
+            if (!InBounds(col, row)) throw new ArgumentOutOfRangeException($"Cell ({col},{row}) is off the board.");
+            if (colorIndex < 0) throw new ArgumentOutOfRangeException(nameof(colorIndex), "Prefill needs a colour.");
+
+            SetCell(col, row, colorIndex);
+
+            if (_gems[col, row] != gem)
+            {
+                _gems[col, row] = gem;
+                GemCount += gem ? 1 : -1;
+            }
+
+            _ice[col, row] = Math.Max(0, ice);
+        }
 
         /// <summary>True when every cell of the shape lands in bounds and on a free cell.</summary>
         public bool CanPlace(PieceShape shape, int col, int row)
@@ -183,6 +244,23 @@ namespace BlockPuzzle.Core
             }
         }
 
+        /// <summary>Crystals sitting in the given rows and columns, each counted once.</summary>
+        public int CountGemsInLines(List<int> rows, List<int> columns)
+        {
+            if (GemCount == 0) return 0;
+
+            int gems = 0;
+            foreach (int y in rows)
+                for (int x = 0; x < Size; x++)
+                    if (_gems[x, y]) gems++;
+
+            foreach (int x in columns)
+                for (int y = 0; y < Size; y++)
+                    if (_gems[x, y] && !rows.Contains(y)) gems++;
+
+            return gems;
+        }
+
         /// <summary>
         /// How many of a piece's edges would touch an occupied cell or a wall at this position.
         /// Snug placements score higher, which is what "fits nicely" means numerically.
@@ -228,6 +306,36 @@ namespace BlockPuzzle.Core
             return ResolveLines();
         }
 
+        /// <summary>
+        /// Wipes every block in the square of the given radius around a cell — ice, crystals and
+        /// all. The bomb power. Does not complete lines; it only makes room.
+        /// </summary>
+        public ClearResult Blast(int col, int row, int radius)
+        {
+            var result = new ClearResult();
+
+            for (int y = row - radius; y <= row + radius; y++)
+            for (int x = col - radius; x <= col + radius; x++)
+            {
+                if (!InBounds(x, y) || _cells[x, y] == Empty) continue;
+
+                var cell = new CellOffset(x, y);
+                if (_gems[x, y])
+                {
+                    _gems[x, y] = false;
+                    GemCount--;
+                    result.CollectedGems.Add(cell);
+                }
+
+                _ice[x, y] = 0;
+                SetCell(x, y, Empty);
+                result.ClearedCells.Add(cell);
+            }
+
+            result.PerfectClear = result.ClearedCells.Count > 0 && OccupiedCount == 0;
+            return result;
+        }
+
         void SetCell(int x, int y, int value)
         {
             int previous = _cells[x, y];
@@ -249,6 +357,22 @@ namespace BlockPuzzle.Core
             _cells[x, y] = value;
         }
 
+        bool RowIsMono(int y)
+        {
+            int colour = _cells[0, y];
+            for (int x = 1; x < Size; x++)
+                if (_cells[x, y] != colour) return false;
+            return true;
+        }
+
+        bool ColumnIsMono(int x)
+        {
+            int colour = _cells[x, 0];
+            for (int y = 1; y < Size; y++)
+                if (_cells[x, y] != colour) return false;
+            return true;
+        }
+
         ClearResult ResolveLines()
         {
             var result = new ClearResult();
@@ -260,6 +384,13 @@ namespace BlockPuzzle.Core
                 if (_colCount[x] == Size) result.ClearedColumns.Add(x);
 
             if (!result.Any) return result;
+
+            // Colour is judged before anything is wiped, while the full line is still there.
+            foreach (int y in result.ClearedRows)
+                if (RowIsMono(y)) result.MonoRows.Add(y);
+            foreach (int x in result.ClearedColumns)
+                if (ColumnIsMono(x)) result.MonoColumns.Add(x);
+            result.MonoLines = result.MonoRows.Count + result.MonoColumns.Count;
 
             var wiped = new HashSet<CellOffset>();
 
@@ -273,10 +404,27 @@ namespace BlockPuzzle.Core
 
             foreach (var cell in wiped)
             {
+                // Ice absorbs the clear: the block stays and only the ice gets thinner. A cell on a
+                // crossing row and column still loses a single layer — it was hit by one move.
+                if (_ice[cell.X, cell.Y] > 0)
+                {
+                    _ice[cell.X, cell.Y]--;
+                    result.CrackedIce.Add(cell);
+                    continue;
+                }
+
+                if (_gems[cell.X, cell.Y])
+                {
+                    _gems[cell.X, cell.Y] = false;
+                    GemCount--;
+                    result.CollectedGems.Add(cell);
+                }
+
                 SetCell(cell.X, cell.Y, Empty);
                 result.ClearedCells.Add(cell);
             }
 
+            result.PerfectClear = OccupiedCount == 0;
             return result;
         }
     }

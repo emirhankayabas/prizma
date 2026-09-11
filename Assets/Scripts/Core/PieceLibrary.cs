@@ -88,8 +88,23 @@ namespace BlockPuzzle.Core
             return list.ToArray();
         }
 
+        /// <summary>
+        /// The library instance covering the same cells, so a rotated or restored piece keeps a
+        /// stable id. Returns the shape itself when the library has no match.
+        /// </summary>
+        public static PieceShape Canonical(PieceShape shape)
+        {
+            if (shape == null) return null;
+
+            for (int i = 0; i < All.Count; i++)
+                if (All[i].Shape.SameCells(shape))
+                    return All[i].Shape;
+
+            return shape;
+        }
+
         /// <summary>Picks a shape using the library weights.</summary>
-        public static PieceShape PickWeighted(Random random)
+        public static PieceShape PickWeighted(Rng random)
         {
             if (random == null) throw new ArgumentNullException(nameof(random));
 

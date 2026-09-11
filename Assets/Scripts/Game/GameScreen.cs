@@ -1,4 +1,6 @@
+using System;
 using System.Collections;
+using System.Collections.Generic;
 using BlockPuzzle.Core;
 using TMPro;
 using UnityEngine;
@@ -7,45 +9,47 @@ using UnityEngine.UI;
 namespace BlockPuzzle.Game
 {
     /// <summary>
-    /// The play page: HUD, board, tray and the game-over card. Pointer input arrives through
-    /// <see cref="PointerRouter"/> as the fallback handler, so buttons always win over the board.
+    /// The play page: HUD, board, prism powers, tray and the result card, for every mode.
+    /// Pointer input arrives through <see cref="PointerRouter"/> as the fallback handler, so
+    /// buttons always win over the board.
+    ///
+    /// The page never creates a run itself. <see cref="AppController"/> hands it one — fresh or
+    /// restored from a save — through <see cref="Begin"/>.
     /// </summary>
     public sealed class GameScreen : AppScreen, IPointerFallback
     {
         const float BoardPadding = 20f;
         const float BoardGap = 10f;
         const float HudHeight = 440f;
-        const float TrayHeight = 300f;
-        const float TrayBottomOffset = 100f;
+        const float TrayHeight = 280f;
+        const float TrayBottomOffset = 60f;
+        const float PowerBarHeight = 110f;
+        const float PowerBarGap = 20f;
+
+        /// <summary>Everything stacked under the board: the tray and the power bar over it.</summary>
+        const float BottomStack = TrayBottomOffset + TrayHeight + PowerBarGap + PowerBarHeight;
 
         /// <summary>
-        /// The board is centred in the band the HUD and the tray leave behind, not on the canvas.
-        /// Written as a difference so it follows those two when they move, and because the canvas
-        /// is taller than 1920 on a long phone — the surplus has to split evenly above and below
-        /// the board instead of pooling under it.
+        /// The board is centred in the band the HUD and the bottom stack leave behind, not on the
+        /// canvas. Written as a difference so it follows those when they move, and because the
+        /// canvas is taller than 1920 on a long phone — the surplus has to split evenly above and
+        /// below the board instead of pooling under it.
         /// </summary>
-        public const float BoardCenterY = (TrayBottomOffset + TrayHeight - HudHeight) * 0.5f;
+        public const float BoardCenterY = (BottomStack - HudHeight) * 0.5f;
 
         GameSession _session;
 
         BoardView _board;
         TrayView _tray;
+        GameHud _hud;
+        PowerBar _powers;
+        ResultCard _result;
+        Action _resultPrimary;
+        Action _resultSecondary;
+
         RectTransform _dragLayer;
-
-        TextMeshProUGUI _scoreLabel;
-        TextMeshProUGUI _bestLabel;
-
-        RectTransform _comboChip;
-        Image _comboChipFill;
-        Image _comboChipEdge;
-        TextMeshProUGUI _comboLabel;
-
-
-        RectTransform _overPanel;
-        Image _overScrim;
-        RectTransform _overCard;
-        TextMeshProUGUI _overScore;
-        TextMeshProUGUI _overNote;
+        RectTransform _popupLayer;
+        RectTransform _flyLayer;
 
         PieceView _dragPiece;
         int _dragSlot = -1;
@@ -56,15 +60,22 @@ namespace BlockPuzzle.Game
         int _hoverRow;
         bool _hoverKnown;
 
-        int _displayedScore;
-        int _linesThisRun;
-        float _liftPixels;
+        // A power waiting for its target: the piece to turn, or the cell to blast.
+        PowerKind? _aiming;
+        bool _bombHeld;
+        bool _colorBlind;
 
+        int _displayedScore;
+        float _liftPixels;
         Coroutine _scoreRoutine;
 
-        RectTransform _popupLayer;
-        readonly System.Collections.Generic.List<TextMeshProUGUI> _popupPool =
-            new System.Collections.Generic.List<TextMeshProUGUI>();
+        Image _hand;
+        Coroutine _tutorial;
+
+        readonly List<TextMeshProUGUI> _popupPool = new List<TextMeshProUGUI>();
+        readonly List<Image> _flyPool = new List<Image>();
+
+        public GameSession Session => _session;
 
         // ------------------------------------------------------------------ build
 
@@ -73,18 +84,38 @@ namespace BlockPuzzle.Game
             float boardSize = 1080f - Design.Gutter * 2f;
 
             BuildBoard(boardSize);
-            BuildHud();
+
+            _hud = new GameHud();
+            _hud.Build(Root, HudHeight, () => { Audio.PlayClick(); App.OpenPause(); });
+
+            _powers = new PowerBar();
+            _powers.Build(Root, boardSize, PowerBarHeight, TrayBottomOffset + TrayHeight + PowerBarGap);
+            _powers.PowerClicked += OnPowerClicked;
+            _powers.EndClicked += () => { Audio.PlayClick(); _session?.Concede(); };
+
             BuildTray(boardSize);
 
-
             _popupLayer = UiBuilder.Child(Root, "Popups");
+            _flyLayer = UiBuilder.Child(Root, "Fly");
             _dragLayer = UiBuilder.Child(Root, "DragLayer");
 
             // The held piece moves every frame; on its own canvas that re-batches one piece
-            // instead of the board, the HUD and the tray along with it.
+            // instead of the board, the HUD and the tray along with it. Flying crystals likewise.
             _dragLayer.gameObject.AddComponent<Canvas>();
+            _flyLayer.gameObject.AddComponent<Canvas>();
 
-            BuildGameOver();
+            _hand = UiBuilder.Image(Root, "TutorialHand", Icons.Hand, Color.white);
+            _hand.type = Image.Type.Simple;
+            _hand.rectTransform.sizeDelta = new Vector2(150f, 150f);
+            // The fingertip, not the middle of the glyph, is what lands on the target.
+            _hand.rectTransform.pivot = new Vector2(0.45f, 0.94f);
+            _hand.gameObject.AddComponent<Canvas>();
+            _hand.gameObject.SetActive(false);
+
+            _result = new ResultCard();
+            _result.Build(Root);
+            _result.PrimaryClicked += () => { Audio.PlayClick(); _resultPrimary?.Invoke(); };
+            _result.SecondaryClicked += () => { Audio.PlayClick(); _resultSecondary?.Invoke(); };
         }
 
         void BuildBoard(float boardSize)
@@ -101,65 +132,6 @@ namespace BlockPuzzle.Game
             _liftPixels = _board.CellSize * 1.55f;
         }
 
-        void BuildHud()
-        {
-            var hud = UiBuilder.Node(Root, "Hud");
-            hud.anchorMin = hud.anchorMax = new Vector2(0.5f, 1f);
-            hud.pivot = new Vector2(0.5f, 1f);
-            hud.sizeDelta = new Vector2(1080f, HudHeight);
-
-            // Best score, marked with a gem rather than the crown the genre usually reaches for.
-            var gem = UiBuilder.Image(hud, "Gem", Icons.Gem, Design.Gold);
-            gem.type = Image.Type.Simple;
-            gem.rectTransform.anchorMin = gem.rectTransform.anchorMax = new Vector2(0f, 1f);
-            gem.rectTransform.pivot = new Vector2(0f, 1f);
-            gem.rectTransform.sizeDelta = new Vector2(44f, 44f);
-            gem.rectTransform.anchoredPosition = new Vector2(Design.Gutter, -Design.Space6);
-
-            _bestLabel = UiBuilder.Label(hud, "Best", "0", Design.Headline, Design.Gold,
-                Design.FontDisplay, TextAlignmentOptions.Left);
-            _bestLabel.rectTransform.anchorMin = _bestLabel.rectTransform.anchorMax = new Vector2(0f, 1f);
-            _bestLabel.rectTransform.pivot = new Vector2(0f, 1f);
-            _bestLabel.rectTransform.sizeDelta = new Vector2(300f, 64f);
-            _bestLabel.rectTransform.anchoredPosition = new Vector2(Design.Gutter + 62f, -Design.Space6 + 8f);
-
-            // One control in the corner. It pauses; settings and quitting live inside that menu,
-            // which is where a player looks for them mid-run.
-            var pause = UiBuilder.Button(hud, "Pause", new Vector2(104f, 104f), UiButton.Style.Icon,
-                null, Design.Body, Icons.Pause);
-            pause.Rect.anchorMin = pause.Rect.anchorMax = new Vector2(1f, 1f);
-            pause.Rect.pivot = new Vector2(1f, 1f);
-            pause.Rect.anchoredPosition = new Vector2(-Design.Gutter, -Design.Space5);
-            pause.Clicked += () => { Audio.PlayClick(); App.OpenPause(); };
-
-            _scoreLabel = UiBuilder.Label(hud, "Score", "0", Design.Readout, Design.TextPrimary,
-                Design.FontDisplay, tracking: Design.TrackingDisplay);
-            _scoreLabel.rectTransform.anchorMin = _scoreLabel.rectTransform.anchorMax = new Vector2(0.5f, 1f);
-            _scoreLabel.rectTransform.pivot = new Vector2(0.5f, 1f);
-            // A tight box: the default line box would reserve enough room to collide with the chip.
-            _scoreLabel.rectTransform.sizeDelta = new Vector2(960f, 170f);
-            _scoreLabel.rectTransform.anchoredPosition = new Vector2(0f, -170f);
-            UiBuilder.TextShadow(_scoreLabel, 0.45f, -0.3f, 0.45f);
-
-            // The combo chip stays on screen for as long as the streak is alive, rather than
-            // flashing once. A multiplier the player cannot see is a multiplier they cannot chase.
-            _comboChip = UiBuilder.Node(hud, "ComboChip");
-            _comboChip.anchorMin = _comboChip.anchorMax = new Vector2(0.5f, 1f);
-            _comboChip.pivot = new Vector2(0.5f, 1f);
-            _comboChip.sizeDelta = new Vector2(330f, 72f);
-            _comboChip.anchoredPosition = new Vector2(0f, -352f);
-
-            _comboChipFill = UiBuilder.Panel(_comboChip, "Fill", _comboChip.sizeDelta,
-                Design.SurfaceInset, 36f);
-            _comboChipEdge = UiBuilder.Hairline(_comboChip, "Edge", _comboChip.sizeDelta, 36f, Design.Mint.WithAlpha(0.5f));
-
-            _comboLabel = UiBuilder.Label(_comboChip, "Label", "", Design.Body, Design.Mint,
-                Design.FontDisplay, tracking: 4f);
-            _comboLabel.rectTransform.sizeDelta = _comboChip.sizeDelta;
-
-            _comboChip.gameObject.SetActive(false);
-        }
-
         void BuildTray(float boardSize)
         {
             var trayGo = new GameObject("Tray", typeof(RectTransform));
@@ -174,54 +146,12 @@ namespace BlockPuzzle.Game
             _tray.Build(boardSize, TrayHeight, _board.CellSize, _board.Gap, GameSession.TraySlots);
         }
 
-        void BuildGameOver()
-        {
-            _overPanel = UiBuilder.Node(Root, "GameOver");
-            UiBuilder.Stretch(_overPanel);
-
-            _overScrim = UiBuilder.Image(_overPanel, "Scrim", Art.Panel(0f), Design.Scrim);
-            _overScrim.type = Image.Type.Simple;
-            UiBuilder.Stretch(_overScrim.rectTransform);
-
-            var size = new Vector2(880f, 800f);
-            _overCard = UiBuilder.Node(_overPanel, "Card");
-            _overCard.sizeDelta = size;
-
-            UiBuilder.Shadow(_overCard, "Shadow", size, Design.RadiusLg, Design.E3);
-            UiBuilder.Panel(_overCard, "Fill", size, Design.SurfaceHigh, Design.RadiusLg);
-            UiBuilder.Hairline(_overCard, "Hairline", size, Design.RadiusLg);
-
-            var title = UiBuilder.Label(_overCard, "Title", "Oyun Bitti", Design.Title, Design.TextSecondary,
-                Design.FontMedium);
-            title.rectTransform.anchoredPosition = new Vector2(0f, 270f);
-
-            _overScore = UiBuilder.Label(_overCard, "Score", "0", Design.Readout, Design.TextPrimary,
-                Design.FontDisplay, tracking: Design.TrackingDisplay);
-            _overScore.rectTransform.anchoredPosition = new Vector2(0f, 130f);
-
-            _overNote = UiBuilder.Label(_overCard, "Note", "", Design.Label, Design.Mint,
-                Design.FontMedium, tracking: Design.TrackingLabel);
-            _overNote.rectTransform.anchoredPosition = new Vector2(0f, 24f);
-
-            var replay = UiBuilder.Button(_overCard, "Replay", new Vector2(600f, 156f), UiButton.Style.Primary,
-                "TEKRAR OYNA", Design.Headline);
-            replay.Rect.anchoredPosition = new Vector2(0f, -110f);
-            replay.Clicked += () => { Audio.PlayClick(); StartNewRun(); };
-
-            var menu = UiBuilder.Button(_overCard, "Menu", new Vector2(600f, 136f), UiButton.Style.Secondary,
-                "ANA MENÜ", Design.Body);
-            menu.Rect.anchoredPosition = new Vector2(0f, -280f);
-            menu.Clicked += () => { Audio.PlayClick(); App.ShowMenu(); };
-
-            _overPanel.gameObject.SetActive(false);
-        }
-
         // ------------------------------------------------------------------ run lifecycle
 
         protected override void OnShow()
         {
             PointerRouter.Fallback = this;
-            if (_session == null) StartNewRun();
+            Progress.Changed += OnProgressChanged;
         }
 
         protected override void OnHide()
@@ -229,27 +159,113 @@ namespace BlockPuzzle.Game
             if (ReferenceEquals(PointerRouter.Fallback, this))
                 PointerRouter.Fallback = null;
 
+            Progress.Changed -= OnProgressChanged;
             CancelDrag();
+            CancelAim();
+            StopTutorial();
+            SaveRun();
         }
 
-        public void StartNewRun()
+        /// <summary>The colour-blind setting can be flipped from the pause menu mid-run; apply it at once.</summary>
+        void OnProgressChanged()
         {
-            _session = GameSession.NewRandomRun(App.BoardSize, Design.Blocks.Length);
-            _session.Moved += OnMoved;
-            _session.GameOver += OnGameOver;
+            bool colorBlind = Progress.ColorBlind;
+            if (colorBlind == _colorBlind) return;
 
-            _linesThisRun = 0;
-            _displayedScore = 0;
-
-            _board.Bind(_session.Board);
-            _tray.Refresh(_session);
-
-            _overPanel.gameObject.SetActive(false);
-            HideCombo();
-
-            _scoreLabel.text = "0";
-            _bestLabel.text = HighScores.Best.ToString();
+            _colorBlind = colorBlind;
+            _board.SetColorBlind(colorBlind);
+            _tray.SetColorBlind(colorBlind);
+            if (_session != null && !_dragging) _tray.Refresh(_session);
         }
+
+        /// <summary>
+        /// The Android back button, asked before the pause menu opens: it backs out of a result
+        /// card or an armed power first. Returns false when it has nothing to undo here.
+        /// </summary>
+        public bool HandleBack()
+        {
+            if (_result.Visible)
+            {
+                Audio.PlayClick();
+                _resultSecondary?.Invoke();
+                return true;
+            }
+
+            if (_aiming != null)
+            {
+                CancelAim();
+                return true;
+            }
+
+            return false;
+        }
+
+        void OnApplicationPause(bool paused)
+        {
+            if (paused) SaveRun();
+        }
+
+        void OnApplicationQuit() => SaveRun();
+
+        void SaveRun()
+        {
+            if (_session != null && !_session.IsFinished) RunStore.Save(_session);
+        }
+
+        /// <summary>Takes over a run — new or restored — and paints everything from it.</summary>
+        public void Begin(GameSession session)
+        {
+            Detach();
+
+            _session = session;
+            _session.Moved += OnMoved;
+            _session.PowerUsed += OnPowerUsed;
+            _session.Stuck += OnStuck;
+            _session.GameOver += OnGameOver;
+            _session.LevelWon += OnLevelWon;
+
+            _colorBlind = Progress.ColorBlind;
+            _board.SetColorBlind(_colorBlind);
+            _tray.SetColorBlind(_colorBlind);
+
+            _board.Bind(session.Board);
+            _tray.Refresh(session);
+
+            _displayedScore = session.Score;
+            _hud.Bind(session);
+            _hud.Refresh(_displayedScore);
+
+            _result.Hide();
+            _aiming = null;
+            _bombHeld = false;
+            SyncState();
+
+            RunStore.Save(session);
+            MaybeStartTutorial();
+        }
+
+        void Detach()
+        {
+            if (_session == null) return;
+
+            _session.Moved -= OnMoved;
+            _session.PowerUsed -= OnPowerUsed;
+            _session.Stuck -= OnStuck;
+            _session.GameOver -= OnGameOver;
+            _session.LevelWon -= OnLevelWon;
+        }
+
+        /// <summary>Everything that follows the session's state: the tray dims and the power bar changes when stuck.</summary>
+        void SyncState()
+        {
+            if (_session == null) return;
+
+            _tray.SetDimmed(_session.State == SessionState.Stuck);
+            _powers.Refresh(_session, _aiming);
+            _tray.SetRotateHints(_session, _aiming == PowerKind.Rotate);
+        }
+
+        // ------------------------------------------------------------------ moves
 
         void OnMoved(MoveResult result)
         {
@@ -260,67 +276,97 @@ namespace BlockPuzzle.Game
             _board.Refresh();
             _board.PlayPlacePop(result.PlacedShape, result.PlacedColumn, result.PlacedRow);
             Audio.PlayPlace();
+            App.Tick();
 
-            if (result.Clear.Any)
+            if (_tutorial != null || !Progress.TutorialSeen)
             {
-                _linesThisRun += result.Clear.LinesCleared;
+                StopTutorial();
+                Progress.TutorialSeen = true;
+            }
 
+            var clear = result.Clear;
+            if (clear.Any)
+            {
                 var tint = Design.Blocks[result.PlacedColorIndex % Design.Blocks.Length];
-                _board.PlayLineSweep(result.Clear, Color.white);
-                _board.PlayClearBurst(result.Clear.ClearedCells, Color.white);
+                _board.PlayLineSweep(clear, Color.white);
+                _board.PlayClearBurst(clear.ClearedCells, Color.white);
                 _board.PulseEdge(tint);
 
-                ShowCombo(result);
-                ShowScorePopup(result.ClearScore, result.Clear.ClearedCells, tint);
+                if (clear.MonoLines > 0)
+                {
+                    _board.PlayPrismSweep(clear);
+                    Audio.PlayPrism();
+                }
+
+                if (clear.CrackedIce.Count > 0)
+                {
+                    _board.PlayIceCrack(clear.CrackedIce);
+                    Audio.PlayIce();
+                }
+
+                if (clear.CollectedGems.Count > 0)
+                    FlyCrystals(clear.CollectedGems);
+
+                if (clear.PerfectClear)
+                {
+                    _board.PlayBoardWave();
+                    _board.PulseEdge(Design.Gold);
+                    Audio.PlayFanfare();
+                }
+
+                _hud.ShowCombo(this, result.ComboStreak);
+
+                var popupCells = clear.ClearedCells.Count > 0 ? clear.ClearedCells : clear.CrackedIce;
+                ShowScorePopup(result.ClearScore, popupCells, clear.PerfectClear ? Design.Gold : tint, clear.PerfectClear);
 
                 if (result.ComboStreak > 1) Audio.PlayCombo(result.ComboStreak);
                 else Audio.PlayClear();
 
-                if (result.Clear.LinesCleared > 1) App.Vibrate();
+                if (clear.LinesCleared > 1 || clear.PerfectClear) App.Vibrate();
             }
             else
             {
-                HideCombo();
+                _hud.HideCombo();
+            }
+
+            if (result.ChargesGained > 0)
+            {
+                _powers.CelebrateCharge(this, _session.Charges);
+                Audio.PlayCharge();
             }
 
             if (result.TrayRefilled)
                 _tray.Refresh(_session);
 
             UpdateScore();
+            SyncState();
+            SaveRun();
         }
 
-        void ShowCombo(MoveResult result)
+        void UpdateScore()
         {
-            // A streak only exists from the second consecutive clear onwards.
-            if (result.ComboStreak < 2)
-            {
-                HideCombo();
-                return;
-            }
+            if (_scoreRoutine != null) StopCoroutine(_scoreRoutine);
+            _scoreRoutine = StartCoroutine(ScoreRoutine(_displayedScore, _session.Score));
+        }
 
-            float multiplier = ScoreRules.ComboMultiplier(result.ComboStreak);
-            var tint = result.ComboStreak >= 4 ? Design.Gold : Design.Mint;
+        IEnumerator ScoreRoutine(int from, int to)
+        {
+            StartCoroutine(Tween.Punch(_hud.Readout, 0.12f, 0.24f));
 
-            _comboLabel.text = $"COMBO ×{multiplier:0.#}";
-            _comboLabel.color = tint;
-            _comboChipEdge.color = tint.WithAlpha(0.55f);
+            yield return Tween.CountUp(from, to, 0.32f, v =>
+            {
+                _displayedScore = v;
+                _hud.Refresh(v);
+            });
 
-            if (!_comboChip.gameObject.activeSelf)
-            {
-                _comboChip.gameObject.SetActive(true);
-                StartCoroutine(Tween.Scale(_comboChip, Vector3.one * 0.7f, Vector3.one, 0.2f, Ease.OutBack));
-            }
-            else
-            {
-                StartCoroutine(Tween.Punch(_comboChip, 0.18f, 0.26f));
-            }
+            _scoreRoutine = null;
         }
 
         /// <summary>
         /// Floats the points earned up from where the clear happened. Putting the number at the
         /// clear rather than in the HUD is what ties the reward to the move that earned it.
         /// </summary>
-        void ShowScorePopup(int amount, System.Collections.Generic.IReadOnlyList<CellOffset> cells, Color tint)
+        void ShowScorePopup(int amount, IReadOnlyList<CellOffset> cells, Color tint, bool big)
         {
             if (amount <= 0 || cells.Count == 0) return;
 
@@ -335,9 +381,10 @@ namespace BlockPuzzle.Game
             var label = RentPopup();
             label.text = "+" + amount;
             label.color = tint;
+            label.fontSize = big ? Design.Display : Design.Title;
             label.gameObject.SetActive(true);
 
-            StartCoroutine(PopupRoutine(label, start));
+            StartCoroutine(PopupRoutine(label, big ? new Vector2(0f, BoardCenterY) : start));
         }
 
         IEnumerator PopupRoutine(TextMeshProUGUI label, Vector2 start)
@@ -377,79 +424,279 @@ namespace BlockPuzzle.Game
                     return _popupPool[i];
 
             var label = UiBuilder.Label(_popupLayer, "Popup", "", Design.Title, Design.TextPrimary, Design.FontDisplay);
-            label.rectTransform.sizeDelta = new Vector2(360f, 90f);
+            label.rectTransform.sizeDelta = new Vector2(600f, 140f);
             UiBuilder.TextShadow(label, 0.5f, -0.3f, 0.4f);
             label.gameObject.SetActive(false);
             _popupPool.Add(label);
             return label;
         }
 
-        void HideCombo()
+        /// <summary>
+        /// Freed crystals fly off the board into the goal counter, which then ticks down. The
+        /// counter changing on its own would be easy to miss; the flight shows where they went.
+        /// </summary>
+        void FlyCrystals(IReadOnlyList<CellOffset> cells)
         {
-            if (_comboChip != null) _comboChip.gameObject.SetActive(false);
-        }
+            bool toGoal = _session.Level != null && _session.Level.Goal == GoalKind.Gems;
+            var target = toGoal ? _hud.GoalAnchor : _powers.CrystalPosition(Mathf.Max(0, _session.Charges - 1));
 
-        void UpdateScore()
-        {
-            if (_scoreRoutine != null) StopCoroutine(_scoreRoutine);
-            _scoreRoutine = StartCoroutine(ScoreRoutine(_displayedScore, _session.Score));
-
-            if (_session.Score > HighScores.Best)
-                _bestLabel.text = _session.Score.ToString();
-        }
-
-        IEnumerator ScoreRoutine(int from, int to)
-        {
-            StartCoroutine(Tween.Punch(_scoreLabel.transform, 0.12f, 0.24f));
-
-            yield return Tween.CountUp(from, to, 0.32f, v =>
+            for (int i = 0; i < cells.Count; i++)
             {
-                _displayedScore = v;
-                _scoreLabel.text = v.ToString();
-            });
-
-            _scoreRoutine = null;
+                var crystal = RentFly();
+                crystal.rectTransform.sizeDelta = new Vector2(_board.CellSize * 0.66f, _board.CellSize * 0.66f);
+                crystal.rectTransform.position = _board.CellWorldPosition(cells[i].X, cells[i].Y);
+                crystal.gameObject.SetActive(true);
+                StartCoroutine(FlyRoutine(crystal, target, i * 0.08f, toGoal));
+            }
         }
+
+        IEnumerator FlyRoutine(Image crystal, Vector3 target, float delay, bool toGoal)
+        {
+            var rect = crystal.rectTransform;
+            var start = rect.position;
+            if (delay > 0f) yield return new WaitForSecondsRealtime(delay);
+
+            // A curve that rises before it travels, so it reads as lifted out of the board.
+            float scale = App.CanvasScale;
+            var control = (start + target) * 0.5f + new Vector3(0f, 260f * scale, 0f);
+
+            const float duration = 0.6f;
+            for (float t = 0f; t < duration; t += Time.unscaledDeltaTime)
+            {
+                float k = Ease.OutQuad(t / duration);
+                var a = Vector3.Lerp(start, control, k);
+                var b = Vector3.Lerp(control, target, k);
+                rect.position = Vector3.Lerp(a, b, k);
+                rect.localScale = Vector3.one * Mathf.Lerp(1.15f, 0.7f, k);
+                yield return null;
+            }
+
+            crystal.gameObject.SetActive(false);
+            Audio.PlayGem();
+            if (toGoal) StartCoroutine(Tween.Punch(_hud.GoalIcon, 0.3f, 0.3f));
+        }
+
+        Image RentFly()
+        {
+            for (int i = 0; i < _flyPool.Count; i++)
+                if (!_flyPool[i].gameObject.activeSelf)
+                    return _flyPool[i];
+
+            var image = UiBuilder.Image(_flyLayer, "Crystal", Art.Crystal, Design.Crystal);
+            image.type = Image.Type.Simple;
+            image.gameObject.SetActive(false);
+            _flyPool.Add(image);
+            return image;
+        }
+
+        // ------------------------------------------------------------------ powers
+
+        void OnPowerClicked(PowerKind kind)
+        {
+            if (_session == null || _dragging || _result.Visible) return;
+
+            switch (kind)
+            {
+                case PowerKind.Reroll:
+                    CancelAim();
+                    if (_session.TryReroll() == null) Audio.PlayInvalid();
+                    break;
+
+                default:
+                    // Rotate and bomb need a target: the first tap arms them, a second tap disarms.
+                    _aiming = _aiming == kind ? (PowerKind?)null : kind;
+                    _bombHeld = false;
+                    _board.HideGhost();
+                    Audio.PlayClick();
+                    SyncState();
+                    break;
+            }
+        }
+
+        void CancelAim()
+        {
+            if (_aiming == null && !_bombHeld) return;
+
+            _aiming = null;
+            _bombHeld = false;
+            _board.HideGhost();
+            SyncState();
+        }
+
+        void OnPowerUsed(PowerResult result)
+        {
+            _aiming = null;
+            _bombHeld = false;
+
+            switch (result.Kind)
+            {
+                case PowerKind.Rotate:
+                    _tray.RotatePiece(result.Slot, _session);
+                    Audio.PlayRotate();
+                    break;
+
+                case PowerKind.Reroll:
+                    _tray.Refresh(_session);
+                    Audio.PlayReroll();
+                    break;
+
+                case PowerKind.Bomb:
+                    _board.HideGhost();
+                    _board.Refresh();
+                    _board.PlayBlast(result.Blast, result.Column, result.Row);
+                    if (result.Blast.CollectedGems.Count > 0) FlyCrystals(result.Blast.CollectedGems);
+                    Audio.PlayBomb();
+                    App.Vibrate();
+                    UpdateScore();
+                    break;
+            }
+
+            _hud.Refresh(_displayedScore);
+            SyncState();
+            SaveRun();
+        }
+
+        void OnStuck()
+        {
+            CancelDrag();
+            Audio.PlayStuck();
+            SyncState();
+        }
+
+        // ------------------------------------------------------------------ endings
 
         void OnGameOver()
         {
             CancelDrag();
+            CancelAim();
+            StopTutorial();
 
-            int rank = HighScores.Submit(_session.Score, _linesThisRun);
-            _overScore.text = _session.Score.ToString();
+            var session = _session;
+            RunStore.Clear(session.Mode);
+            Progress.RecordRun(session);
+            SyncState();
 
-            if (rank == 1)
+            switch (session.Mode)
             {
-                _overNote.text = "YENİ REKOR";
-                _overNote.color = Design.Gold;
-                Audio.PlayFanfare();
-            }
-            else if (rank > 1)
-            {
-                _overNote.text = $"{rank}. SIRA";
-                _overNote.color = Design.Mint;
-                Audio.PlayGameOver();
-            }
-            else
-            {
-                _overNote.text = $"{_linesThisRun} SATIR";
-                _overNote.color = Design.TextTertiary;
-                Audio.PlayGameOver();
+                case GameMode.Level:
+                {
+                    int n = session.Level.Number;
+                    bool outOfMoves = session.MovesLeft <= 0;
+                    int left = Mathf.Max(0, session.Level.Target - session.GoalProgress);
+
+                    _resultPrimary = () => App.PlayLevel(n);
+                    _resultSecondary = App.ShowLevelSelect;
+                    _result.Show(this, $"Bölüm {n}", left.ToString(),
+                        outOfMoves ? "HAMLE BİTTİ" : "YER KALMADI", Design.PreviewTint(3), GoalSprite(session.Level.Goal),
+                        -1, "TEKRAR DENE", "HARİTA");
+                    Audio.PlayGameOver();
+                    break;
+                }
+
+                case GameMode.Daily:
+                {
+                    bool best = Progress.RecordDaily(session.Score);
+                    int streak = Progress.DailyStreak;
+
+                    _resultPrimary = () => App.PlayDaily(fresh: true);
+                    _resultSecondary = App.ShowMenu;
+                    _result.Show(this, best ? "Bugünün Rekoru" : "Günlük Bulmaca", session.Score.ToString(),
+                        $"{streak} GÜN SERİ", Design.Gold, Icons.Flame, -1, "TEKRAR OYNA", "ANA MENÜ");
+
+                    if (best) Audio.PlayFanfare();
+                    else Audio.PlayGameOver();
+                    break;
+                }
+
+                default:
+                {
+                    int rank = HighScores.Submit(session.Score, session.LinesCleared);
+                    string note;
+                    Color color;
+
+                    if (rank == 1) { note = "YENİ REKOR"; color = Design.Gold; Audio.PlayFanfare(); }
+                    else if (rank > 1) { note = $"{rank}. SIRA"; color = Design.Mint; Audio.PlayGameOver(); }
+                    else { note = $"{session.LinesCleared} SATIR"; color = Design.TextTertiary; Audio.PlayGameOver(); }
+
+                    _resultPrimary = () => App.PlayClassic(fresh: true);
+                    _resultSecondary = App.ShowMenu;
+                    _result.Show(this, "Oyun Bitti", session.Score.ToString(), note, color, null, -1,
+                        "TEKRAR OYNA", "ANA MENÜ");
+                    break;
+                }
             }
 
-            _overPanel.SetAsLastSibling();
-            _overPanel.gameObject.SetActive(true);
             App.Vibrate();
+        }
 
-            StartCoroutine(Tween.FadeGraphic(_overScrim, 0f, 0.8f, 0.25f));
-            StartCoroutine(Tween.Scale(_overCard, Vector3.one * 0.86f, Vector3.one, 0.32f, Ease.OutBack));
+        void OnLevelWon()
+        {
+            CancelDrag();
+            CancelAim();
+
+            var session = _session;
+            int n = session.Level.Number;
+            int stars = session.StarsEarned;
+
+            Progress.RecordLevel(n, stars);
+            Progress.RecordRun(session);
+            RunStore.Clear(GameMode.Level);
+            SyncState();
+
+            // Built while the stars pop, so "next" starts without a pause.
+            System.Threading.ThreadPool.QueueUserWorkItem(_ => LevelGenerator.Generate(n + 1, Design.PaletteSize));
+
+            _resultPrimary = () => App.PlayLevel(n + 1);
+            _resultSecondary = App.ShowLevelSelect;
+            _result.Show(this, $"Bölüm {n}", session.Score.ToString(),
+                $"{session.MovesLeft} HAMLE ARTTI", Design.Mint, Icons.Check, stars, "SONRAKİ", "HARİTA",
+                i => Audio.PlayStar(i));
+
+            _board.PlayBoardWave();
+            Audio.PlayFanfare();
+            App.Vibrate(strong: true);
+        }
+
+        static Sprite GoalSprite(GoalKind goal)
+        {
+            switch (goal)
+            {
+                case GoalKind.Lines: return Icons.Rows;
+                case GoalKind.Score: return Icons.Star;
+                default: return Art.Crystal;
+            }
         }
 
         // ------------------------------------------------------------------ pointer
 
         public void OnPointerDown(Vector2 screenPoint)
         {
-            if (_overPanel.gameObject.activeSelf || _session == null) return;
+            if (_result.Visible || _session == null) return;
+
+            if (_aiming == PowerKind.Bomb)
+            {
+                if (_board.ContainsScreenPoint(screenPoint))
+                {
+                    _bombHeld = true;
+                    AimBomb(screenPoint);
+                }
+                else
+                {
+                    CancelAim();
+                }
+
+                return;
+            }
+
+            if (_aiming == PowerKind.Rotate)
+            {
+                int target = _tray.SlotAtScreenPoint(screenPoint);
+                if (target >= 0 && _session.CanRotate(target)) _session.TryRotate(target);
+                else CancelAim();
+                return;
+            }
+
+            if (_session.State != SessionState.Playing) return;
 
             int slot = _tray.SlotAtScreenPoint(screenPoint);
             if (slot < 0) return;
@@ -461,6 +708,7 @@ namespace BlockPuzzle.Game
             _dragging = true;
             _hoverKnown = false;
             Audio.PlayPickup();
+            if (_hand.gameObject.activeSelf) _hand.gameObject.SetActive(false);
 
             _dragPiece.Rect.SetParent(_dragLayer, false);
             StartCoroutine(Tween.Scale(_dragPiece.Rect, _dragPiece.Rect.localScale, Vector3.one, 0.12f, Ease.OutCubic));
@@ -469,6 +717,12 @@ namespace BlockPuzzle.Game
 
         public void OnPointerDrag(Vector2 screenPoint)
         {
+            if (_bombHeld)
+            {
+                AimBomb(screenPoint);
+                return;
+            }
+
             if (!_dragging) return;
 
             MoveDragPiece(screenPoint);
@@ -501,6 +755,19 @@ namespace BlockPuzzle.Game
 
         public void OnPointerUp(Vector2 screenPoint)
         {
+            if (_bombHeld)
+            {
+                _bombHeld = false;
+                _board.HideGhost();
+
+                if (_board.TryGetCellFromScreenPoint(screenPoint, out int bc, out int br) && _session.CanBomb(bc, br))
+                    _session.TryBomb(bc, br);
+                else
+                    Audio.PlayInvalid();
+
+                return;
+            }
+
             if (!_dragging) return;
 
             MoveDragPiece(screenPoint);
@@ -527,7 +794,16 @@ namespace BlockPuzzle.Game
             {
                 Audio.PlayInvalid();
                 _tray.ReturnPiece(slot, piece);
+                if (!Progress.TutorialSeen) MaybeStartTutorial();
             }
+        }
+
+        void AimBomb(Vector2 screenPoint)
+        {
+            if (_board.TryGetCellFromScreenPoint(screenPoint, out int col, out int row))
+                _board.ShowBombPreview(col, row);
+            else
+                _board.HideGhost();
         }
 
         /// <summary>Puts a held piece back where it came from, for when the screen loses focus.</summary>
@@ -556,5 +832,87 @@ namespace BlockPuzzle.Game
                 screenPosition.y + _liftPixels * scale,
                 0f);
         }
+
+        // ------------------------------------------------------------------ tutorial
+
+        /// <summary>
+        /// The first run teaches the one gesture without a word: a hand lifts the first piece out
+        /// of the tray and sets it on the board, over and over, until the player does it.
+        /// </summary>
+        void MaybeStartTutorial()
+        {
+            if (Progress.TutorialSeen || _session == null || _session.Mode != GameMode.Classic || _session.PlacedPieces > 0)
+                return;
+
+            StopTutorial();
+            _tutorial = StartCoroutine(TutorialRoutine());
+        }
+
+        void StopTutorial()
+        {
+            if (_tutorial != null) StopCoroutine(_tutorial);
+            _tutorial = null;
+            if (_hand != null) _hand.gameObject.SetActive(false);
+        }
+
+        IEnumerator TutorialRoutine()
+        {
+            yield return new WaitForSecondsRealtime(0.8f);
+
+            while (true)
+            {
+                int slot = -1;
+                for (int i = 0; i < _session.Tray.Length; i++)
+                    if (!_session.Tray[i].Used) { slot = i; break; }
+                if (slot < 0) yield break;
+
+                var shape = _session.Tray[slot].Shape;
+                int col = (_session.Board.Size - shape.Width) / 2;
+                int row = (_session.Board.Size - shape.Height) / 2;
+
+                var from = _tray.Slot(slot).position;
+                var to = _board.CellWorldPosition(col, row);
+
+                _hand.rectTransform.SetAsLastSibling();
+                _hand.rectTransform.position = from;
+                _hand.gameObject.SetActive(!_dragging);
+
+                for (float t = 0f; t < 0.25f; t += Time.unscaledDeltaTime)
+                {
+                    _hand.color = Color.white.WithAlpha(t / 0.25f);
+                    yield return null;
+                }
+
+                for (float t = 0f; t < 0.9f; t += Time.unscaledDeltaTime)
+                {
+                    _hand.rectTransform.position = Vector3.Lerp(from, to, Ease.OutCubic(t / 0.9f));
+                    yield return null;
+                }
+
+                yield return new WaitForSecondsRealtime(0.3f);
+
+                for (float t = 0f; t < 0.3f; t += Time.unscaledDeltaTime)
+                {
+                    _hand.color = Color.white.WithAlpha(1f - t / 0.3f);
+                    yield return null;
+                }
+
+                _hand.gameObject.SetActive(false);
+                yield return new WaitForSecondsRealtime(0.6f);
+            }
+        }
+
+        // ------------------------------------------------------------------ automation
+
+#if PRIZMA_AUTOTEST
+        /// <summary>Test hook: plays one move the way the computer player would.</summary>
+        public bool AutoStep(Autoplayer bot) => _session != null && bot.Step(_session);
+
+        /// <summary>Test hook: taps a power button.</summary>
+        public void AutoPower(PowerKind kind) => OnPowerClicked(kind);
+
+        /// <summary>Test hook: holds the armed bomb over a cell.</summary>
+        public void AutoBombPreview(int col, int row) => _board.ShowBombPreview(col, row);
+#endif
     }
 }

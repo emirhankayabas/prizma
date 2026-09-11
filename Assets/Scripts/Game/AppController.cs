@@ -1,3 +1,5 @@
+using System;
+using BlockPuzzle.Core;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.UI;
@@ -6,7 +8,8 @@ namespace BlockPuzzle.Game
 {
     /// <summary>
     /// Root of the whole game. Owns the canvas, the shared backdrop, audio, and the screen stack,
-    /// and is the single component that has to exist in the scene.
+    /// and is the single component that has to exist in the scene. Every way into a run goes
+    /// through here, so resuming a saved run and starting a fresh one live in one place.
     /// </summary>
     public sealed class AppController : MonoBehaviour
     {
@@ -29,9 +32,12 @@ namespace BlockPuzzle.Game
 
         MainMenuScreen _menu;
         GameScreen _game;
+        LevelSelectScreen _levels;
         SettingsScreen _settings;
         ScoresScreen _scores;
         PauseScreen _pause;
+        StatsScreen _stats;
+        ThemesScreen _themes;
 
         AppScreen _currentPage;
 
@@ -64,11 +70,18 @@ namespace BlockPuzzle.Game
 
             _menu = CreateScreen<MainMenuScreen>("MainMenu", _pageLayer);
             _game = CreateScreen<GameScreen>("Game", _pageLayer);
+            _levels = CreateScreen<LevelSelectScreen>("Levels", _pageLayer);
             _settings = CreateScreen<SettingsScreen>("Settings", _modalLayer);
             _scores = CreateScreen<ScoresScreen>("Scores", _modalLayer);
             _pause = CreateScreen<PauseScreen>("Pause", _modalLayer);
+            _stats = CreateScreen<StatsScreen>("Stats", _modalLayer);
+            _themes = CreateScreen<ThemesScreen>("Themes", _modalLayer);
 
             ShowMenu();
+
+#if PRIZMA_AUTOTEST
+            gameObject.AddComponent<AutoTest>();
+#endif
         }
 
         void BuildCanvas()
@@ -133,21 +146,91 @@ namespace BlockPuzzle.Game
             return screen;
         }
 
+        // ------------------------------------------------------------------ runs
+
+        /// <summary>Classic: resumes the saved run if there is one, unless a fresh start was asked for.</summary>
+        public void PlayClassic(bool fresh = false)
+        {
+            if (fresh) RunStore.Clear(GameMode.Classic);
+
+            var session = RunStore.Load(GameMode.Classic)
+                          ?? GameSession.NewRandomRun(_boardSize, Design.PaletteSize);
+            Begin(session);
+        }
+
+        /// <summary>The daily puzzle. A saved daily run only resumes on the day it was started.</summary>
+        public void PlayDaily(bool fresh = false)
+        {
+            if (fresh) RunStore.Clear(GameMode.Daily);
+
+            var session = RunStore.Load(GameMode.Daily);
+            if (session == null || session.Seed != GameSession.DailySeed(DateTime.Now))
+                session = GameSession.NewDailyRun(DateTime.Now, _boardSize, Design.PaletteSize);
+
+            Begin(session);
+        }
+
+        /// <summary>A level. Resumes a saved attempt at the same level; anything else starts clean.</summary>
+        public void PlayLevel(int number)
+        {
+            number = Mathf.Clamp(number, 1, Progress.UnlockedLevel);
+
+            var saved = RunStore.Load(GameMode.Level);
+            GameSession session = saved != null && saved.Level != null && saved.Level.Number == number
+                ? saved
+                : GameSession.NewLevelRun(LevelGenerator.Generate(number, Design.PaletteSize), _boardSize, Design.PaletteSize);
+
+            Begin(session);
+        }
+
+        /// <summary>Throws the current run away and starts the same kind of run again.</summary>
+        public void RestartRun()
+        {
+            var session = _game.Session;
+            if (session == null)
+            {
+                PlayClassic(fresh: true);
+                return;
+            }
+
+            RunStore.Clear(session.Mode);
+            switch (session.Mode)
+            {
+                case GameMode.Daily: PlayDaily(fresh: true); break;
+                case GameMode.Level: PlayLevel(session.Level.Number); break;
+                default: PlayClassic(fresh: true); break;
+            }
+        }
+
+        /// <summary>Back out of a run to where it was started from. The run stays saved.</summary>
+        public void LeaveRun()
+        {
+            var session = _game.Session;
+            if (session != null && session.Mode == GameMode.Level) ShowLevelSelect();
+            else ShowMenu();
+        }
+
+        void Begin(GameSession session)
+        {
+            ShowPage(_game);
+            _game.Begin(session);
+        }
+
         // ------------------------------------------------------------------ navigation
 
         public void ShowMenu() => ShowPage(_menu);
 
-        public void StartGame()
-        {
-            ShowPage(_game);
-            _game.StartNewRun();
-        }
+        public void ShowLevelSelect() => ShowPage(_levels);
 
         public void OpenSettings() => ShowModal(_settings);
 
         public void OpenScores() => ShowModal(_scores);
 
         public void OpenPause() => ShowModal(_pause);
+
+        public void OpenStats() => ShowModal(_stats);
+
+        public void OpenThemes() => ShowModal(_themes);
 
         /// <summary>Dismisses the top modal, falling back to the one beneath it if there is one.</summary>
         public void CloseModal()
@@ -203,24 +286,28 @@ namespace BlockPuzzle.Game
 
         // ------------------------------------------------------------------ platform
 
-        /// <summary>Short haptic tap, honouring the player's setting. No-op in the Editor.</summary>
-        public void Vibrate()
+        /// <summary>A haptic pulse for a big moment — multi-line clears, the end of a run. Honours the setting.</summary>
+        public void Vibrate(bool strong = false)
         {
-            if (!GameSettings.Haptics) return;
+            if (GameSettings.Haptics) Haptics.Pulse(strong ? 45 : 22);
+        }
 
-#if UNITY_ANDROID || UNITY_IOS
-            if (!Application.isEditor) Handheld.Vibrate();
-#endif
+        /// <summary>The lightest tick there is, for a piece landing. Felt more than noticed.</summary>
+        public void Tick()
+        {
+            if (GameSettings.Haptics) Haptics.Pulse(8, 70);
         }
 
         void Update()
         {
-            // Android back button: close the top modal, or pause from within a run.
+            // Android back button: close the top modal; in a run, let the page back out of a result
+            // card or an armed power before pausing; elsewhere go home.
             if (UnityEngine.InputSystem.Keyboard.current != null &&
                 UnityEngine.InputSystem.Keyboard.current.escapeKey.wasPressedThisFrame)
             {
                 if (_modals.Count > 0) CloseModal();
-                else if (_currentPage == _game) OpenPause();
+                else if (_currentPage == _game) { if (!_game.HandleBack()) OpenPause(); }
+                else if (_currentPage == _levels) ShowMenu();
             }
         }
     }

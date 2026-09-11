@@ -34,6 +34,16 @@ namespace BlockPuzzle.Game
         AudioClip _fanfare;
         AudioClip[] _combo;
 
+        AudioClip _gem;
+        AudioClip _ice;
+        AudioClip _rotate;
+        AudioClip _reroll;
+        AudioClip _bomb;
+        AudioClip _charge;
+        AudioClip _prism;
+        AudioClip _stuck;
+        AudioClip[] _stars;
+
         void Awake()
         {
             _source = gameObject.AddComponent<AudioSource>();
@@ -68,7 +78,44 @@ namespace BlockPuzzle.Game
                 _combo[i] = Chime($"sfx_combo{i}",
                     new[] { Pentatonic[root], Pentatonic[root + 2] }, 0.06f, 0.5f, 0.28f, 3000f);
             }
+
+            // A freed crystal: high and glassy, the brightest sound in the set.
+            _gem = Chime("sfx_gem", new[] { Pentatonic[7], Pentatonic[9], 1046.5f }, 0.045f, 0.45f, 0.22f, 5200f);
+
+            // Ice taking a hit: a short filtered crackle, no pitch to clash with the chimes.
+            _ice = Tone("sfx_ice", 1800f, 900f, 0.07f, 0.16f, attack: 0.002f, lowpass: 4800f, noise: 0.6f);
+
+            _rotate = Tone("sfx_rotate", 520f, 880f, 0.09f, 0.18f, attack: 0.01f, lowpass: 3000f);
+            _reroll = Chime("sfx_reroll", new[] { Pentatonic[3], Pentatonic[4], Pentatonic[5] }, 0.035f, 0.14f, 0.2f, 3000f);
+
+            // The bomb: a low sweep buried in noise. Kept round rather than loud.
+            _bomb = Tone("sfx_bomb", 120f, 42f, 0.5f, 0.55f, attack: 0.004f, lowpass: 520f, noise: 0.45f);
+
+            // The prism filling to a new charge.
+            _charge = Chime("sfx_charge", new[] { Pentatonic[4], Pentatonic[7] }, 0.07f, 0.4f, 0.22f, 3600f);
+
+            // A single-colour line: the whole scale run up, like light fanning out of a prism.
+            _prism = Chime("sfx_prism", new[] { Pentatonic[5], Pentatonic[6], Pentatonic[7], Pentatonic[8], Pentatonic[9] },
+                0.035f, 0.5f, 0.22f, 4200f);
+
+            // Out of room: two soft falling notes. Not a failure buzzer — the run may yet be saved.
+            _stuck = Chime("sfx_stuck", new[] { Pentatonic[4], Pentatonic[2] }, 0.12f, 0.5f, 0.2f, 1800f);
+
+            _stars = new AudioClip[3];
+            for (int i = 0; i < _stars.Length; i++)
+                _stars[i] = Chime($"sfx_star{i}", new[] { Pentatonic[5 + i * 2 - (i == 2 ? 1 : 0)], Pentatonic[Mathf.Min(9, 7 + i)] },
+                    0.05f, 0.45f, 0.24f, 4200f);
         }
+
+        public void PlayGem() => Play(_gem);
+        public void PlayIce() => Play(_ice);
+        public void PlayRotate() => Play(_rotate);
+        public void PlayReroll() => Play(_reroll);
+        public void PlayBomb() => Play(_bomb);
+        public void PlayCharge() => Play(_charge);
+        public void PlayPrism() => Play(_prism);
+        public void PlayStuck() => Play(_stuck);
+        public void PlayStar(int index) => Play(_stars[Mathf.Clamp(index, 0, _stars.Length - 1)]);
 
         public void PlayPickup() => Play(_pickup);
         public void PlayPlace() => Play(_place);

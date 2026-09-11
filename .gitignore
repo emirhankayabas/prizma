@@ -60,6 +60,12 @@ sysinfo.txt
 /.utmp/
 *.slnx
 
+# Core simülasyon düzeneği: proje dosyası repoda kalır (yukarıdaki *.csproj kuralına istisna),
+# derleme çıktıları kalmaz.
+!/Tools/CoreHarness/Harness.csproj
+/Tools/CoreHarness/bin/
+/Tools/CoreHarness/obj/
+
 # Build sirasinda test paketinin urettigi gecici dosyalar
 /Assets/Resources/PerformanceTestRunInfo.json*
 /Assets/Resources/PerformanceTestRunSettings.json*

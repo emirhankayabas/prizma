@@ -1,5 +1,7 @@
+using System.Collections;
 using BlockPuzzle.Core;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace BlockPuzzle.Game
 {
@@ -9,15 +11,26 @@ namespace BlockPuzzle.Game
     /// </summary>
     public sealed class TrayView : MonoBehaviour
     {
-        /// <summary>Pieces sit smaller in the tray than on the board, then grow when picked up.</summary>
-        public const float TrayScale = 0.68f;
+        /// <summary>
+        /// Largest scale a piece sits at in the tray; long pieces shrink further to fit their
+        /// slot. Pieces grow back to board size when picked up.
+        /// </summary>
+        public const float MaxScale = 0.6f;
+
+        const float SlotInset = 26f;
 
         RectTransform _rect;
         RectTransform[] _slots;
         PieceView[] _pieces;
+        float[] _scales;
+        Image[] _hints;
+        CanvasGroup _group;
 
         float _boardCellSize;
         float _boardGap;
+        float _slotWidth;
+        float _height;
+        bool _colorBlind;
 
         public RectTransform Rect => _rect;
         public int SlotCount => _slots.Length;
@@ -27,25 +40,39 @@ namespace BlockPuzzle.Game
             _rect = GetComponent<RectTransform>();
             _boardCellSize = boardCellSize;
             _boardGap = boardGap;
+            _height = height;
 
             _rect.sizeDelta = new Vector2(width, height);
+            _group = gameObject.AddComponent<CanvasGroup>();
 
             _slots = new RectTransform[slotCount];
             _pieces = new PieceView[slotCount];
+            _scales = new float[slotCount];
+            _hints = new Image[slotCount];
 
-            float slotWidth = width / slotCount;
+            _slotWidth = width / slotCount;
             for (int i = 0; i < slotCount; i++)
             {
                 var slot = UiBuilder.Node(_rect, $"Slot_{i}");
-                slot.sizeDelta = new Vector2(slotWidth, height);
-                slot.anchoredPosition = new Vector2(-width * 0.5f + slotWidth * (i + 0.5f), 0f);
+                slot.sizeDelta = new Vector2(_slotWidth, height);
+                slot.anchoredPosition = new Vector2(-width * 0.5f + _slotWidth * (i + 0.5f), 0f);
                 _slots[i] = slot;
+
+                // Shown behind a piece the rotate power can turn. A steady wash, like the line preview.
+                var hint = UiBuilder.Panel(slot, "Hint", new Vector2(_slotWidth - 20f, height - 12f),
+                    Design.Prism.WithAlpha(0.14f), Design.RadiusMd);
+                hint.gameObject.SetActive(false);
+                _hints[i] = hint;
             }
         }
 
         public RectTransform Slot(int index) => _slots[index];
 
         public PieceView Piece(int index) => _pieces[index];
+
+        public float ScaleOf(int index) => _scales[index] <= 0f ? MaxScale : _scales[index];
+
+        public void SetColorBlind(bool on) => _colorBlind = on;
 
         /// <summary>Rebuilds every slot from the session tray. Used pieces leave an empty slot.</summary>
         public void Refresh(GameSession session)
@@ -61,24 +88,57 @@ namespace BlockPuzzle.Game
                 var trayPiece = session.Tray[i];
                 if (trayPiece.Used) continue;
 
-                _pieces[i] = CreatePiece(trayPiece, _slots[i], i);
+                _pieces[i] = CreatePiece(trayPiece, i);
+
+                // Staggered so a refill reads as three pieces arriving, not one popping in triplicate.
+                StartCoroutine(Tween.Scale(_pieces[i].Rect, Vector3.zero, Vector3.one * _scales[i], 0.28f, Ease.OutBack, i * 0.06f));
             }
         }
 
-        PieceView CreatePiece(TrayPiece trayPiece, RectTransform slot, int slotIndex)
+        PieceView CreatePiece(TrayPiece trayPiece, int slotIndex)
         {
             var go = new GameObject("Piece", typeof(RectTransform));
-            go.transform.SetParent(slot, false);
+            go.transform.SetParent(_slots[slotIndex], false);
 
             var color = Design.Blocks[trayPiece.ColorIndex % Design.Blocks.Length];
 
             var view = go.AddComponent<PieceView>();
-            view.Build(trayPiece.Shape, trayPiece.ColorIndex, color, _boardCellSize, _boardGap);
+            view.Build(trayPiece.Shape, trayPiece.ColorIndex, color, _boardCellSize, _boardGap, _colorBlind);
             view.Rect.anchoredPosition = Vector2.zero;
 
-            // Staggered so a refill reads as three pieces arriving, not one popping in triplicate.
-            StartCoroutine(Tween.Scale(view.Rect, Vector3.zero, Vector3.one * TrayScale, 0.28f, Ease.OutBack, slotIndex * 0.06f));
+            var size = view.Rect.sizeDelta;
+            _scales[slotIndex] = Mathf.Min(MaxScale,
+                (_slotWidth - SlotInset) / Mathf.Max(1f, size.x),
+                (_height - SlotInset) / Mathf.Max(1f, size.y));
+
+            view.Rect.localScale = Vector3.one * _scales[slotIndex];
             return view;
+        }
+
+        /// <summary>The rotate power: the new shape turns into place from a quarter turn back.</summary>
+        public void RotatePiece(int index, GameSession session)
+        {
+            if (_pieces[index] != null) Destroy(_pieces[index].gameObject);
+
+            _pieces[index] = CreatePiece(session.Tray[index], index);
+            StartCoroutine(SpinIn(_pieces[index].Rect, _scales[index]));
+        }
+
+        IEnumerator SpinIn(RectTransform rect, float scale)
+        {
+            const float duration = 0.24f;
+            for (float t = 0f; t < duration; t += Time.unscaledDeltaTime)
+            {
+                if (rect == null) yield break;
+                float k = Ease.OutBack(t / duration);
+                rect.localEulerAngles = new Vector3(0f, 0f, Mathf.LerpUnclamped(90f, 0f, k));
+                rect.localScale = Vector3.one * scale * Mathf.LerpUnclamped(0.8f, 1f, k);
+                yield return null;
+            }
+
+            if (rect == null) yield break;
+            rect.localEulerAngles = Vector3.zero;
+            rect.localScale = Vector3.one * scale;
         }
 
         /// <summary>Detaches a slot's piece so the drag layer can own it. Returns null on an empty slot.</summary>
@@ -98,11 +158,23 @@ namespace BlockPuzzle.Game
 
             var droppedAt = piece.Rect.position;
             piece.Rect.SetParent(_slots[index], false);
-            piece.Rect.localScale = Vector3.one * TrayScale;
+            piece.Rect.localScale = Vector3.one * ScaleOf(index);
             piece.SetAlpha(1f);
             piece.Rect.position = droppedAt;
 
             StartCoroutine(Tween.MoveAnchored(piece.Rect, piece.Rect.anchoredPosition, Vector2.zero, 0.16f, Ease.OutCubic));
+        }
+
+        /// <summary>Faded while no piece fits, so the eye goes to the powers instead.</summary>
+        public void SetDimmed(bool dimmed)
+        {
+            if (_group != null) _group.alpha = dimmed ? 0.4f : 1f;
+        }
+
+        public void SetRotateHints(GameSession session, bool on)
+        {
+            for (int i = 0; i < _hints.Length; i++)
+                _hints[i].gameObject.SetActive(on && session != null && session.CanRotate(i));
         }
 
         /// <summary>Index of the slot under a screen point, or -1. Slots are generous on purpose.</summary>
