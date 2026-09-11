@@ -103,6 +103,20 @@ Girdi tek yoldan: `PointerRouter` her kare `Pointer.current` okur. Widget'lar (`
    engelleyicinin dışındaki hiçbir widget (ve tahta) dokunma almaz. Yeni bir kaplayan yüzey
    eklersen onu da engelleyici yap.
 
+9. **Açılmayan APK.** Bir APK telefonda Unity splash'ından sonra boş varsayılan gökyüzünde kaldı:
+   build, sahnedeki `GameRoot` → `AppController` script'ini çözememişti. Unity bunu yalnızca log'da
+   bir uyarıyla geçti ("Script attached to 'GameRoot' … is missing") ve build'i **başarılı** saydı.
+   Oyunun tamamı o tek bileşene bağlı olduğundan hiçbir şey kurulmadı. Build, projenin geçici bir
+   kopyasından, üstelik o kopya başka bir yoldan (junction) açılarak alınmıştı — kod sağlamdı.
+   - `Editor/ReleaseBuild` artık build öncesi `AppController`'ın bir sınıfa çözüldüğünü kontrol ediyor,
+     build sırasında "missing script" uyarısını yakalıyor; ikisinden biri olursa APK'yı **siliyor**
+     ve `Builds/PRIZMA-build.txt`'ye nedenini yazıyor. Bu korumayı kaldırma.
+   - APK'yı gerçek projeden al (menü: *PRIZMA → Android APK Al*, ya da Editor kapalıyken batchmode
+     `-executeMethod BlockPuzzle.EditorTools.ReleaseBuild.BuildAndroid`). Kopyadan build sadece
+     `Tools/autotest.ps1`'in Windows testi için.
+   - Uzun proje yolu Android'de Gradle'ı düşürür (`prefab_command.bat` 260 karakter sınırını aşar,
+     "CreateProcess error=2"). `%TEMP%` altındaki kopyalardan Android build alma.
+
 7. **Dağıtıcı çok güçlü olursa oyun hiç bitmez.** Bir kez yardımı tavansız bıraktım; yetkin bir
    oyuncuyla tahta hiç dolmadı, test döngüsü sonsuza girdi ve **Unity'yi kilitledi**.
    `PieceDealer.AssistCeiling` bu yüzden var — silme.
