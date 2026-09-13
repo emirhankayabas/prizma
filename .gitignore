@@ -69,3 +69,6 @@ sysinfo.txt
 # Build sirasinda test paketinin urettigi gecici dosyalar
 /Assets/Resources/PerformanceTestRunInfo.json*
 /Assets/Resources/PerformanceTestRunSettings.json*
+
+# ---------------------------------------------------------------- Python araçları
+__pycache__/

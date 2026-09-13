@@ -117,6 +117,12 @@ Girdi tek yoldan: `PointerRouter` her kare `Pointer.current` okur. Widget'lar (`
    - Uzun proje yolu Android'de Gradle'ı düşürür (`prefab_command.bat` 260 karakter sınırını aşar,
      "CreateProcess error=2"). `%TEMP%` altındaki kopyalardan Android build alma.
 
+10. **Statik olaya abonelik, yeniden kurulan ekranda hayalet bırakır.** `AppScreen.Show` zaten açık bir
+    sayfada tekrar çalışır (yeniden başlat, "TEKRAR OYNA"). `GameScreen` her seferinde `Progress.Changed`'e
+    abone olup çıkışta bir kez ayrılıyordu. Ekran hep yaşadığı için zararsızdı — tema değişimi ekranı yok
+    edince kalan abonelik yok edilmiş tahtaya dokunup `NullReferenceException` attı. Statik bir olaya
+    abone olan her ekran: abonelikten önce çık (`-=` sonra `+=`) ve `OnDestroy`'da da çık.
+
 7. **Dağıtıcı çok güçlü olursa oyun hiç bitmez.** Bir kez yardımı tavansız bıraktım; yetkin bir
    oyuncuyla tahta hiç dolmadı, test döngüsü sonsuza girdi ve **Unity'yi kilitledi**.
    `PieceDealer.AssistCeiling` bu yüzden var — silme.
@@ -293,8 +299,34 @@ Unity'ye dokunmadığı için güvenli.
 - Günlük kayıt yalnız başladığı gün devam eder. Bölüm kaydı yalnız aynı bölüme.
 - `Progress`: yıldızlar, günlük seri (`DailyStreak` dün ya da bugün oynandıysa yaşar), yaşam boyu
   istatistikler, tema, renk körü modu, öğretici görüldü.
-- `Themes`: yalnız blok paleti değişir, yıldızla açılır. Her palette 7 renk ve tonlar birbirinden uzak —
-  tek renk satır bonusu yüzünden birbirine benzeyen iki renk tuzak olur.
+- `Themes`: yıldızla açılır ve **ekranın bütün havasını** değiştirir — zemin, ışık, ızgara, tüm yüzeyler,
+  tahta, ana buton vurgusu, scrim ve bloklar. Oyunda anlam taşıyan renkler **temalanmaz**: altın, nane,
+  prizma, kristal, buz, ön-temizleme tonları.
+
+### Temalar — neden böyle, nasıl değiştirilir
+İlk hâlinde tema yalnız blok paletiydi ve kullanıcı "temayı değiştirince bir şey değişmiyor" dedi.
+Ölçünce haklıydı: beş palet aynı renk sırasını paylaşıp yalnız açıklıkla oynuyordu; Prizma–Şeker renk başına
+ΔE 15, bir rengi ΔE 6. Üstelik tema bloksuz bir menüde seçilip bir tur sonra hafızadan yargılanıyordu.
+Şimdi zeminler temalar arası ΔE 30–85.
+
+- **Uygulama yeniden kurmakla olur** (`AppController.SetTheme` → `RebuildInterface`). Renkler arayüzün her
+  yerinde kurulum anında okunuyor (dolgular, vurgu için saklanan dinlenme renkleri, scrim, backdrop);
+  yerinde boyamak tek bir grafiği kaçırsa eski temadan bir yama kalır. Yeniden kurma oyuncuyu olduğu yerde
+  bırakır: aynı sayfa, açık modallar, süren tur. Eski ağaç `Destroy`'dan **önce kapatılır** — yoksa kare
+  sonuna kadar eski widget'lar girdiye kayıtlı kalır.
+- `Design` renkleri artık `Themes.Current`'tan okunan özellikler. **Temaya bağlı bir rengi `static readonly`
+  alanda saklama** (`BoardView.EmptyCellColor` bu yüzden özellik oldu) — ilk temada donar.
+- **Uygulama ikonu ve splash `Themes.Default`** kullanır, `Current` değil: ikon Editor'de üretiliyor ve orada
+  `Current`, geliştiricinin test ederken en son seçtiği tema olur.
+- Temalar ekranında canlı önizleme (`ThemePreview`): açık temaya dokunmak hemen uygular, kilitliye dokunmak
+  onu yıldız bedeliyle önizler.
+- Palet değiştirince **`python Tools/theme-check.py`** koş. Değerleri doğrudan `Themes.cs`'ten okur:
+  yüzeyde beyaz ≥7:1, vurguda ≥3:1, çiplerde altın/nane ≥4.5:1, zeminde `TextOnGround` ≥3:1, tahtada her
+  blok ≥3:1, paletteki iki blok ≥ΔE 22 (tek renk satır), hiçbir blok kristal/buza yakın değil. Son kural
+  canlı yakaladı: Pastel'in açık mavisi buza ΔE 20'ydi. Mücevher'de bu yüzden inci beyazı blok yok.
+  Bir kural daha: **tepsideki parçalar tahtada değil zeminde durur** — her blok tepsinin altındaki zemine
+  ≥ΔE 24. Şeker'in pembe parçası pembe zeminde ΔE 10'du ve görünmüyordu; ölçüt Prizma'nın mavi zemindeki
+  mavi parçası (ΔE 26).
 
 ---
 

@@ -96,7 +96,7 @@ namespace BlockPuzzle.EditorTools
 
             // The splash sits in the game's own blue rather than Unity's charcoal, so launching
             // does not flash a colour that belongs to nothing.
-            var splash = Design.BgBottom;
+            var splash = Themes.Default.BgBottom;
             if (PlayerSettings.SplashScreen.backgroundColor != splash)
             {
                 PlayerSettings.SplashScreen.backgroundColor = splash;

@@ -246,8 +246,16 @@ namespace BlockPuzzle.Game
         protected override void OnShow()
         {
             PointerRouter.Fallback = this;
+
+            // Show runs again on a page that is already up — a restart, "play again" — so the
+            // subscription is made idempotent. It used to stack one handler per restart and drop
+            // only one on hide; harmless while this page lived forever, but a theme change destroys
+            // it, and the leftover handler then reached into a destroyed board.
+            Progress.Changed -= OnProgressChanged;
             Progress.Changed += OnProgressChanged;
         }
+
+        void OnDestroy() => Progress.Changed -= OnProgressChanged;
 
         protected override void OnHide()
         {

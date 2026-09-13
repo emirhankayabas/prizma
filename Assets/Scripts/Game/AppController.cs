@@ -40,7 +40,9 @@ namespace BlockPuzzle.Game
         [SerializeField] int _boardSize = 8;
 
         Canvas _canvas;
+        Camera _camera;
         RectTransform _root;
+        GameObject _backdrop;
         RectTransform _pageLayer;
         RectTransform _modalLayer;
 
@@ -62,6 +64,13 @@ namespace BlockPuzzle.Game
         public MusicPlayer Music { get; private set; }
 
         public int BoardSize => _boardSize;
+
+        /// <summary>The play page. Replaced when the interface is rebuilt for a new theme.</summary>
+        public GameScreen Game => _game;
+
+#if PRIZMA_AUTOTEST
+        public ThemesScreen ThemesPage => _themes;
+#endif
         public float CanvasScale => _canvas == null || _canvas.scaleFactor <= 0f ? 1f : _canvas.scaleFactor;
 
         /// <summary>
@@ -104,8 +113,24 @@ namespace BlockPuzzle.Game
             Music = gameObject.AddComponent<MusicPlayer>();
             gameObject.AddComponent<PointerRouter>();
 
-            var backdropGo = new GameObject("Backdrop", typeof(RectTransform));
-            backdropGo.AddComponent<Backdrop>().Build(_root);
+            BuildInterface();
+            ShowMenu();
+
+#if PRIZMA_AUTOTEST
+            gameObject.AddComponent<AutoTest>();
+#endif
+        }
+
+        /// <summary>
+        /// The backdrop, the two layers and every screen, in the current theme. Colours are read
+        /// while building, so this is also how a theme change reaches the whole screen.
+        /// </summary>
+        void BuildInterface()
+        {
+            if (_camera != null) _camera.backgroundColor = Design.BgTop;
+
+            _backdrop = new GameObject("Backdrop", typeof(RectTransform));
+            _backdrop.AddComponent<Backdrop>().Build(_root);
 
             _pageLayer = UiBuilder.Child(_root, "Pages");
             _modalLayer = UiBuilder.Child(_root, "Modals");
@@ -119,12 +144,75 @@ namespace BlockPuzzle.Game
             _pause = CreateScreen<PauseScreen>("Pause", _modalLayer);
             _stats = CreateScreen<StatsScreen>("Stats", _modalLayer);
             _themes = CreateScreen<ThemesScreen>("Themes", _modalLayer);
+        }
 
-            ShowMenu();
+        // ------------------------------------------------------------------ theme
 
-#if PRIZMA_AUTOTEST
-            gameObject.AddComponent<AutoTest>();
-#endif
+        /// <summary>
+        /// Switches to a theme and rebuilds the interface in it, leaving the player exactly where
+        /// they were — the same page, the same modals open, a run carried over.
+        ///
+        /// A rebuild rather than recolouring in place: colours are taken at build time all over
+        /// the UI (fills, rest colours kept for highlights, scrims, the backdrop), and one missed
+        /// graphic would leave a patch of the old theme on screen. Building everything again is
+        /// the one way that cannot miss anything, and it costs about what the first launch did,
+        /// once, on a tap in a menu.
+        /// </summary>
+        public void SetTheme(int index)
+        {
+            if (index == Progress.Theme || !Themes.IsUnlocked(index)) return;
+
+            Progress.Theme = index;
+            RebuildInterface();
+        }
+
+        void RebuildInterface()
+        {
+            // Where the player is, by kind of screen: the screens themselves are about to go.
+            bool onGame = _currentPage == _game;
+            bool onLevels = _currentPage == _levels;
+            var session = onGame ? _game.Session : null;
+
+            var modalKinds = new System.Collections.Generic.List<Type>();
+            foreach (var modal in _modals) modalKinds.Add(modal.GetType());
+
+            CloseAllModals();
+            _currentPage?.Hide(); // the play page saves its run on the way out
+            _currentPage = null;
+            PointerRouter.Fallback = null;
+
+            // Switched off first: Destroy only lands at the end of the frame, and until then the
+            // old widgets would still be registered for input and the old graphics still drawn.
+            foreach (var old in new[] { _backdrop, _pageLayer.gameObject, _modalLayer.gameObject })
+            {
+                old.SetActive(false);
+                Destroy(old);
+            }
+
+            BuildInterface();
+
+            if (onGame && session != null)
+            {
+                ShowPage(_game, animate: false);
+                _game.Begin(session);
+            }
+            else
+            {
+                ShowPage(onLevels ? (AppScreen)_levels : _menu, animate: false);
+            }
+
+            foreach (var kind in modalKinds)
+            {
+                var modal = ModalOfKind(kind);
+                if (modal != null) ShowModal(modal, animate: false);
+            }
+        }
+
+        AppScreen ModalOfKind(Type kind)
+        {
+            foreach (var modal in new AppScreen[] { _settings, _scores, _pause, _stats, _themes })
+                if (modal.GetType() == kind) return modal;
+            return null;
         }
 
         void BuildCanvas()
@@ -163,6 +251,8 @@ namespace BlockPuzzle.Game
                 go.transform.SetParent(transform, false);
                 cam = go.AddComponent<Camera>();
             }
+
+            _camera = cam;
 
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = Design.BgTop;
@@ -319,7 +409,7 @@ namespace BlockPuzzle.Game
             _modals.Clear();
         }
 
-        void ShowPage(AppScreen page)
+        void ShowPage(AppScreen page, bool animate = true)
         {
             CloseAllModals();
 
@@ -327,10 +417,10 @@ namespace BlockPuzzle.Game
                 _currentPage.Hide();
 
             _currentPage = page;
-            page.Show();
+            page.Show(animate);
         }
 
-        void ShowModal(AppScreen modal)
+        void ShowModal(AppScreen modal, bool animate = true)
         {
             if (_modals.Contains(modal)) return;
 
@@ -340,7 +430,7 @@ namespace BlockPuzzle.Game
             PointerRouter.Fallback = null;
 
             _modals.Add(modal);
-            modal.Show();
+            modal.Show(animate);
             PointerRouter.PushBlocker(modal.RootRect);
         }
 

@@ -12,7 +12,6 @@ namespace BlockPuzzle.Game
     public sealed class Backdrop : MonoBehaviour
     {
         const float GlowSize = 1560f;
-        const float GlowAlpha = 0.42f;
         const float VignetteAlpha = 0.55f;
         const float GrainAlpha = 0.022f;
 
@@ -62,7 +61,7 @@ namespace BlockPuzzle.Game
         {
             // Centred on the board, which is also where the grid converges: one focal point, so the
             // eye is pulled to the same place by the light and by the perspective.
-            _glow = UiBuilder.Image(root, "Glow", Art.Pool, Design.BgGlow.WithAlpha(GlowAlpha));
+            _glow = UiBuilder.Image(root, "Glow", Art.Pool, Design.BgGlow.WithAlpha(Design.GlowAlpha));
             _glow.type = Image.Type.Simple;
 
             _glowRect = _glow.rectTransform;

@@ -22,7 +22,9 @@ namespace BlockPuzzle.Game
 
         string _out;
         AppController _app;
-        GameScreen _game;
+
+        // Read through the app every time: a theme change rebuilds the interface, play page included.
+        GameScreen _game => _app.Game;
 
         IEnumerator Start()
         {
@@ -31,7 +33,6 @@ namespace BlockPuzzle.Game
             Log($"writing to {_out}");
 
             _app = GetComponent<AppController>();
-            _game = FindAnyObjectByType<GameScreen>(FindObjectsInactive.Include);
 
             // Stray clicks from the desktop must not change screens mid-sequence.
             GetComponent<PointerRouter>().enabled = false;
@@ -150,8 +151,43 @@ namespace BlockPuzzle.Game
             yield return Shot("16_themes");
             _app.CloseModal();
 
+            // A theme not earned yet, previewed: 33 stars so far, Mücevher needs 45.
+            _app.OpenThemes();
+            _app.ThemesPage.AutoFocus(3);
+            yield return Wait(0.4f);
+            yield return Shot("18_theme_locked_preview");
+            _app.CloseModal();
+
+            // Every theme, on the three screens that show the most of it. Stars are granted so each
+            // can be applied; SetTheme rebuilds the interface in place.
+            for (int n = 12; n <= 40; n++) Progress.RecordLevel(n, 3);
+            for (int t = 0; t < Themes.All.Length; t++)
+            {
+                _app.ShowMenu();
+                _app.OpenThemes();
+                _app.SetTheme(t);
+                yield return Wait(0.5f);
+                yield return Shot($"18_theme{t}_picker");
+
+                _app.CloseModal();
+                yield return Wait(0.3f);
+                yield return Shot($"18_theme{t}_menu");
+
+                _app.PlayClassic(fresh: true);
+                var themeBot = new Autoplayer(21 + t, 0.8f);
+                for (int i = 0; i < 14; i++)
+                {
+                    _game.AutoStep(themeBot);
+                    yield return Frames(3);
+                }
+
+                yield return Wait(0.8f);
+                yield return Shot($"18_theme{t}_game");
+            }
+
+            _app.ShowMenu();
             Progress.ColorBlind = true;
-            Progress.Theme = 1;
+            _app.SetTheme(1);
             _app.PlayClassic(fresh: true);
             var cbBot = new Autoplayer(11, 0.8f);
             for (int i = 0; i < 12; i++)
@@ -164,7 +200,7 @@ namespace BlockPuzzle.Game
             yield return Shot("17_colorblind_pastel");
 
             Progress.ColorBlind = false;
-            Progress.Theme = 0;
+            _app.SetTheme(0);
             Log("done");
             Application.Quit();
         }

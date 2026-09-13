@@ -46,7 +46,7 @@ namespace BlockPuzzle.Game
         float _content;
         Vector2 _origin;
 
-        static readonly Color EmptyCellColor = Design.SurfaceInset;
+        static Color EmptyCellColor => Design.SurfaceInset;
         static readonly Color GlyphColor = new Color(0f, 0f, 0f, 0.30f);
         static readonly Color BombHot = new Color(1f, 0.55f, 0.28f, 0.5f);
         static readonly Color BombCold = new Color(1f, 0.55f, 0.28f, 0.16f);

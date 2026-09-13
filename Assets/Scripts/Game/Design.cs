@@ -88,31 +88,40 @@ namespace BlockPuzzle.Game
 
         // ------------------------------------------------------------------ colour
 
-        // The page is bright: a saturated blue ground with a perspective grid running across it.
-        // Everything the player reads sits on a deep indigo panel cut into that ground — the board,
-        // the cards, the buttons — so white text keeps its contrast everywhere and the block
-        // colours stay the loudest thing on screen.
+        // Everything the player reads sits on a deep panel cut into the ground — the board, the
+        // cards, the buttons — so white text keeps its contrast everywhere and the block colours
+        // stay the loudest thing on screen.
+        //
+        // The ground, the surfaces and the accent belong to the chosen theme (Themes). They are
+        // read live, so anything built after a theme change picks it up; AppController rebuilds
+        // the interface when the player picks one. Colours that mean something in play — gold,
+        // mint, the prism, crystals, ice, the line preview — are not themed.
 
-        /// <summary>Top of the ground, behind the score.</summary>
-        public static readonly Color BgTop = Hex("#57A6F5");
+        static Themes.Theme Mood => Themes.Current;
+
+        /// <summary>Top of the ground, behind the score. Also the camera's clear colour.</summary>
+        public static Color BgTop => Mood.BgTop;
 
         /// <summary>Bottom of the ground, behind the tray.</summary>
-        public static readonly Color BgBottom = Hex("#3A6BDB");
+        public static Color BgBottom => Mood.BgBottom;
 
         /// <summary>A soft lift behind the board, so the ground is never a flat field.</summary>
-        public static readonly Color BgGlow = Hex("#8CCBFF");
+        public static Color BgGlow => Mood.BgGlow;
+
+        /// <summary>How strongly the glow shows. A dark ground needs far less light to read as lit.</summary>
+        public static float GlowAlpha => Mood.GlowAlpha;
 
         /// <summary>Where the vignette settles, in the corners.</summary>
-        public static readonly Color BgVignette = Hex("#1B3F8F");
+        public static Color BgVignette => Mood.BgVignette;
 
         /// <summary>The perspective grid drawn over the ground.</summary>
-        public static readonly Color BgGrid = new Color(1f, 1f, 1f, 0.16f);
+        public static Color BgGrid => new Color(1f, 1f, 1f, Mood.GridAlpha);
 
-        public static readonly Color Surface = Hex("#26305E");
-        public static readonly Color SurfaceHigh = Hex("#2E3A6E");
+        public static Color Surface => Mood.Surface;
+        public static Color SurfaceHigh => Mood.SurfaceHigh;
 
         /// <summary>Darker than the general surface so the block colours carry the contrast.</summary>
-        public static readonly Color BoardSurface = Hex("#1E2650");
+        public static Color BoardSurface => Mood.BoardSurface;
 
         // The project renders in Linear colour space, where a low-alpha white composites far
         // brighter than the sRGB arithmetic suggests — 7% white reads closer to 25%. Surfaces are
@@ -120,33 +129,35 @@ namespace BlockPuzzle.Game
         // is what ships. Only hairlines stay translucent, where the lift is wanted.
 
         /// <summary>Secondary buttons.</summary>
-        public static readonly Color SurfaceButton = Hex("#38447F");
+        public static Color SurfaceButton => Mood.SurfaceButton;
 
         /// <summary>Slider tracks and toggle backgrounds.</summary>
-        public static readonly Color SurfaceTrack = Hex("#2C3768");
+        public static Color SurfaceTrack => Mood.SurfaceTrack;
 
         /// <summary>Recessed areas: empty board cells, badges.</summary>
-        public static readonly Color SurfaceInset = Hex("#28315C");
+        public static Color SurfaceInset => Mood.SurfaceInset;
 
-
-        /// <summary>The leader row in the scores table.</summary>
-        public static readonly Color SurfaceLeader = Hex("#4A3C1E");
+        /// <summary>The leader row in the scores table, the chosen theme's row.</summary>
+        public static Color SurfaceLeader => Mood.SurfaceLeader;
 
         public static readonly Color Hairline = new Color(1f, 1f, 1f, 0.10f);
 
         public static readonly Color TextPrimary = Color.white;
 
         /// <summary>
-        /// Quiet text sitting directly on the bright ground rather than on a panel. Translucent
-        /// white disappears there — going darker than the ground is what reads as secondary.
+        /// Quiet text sitting directly on the ground rather than on a panel. Translucent white
+        /// disappears on a bright ground — going darker than it is what reads as secondary. On
+        /// the one dark ground (Neon) it is a light tint instead.
         /// </summary>
-        public static readonly Color TextOnGround = Hex("#1B3A80");
+        public static Color TextOnGround => Mood.TextOnGround;
 
         public static readonly Color TextSecondary = new Color(1f, 1f, 1f, 0.70f);
         public static readonly Color TextTertiary = new Color(1f, 1f, 1f, 0.45f);
 
-        public static readonly Color AccentA = Hex("#8B5CFF");
-        public static readonly Color AccentB = Hex("#5F32E8");
+        /// <summary>The primary buttons' gradient, top and bottom.</summary>
+        public static Color AccentA => Mood.AccentA;
+        public static Color AccentB => Mood.AccentB;
+
         public static readonly Color Gold = Hex("#FFC24B");
         public static readonly Color Mint = Hex("#38D39F");
 
@@ -157,7 +168,7 @@ namespace BlockPuzzle.Game
         /// Behind a modal. Tinted with the ground rather than black: on a bright page a black
         /// scrim reads as the lights going out, which is far more drama than pausing deserves.
         /// </summary>
-        public static readonly Color Scrim = Hex("#0C1636").WithAlpha(0.72f);
+        public static Color Scrim => Mood.Scrim.WithAlpha(0.72f);
 
         /// <summary>
         /// Colour of the pre-clear preview, escalating with how many lines a drop would take.
@@ -174,7 +185,7 @@ namespace BlockPuzzle.Game
         /// The block colours of the chosen theme (<see cref="Themes"/>). Every theme has the same
         /// number of colours, so a saved run keeps its colour indices whatever the theme.
         /// </summary>
-        public static Color[] Blocks => Themes.Current.Blocks;
+        public static Color[] Blocks => Mood.Blocks;
 
         /// <summary>How many colours the rules deal. Fixed, independent of the theme.</summary>
         public const int PaletteSize = 7;

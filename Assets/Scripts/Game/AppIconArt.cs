@@ -47,11 +47,11 @@ namespace BlockPuzzle.Game
 
         static void PaintGround(Raster raster, int s)
         {
-            var glow = Design.BgGlow;
+            var glow = Themes.Default.BgGlow;
             raster.Paint((x, y) =>
             {
                 float k = y / s;
-                var c = Color.Lerp(Design.BgBottom, Design.BgTop, k);
+                var c = Color.Lerp(Themes.Default.BgBottom, Themes.Default.BgTop, k);
 
                 float dx = x / s - 0.5f;
                 float dy = y / s - 0.56f;
@@ -71,13 +71,13 @@ namespace BlockPuzzle.Game
             // A soft shadow under the board, offset slightly down, like the in-game E1 elevation.
             raster.FillSquircle(x0 - s * 0.012f, y0 - s * 0.03f, board + s * 0.024f, board + s * 0.024f,
                 board * 0.2f, new Color(0f, 0f, 0f, 0.22f));
-            raster.FillSquircle(x0, y0, board, board, board * 0.18f, Design.BoardSurface);
+            raster.FillSquircle(x0, y0, board, board, board * 0.18f, Themes.Default.BoardSurface);
 
             float pad = board * 0.085f;
             float gap = board * 0.045f;
             float cell = (board - pad * 2f - gap * 2f) / 3f;
 
-            var colours = Themes.All[0].Blocks;
+            var colours = Themes.Default.Blocks;
             // Row from the top, column from the left: a staircase of five colours.
             var filled = new[,]
             {
@@ -93,7 +93,7 @@ namespace BlockPuzzle.Game
                 float py = y0 + board - pad - (row + 1) * cell - row * gap;
 
                 int colour = filled[row, col];
-                if (colour < 0) raster.FillSquircle(px, py, cell, cell, cell * 0.22f, Design.SurfaceInset);
+                if (colour < 0) raster.FillSquircle(px, py, cell, cell, cell * 0.22f, Themes.Default.SurfaceInset);
                 else PaintBlock(raster, px, py, cell, colours[colour]);
             }
 

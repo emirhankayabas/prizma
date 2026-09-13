@@ -38,14 +38,19 @@ namespace BlockPuzzle.Game
 
         protected abstract void Build();
 
-        public void Show()
+        /// <param name="animate">
+        /// False when the screen is replacing an identical one — a rebuild for a new theme — where a
+        /// fade from nothing would flash the ground through the page.
+        /// </param>
+        public void Show(bool animate = true)
         {
             Root.SetAsLastSibling();
             Root.gameObject.SetActive(true);
             OnShow();
 
             StopAllCoroutines();
-            StartCoroutine(EnterRoutine());
+            if (animate) StartCoroutine(EnterRoutine());
+            else Group.alpha = 1f;
         }
 
         public void Hide()
