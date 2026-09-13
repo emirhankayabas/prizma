@@ -103,19 +103,65 @@ namespace BlockPuzzle.Core
             return shape;
         }
 
-        /// <summary>Picks a shape using the library weights.</summary>
-        public static PieceShape PickWeighted(Rng random)
+        /// <summary>
+        /// Picks a shape using the library weights.
+        ///
+        /// <paramref name="smallBias"/> tilts the roll towards smaller pieces: 0 is the plain
+        /// library distribution, 1 makes a four-cell piece about half as likely as it was and a
+        /// nine-cell square about a quarter as likely. Nothing is ever removed from the deal, so
+        /// a crowded board can still be handed an awkward shape — it is just less likely to be.
+        ///
+        /// This is the dial that answers "there is nowhere to put anything". Runs were ending with
+        /// the board only about two thirds full: the player was not being crowded out, they were
+        /// being handed pieces that did not fit the holes they had. Without this the only defence
+        /// was the candidate ranking, and when every one of the sixteen candidates happens to be
+        /// built from big shapes, ranking them changes nothing.
+        /// </summary>
+        public static PieceShape PickWeighted(Rng random, float smallBias = 0f)
         {
             if (random == null) throw new ArgumentNullException(nameof(random));
 
+            var table = new float[All.Count];
+            float total = BuildWeights(smallBias, table);
+            return PickFrom(random, table, total);
+        }
+
+        /// <summary>
+        /// Fills <paramref name="into"/> with the weights for a given bias and returns their sum.
+        ///
+        /// Built once per deal rather than once per piece: the dealer rolls three shapes for each
+        /// of sixteen candidates, so folding the bias in at pick time meant raising every shape's
+        /// weight to a power forty-eight times over instead of once.
+        /// </summary>
+        public static float BuildWeights(float smallBias, float[] into)
+        {
             float total = 0f;
+
             for (int i = 0; i < All.Count; i++)
-                total += All[i].Weight;
+            {
+                var entry = All[i];
+
+                // Four cells is the pivot: smaller than that gains, larger loses.
+                float weight = smallBias <= 0.001f
+                    ? entry.Weight
+                    : entry.Weight * (float)Math.Pow(4f / entry.Shape.CellCount, smallBias);
+
+                into[i] = weight;
+                total += weight;
+            }
+
+            return total;
+        }
+
+        /// <summary>Rolls one shape against a table from <see cref="BuildWeights"/>.</summary>
+        public static PieceShape PickFrom(Rng random, float[] weights, float total)
+        {
+            if (random == null) throw new ArgumentNullException(nameof(random));
 
             double roll = random.NextDouble() * total;
             for (int i = 0; i < All.Count; i++)
             {
-                roll -= All[i].Weight;
+                roll -= weights[i];
                 if (roll <= 0d)
                     return All[i].Shape;
             }

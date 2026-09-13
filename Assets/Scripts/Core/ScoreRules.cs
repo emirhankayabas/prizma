@@ -85,19 +85,29 @@ namespace BlockPuzzle.Core
         /// before the next jam, and a good player's run went three to four times longer than
         /// without powers — the powers were doing the dealer's job and taking the tension out.
         /// The rising price keeps them a rescue, not a way of life. See "Güçler" in CLAUDE.md.
+        ///
+        /// The first price used to be thirty, and measured, that put it out of reach of exactly
+        /// the player it was meant to rescue: a struggling run clears about twenty lines in total,
+        /// so it never earned a single charge and spent the whole run on the one it started with.
+        /// So the first one is cheap now and the step is steeper — the shape the balance notes
+        /// already pointed at. A weak run gets a second rescue; a strong one still pays more for
+        /// every charge after that.
         /// </summary>
-        public const int LinesPerCharge = 30;
-        public const int ChargeStep = 20;
+        public const int LinesPerCharge = 12;
+        public const int ChargeStep = 26;
 
         /// <summary>Lines the next charge costs, given how many this run has already earned.</summary>
         public static int LinesForCharge(int earnedSoFar) => LinesPerCharge + ChargeStep * earnedSoFar;
 
         /// <summary>
-        /// Charges an endless run starts with. One: it is the rescue a casual player actually
-        /// gets to use — with none, most of them never cleared enough lines to earn a first
-        /// charge, and the powers only ever helped the players who needed them least.
+        /// Charges an endless run starts with. With none, most casual players never cleared enough
+        /// lines to earn a first charge and the powers only ever helped the players who needed
+        /// them least. One was still not enough: a struggling run spent the whole game on that
+        /// single charge, so the rescue existed once and then never again. Two, with the cheap
+        /// first charge above, gives a weak run about three ways out of a jam and leaves a strong
+        /// one almost unchanged — over four hundred moves, one extra charge is noise.
         /// </summary>
-        public const int StartCharges = 1;
+        public const int StartCharges = 2;
 
         /// <summary>Square radius of the bomb: 1 means a 3x3 blast.</summary>
         public const int BombRadius = 1;

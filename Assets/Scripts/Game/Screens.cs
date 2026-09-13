@@ -396,7 +396,7 @@ namespace BlockPuzzle.Game
         {
             var scrim = UiBuilder.Image(root, "Scrim", Art.Panel(0f), Design.Scrim);
             scrim.type = Image.Type.Simple;
-            UiBuilder.Stretch(scrim.rectTransform);
+            UiBuilder.StretchFullScreen(scrim.rectTransform);
 
             var holder = UiBuilder.Node(root, "Card");
             holder.sizeDelta = size;

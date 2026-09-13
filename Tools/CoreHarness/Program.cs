@@ -20,7 +20,8 @@ static class Program
             case "tests": Tests(); break;
             case "balance": Balance(args.Length > 1 ? int.Parse(args[1]) : 40); break;
             case "levels": Levels(args.Length > 1 ? int.Parse(args[1]) : 1, args.Length > 2 ? int.Parse(args[2]) : 60); break;
-            default: Console.WriteLine("usage: tests | balance [runs] | levels [from] [to]"); return 2;
+            case "perf": Perf(); break;
+            default: Console.WriteLine("usage: tests | balance [runs] | levels [from] [to] | perf"); return 2;
         }
 
         if (_failures > 0) Console.WriteLine($"FAILURES: {_failures}");
@@ -180,26 +181,107 @@ static class Program
         return s;
     }
 
+    /// <summary>
+    /// What a run felt like, as opposed to how long it was. Totals alone hid the complaint that
+    /// prompted this: a run can last plenty of moves while the board sits nearly full the whole
+    /// time, never clears more than one line, and never once comes back to empty.
+    /// </summary>
+    sealed class Feel
+    {
+        public int Moves;
+        public int Clears;
+        public int MultiLine;      // clears that took two or more lines in one move
+        public int PerfectClears;
+        public int BestStreak;
+        public long StreakSum;      // streak value on every clearing move
+        public double OccupancySum; // board fill, sampled after every move
+        public int Samples;
+        public int Tight;           // moves played with the board more than 60% full
+        public double PeakOccupancy;
+        public double DeathOccupancy; // how full the board was when the run ended
+        public int MinCells = int.MaxValue; // emptiest the board ever got
+        public int MinSpanRows;             // distinct rows those survivors sat in
+        public int MinSpanCols;
+
+        public double Occupancy => Samples == 0 ? 0 : OccupancySum / Samples;
+        public double MultiLineRate => Clears == 0 ? 0 : MultiLine / (double)Clears;
+        public double AvgStreak => Clears == 0 ? 0 : StreakSum / (double)Clears;
+
+        /// <summary>
+        /// Share of the run spent with the board crowded. This is what "boş yerim oldukça az"
+        /// actually describes — the average fill can look calm while the player spends a third of
+        /// the run with nowhere to put anything.
+        /// </summary>
+        public double TightShare => Samples == 0 ? 0 : Tight / (double)Samples;
+    }
+
+    static GameSession PlayOut(int seed, int botSeed, float skill, int cap, bool powers, Feel feel)
+    {
+        var s = new GameSession(new SessionConfig { Seed = seed, PowersEnabled = powers, PaletteSize = 7 });
+
+        s.Moved += r =>
+        {
+            feel.Moves++;
+            double fill = s.Board.OccupiedCount / (double)(s.Board.Size * s.Board.Size);
+            feel.OccupancySum += fill;
+            feel.Samples++;
+            if (fill > 0.60) feel.Tight++;
+            if (fill > feel.PeakOccupancy) feel.PeakOccupancy = fill;
+            if (s.Board.OccupiedCount < feel.MinCells)
+            {
+                feel.MinCells = s.Board.OccupiedCount;
+
+                // A wipe needs the survivors to share a line. Scattered across four rows, no tray
+                // on earth can clear them without first filling four whole rows.
+                int rows = 0, cols = 0;
+                for (int i = 0; i < s.Board.Size; i++)
+                {
+                    if (s.Board.RowCount(i) > 0) rows++;
+                    if (s.Board.ColumnCount(i) > 0) cols++;
+                }
+                feel.MinSpanRows = rows;
+                feel.MinSpanCols = cols;
+            }
+
+            if (r.Clear == null || !r.Clear.Any) return;
+            feel.Clears++;
+            feel.StreakSum += r.ComboStreak;
+            if (r.Clear.LinesCleared > 1) feel.MultiLine++;
+            if (r.Clear.PerfectClear) feel.PerfectClears++;
+            if (r.ComboStreak > feel.BestStreak) feel.BestStreak = r.ComboStreak;
+        };
+
+        var bot = new Autoplayer(botSeed, skill);
+        int guard = 0;
+        while (!s.IsFinished && s.MovesUsed < cap && guard++ < cap * 4)
+            if (!bot.Step(s)) break;
+        return s;
+    }
+
     // ------------------------------------------------------------------ balance
 
     static void Balance(int runs)
     {
         const int cap = 3000;
-        foreach (float skill in new[] { 0.55f, 0.80f })
+        foreach (float skill in new[] { 0.40f, 0.55f, 0.80f })
         foreach (bool powers in new[] { false, true })
         {
             var moves = new List<int>();
             var lines = new List<int>();
             var scores = new List<int>();
+            var feels = new List<Feel>();
             int capped = 0, powersUsed = 0;
             var sw = Stopwatch.StartNew();
 
             for (int r = 0; r < runs; r++)
             {
-                var s = PlayOut(1000 + r, 7 + r, skill, cap, powers);
+                var feel = new Feel();
+                var s = PlayOut(1000 + r, 7 + r, skill, cap, powers, feel);
+                feel.DeathOccupancy = s.Board.OccupiedCount / (double)(s.Board.Size * s.Board.Size);
                 moves.Add(s.MovesUsed);
                 lines.Add(s.LinesCleared);
                 scores.Add(s.Score);
+                feels.Add(feel);
                 powersUsed += s.PowersUsed;
                 if (!s.IsFinished) capped++;
             }
@@ -208,6 +290,72 @@ static class Program
             moves.Sort();
             Console.WriteLine($"skill {skill:0.00} powers {(powers ? "on " : "off")}: moves avg {moves.Average():0.0} med {moves[runs / 2]} max {moves.Max()}  " +
                               $"lines {lines.Average():0.0}  score {scores.Average():0}  powers/run {powersUsed / (float)runs:0.0}  capped {capped}  ({sw.ElapsedMilliseconds / runs} ms/run)");
+
+            // The feel of it: how full the board sat, how often a move took more than one line,
+            // how long a streak ever got, and whether the board ever came back to empty.
+            Console.WriteLine($"                     board {feels.Average(f => f.Occupancy):P0} full (peak {feels.Average(f => f.PeakOccupancy):P0}, " +
+                              $"crowded {feels.Average(f => f.TightShare):P0} of moves)  " +
+                              $"multi-line {feels.Average(f => f.MultiLineRate):P1}");
+            Console.WriteLine($"                     streak avg {feels.Average(f => f.AvgStreak):0.00} best {feels.Average(f => f.BestStreak):0.0} " +
+                              $"(max {feels.Max(f => f.BestStreak)})  " +
+                              $"board emptied {feels.Sum(f => f.PerfectClears)}x in {runs} runs " +
+                              $"({feels.Count(f => f.PerfectClears > 0) / (float)runs:P0} of runs)  " +
+                              $"board {feels.Average(f => f.DeathOccupancy):P0} full at the end  " +
+                              $"emptiest {feels.Average(f => f.MinCells == int.MaxValue ? 0 : f.MinCells):0.0} cells " +
+                              $"spread over {feels.Average(f => f.MinSpanRows):0.0} rows x {feels.Average(f => f.MinSpanCols):0.0} cols");
+        }
+    }
+
+    // ------------------------------------------------------------------ perf
+
+    /// <summary>
+    /// What one deal costs, at the board states that matter.
+    ///
+    /// The dealer runs on the main thread in the middle of play, so this is frame time, not
+    /// background time — and it is the one part of the game whose cost is allowed to grow with
+    /// how much trouble the player is in. An open board is cheap; a crowded one rolls far more
+    /// candidates, and that is exactly when a hitch would be felt.
+    /// </summary>
+    static void Perf()
+    {
+        Console.WriteLine("  fill   assist  candidates   ms/deal   alloc KB/deal");
+
+        foreach (float fill in new[] { 0.0f, 0.25f, 0.50f, 0.70f, 0.85f })
+        {
+            var rng = new Rng(12345);
+            var board = new BoardModel(8);
+            FillTo(board, fill, rng);
+
+            var dealer = new PieceDealer(new Rng(999));
+            var tray = new[] { new TrayPiece(), new TrayPiece(), new TrayPiece() };
+
+            // Warm up the scratch board and the JIT.
+            for (int i = 0; i < 200; i++) dealer.Deal(board, tray, 7, 0);
+
+            const int Deals = 2000;
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            var sw = Stopwatch.StartNew();
+            for (int i = 0; i < Deals; i++) dealer.Deal(board, tray, 7, 0);
+            sw.Stop();
+            long bytes = GC.GetAllocatedBytesForCurrentThread() - before;
+
+            Console.WriteLine($"  {fill,4:P0}   {dealer.LastAssist,6:0.00}   {16 + (int)(dealer.LastAssist * 28),10}   " +
+                              $"{sw.Elapsed.TotalMilliseconds / Deals,7:0.000}   {bytes / (double)Deals / 1024,13:0.00}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  bir dagitim ~3 hamlede bir olur; 60 fps butcesi 16.7 ms/kare.");
+    }
+
+    static void FillTo(BoardModel board, float fill, Rng rng)
+    {
+        int want = (int)(board.Size * board.Size * fill);
+        int guard = 0;
+        while (board.OccupiedCount < want && guard++ < 5000)
+        {
+            int x = rng.Next(board.Size);
+            int y = rng.Next(board.Size);
+            if (!board.IsOccupied(x, y)) board.SetPrefill(x, y, rng.Next(7), false, 0);
         }
     }
 

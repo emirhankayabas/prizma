@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using BlockPuzzle.Core;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
@@ -13,8 +13,22 @@ namespace BlockPuzzle.Game
     /// </summary>
     public sealed class AppController : MonoBehaviour
     {
-        const float ReferenceWidth = 1080f;
-        const float ReferenceHeight = 1920f;
+        public const float ReferenceWidth = 1080f;
+        public const float ReferenceHeight = 1920f;
+
+        /// <summary>
+        /// Bottom margin kept clear for the system gesture bar, in canvas units.
+        ///
+        /// <c>Screen.safeArea</c> is not enough on its own: on Android it reports display cutouts
+        /// but usually not the gesture handle, which sits over the app. A drag started on the
+        /// bottom row of the tray was landing inside it — measured off a phone screenshot, the
+        /// tray finished 89 px from the bottom edge, well inside the ~48dp handle.
+        ///
+        /// The figure is in canvas units rather than dp on purpose. The scaler matches width, so
+        /// a canvas unit is a fixed fraction of the physical width whatever the density: 1080
+        /// units span a phone about 392dp wide, which puts 48dp at roughly 130 units.
+        /// </summary>
+        const float GestureBarMargin = 130f;
 
         /// <summary>
         /// Android runs an app at 30 fps unless it asks for more — this line is the difference
@@ -50,13 +64,41 @@ namespace BlockPuzzle.Game
         public int BoardSize => _boardSize;
         public float CanvasScale => _canvas == null || _canvas.scaleFactor <= 0f ? 1f : _canvas.scaleFactor;
 
+        /// <summary>
+        /// Height of a page in canvas units once the notch and the gesture bar are taken out.
+        /// Computed from the scaler's own rule rather than read off a RectTransform, because
+        /// screens are built during Awake and layout has not run yet.
+        /// </summary>
+        public float PageHeight { get; private set; } = ReferenceHeight;
+
+        /// <summary>
+        /// Left, bottom, right, top — canvas units. Static because a full-screen scrim has to be
+        /// able to bleed back out over the notch and the gesture bar, and there is only ever one
+        /// of these.
+        /// </summary>
+        public static Vector4 SafeInsets { get; private set; }
+
+        Vector4 _safeInsets;
+        Rect _measuredSafeArea;
+        Vector2Int _measuredScreen;
+
         void Awake()
         {
+            // One breadcrumb in logcat. An APK once started into an empty sky because the scene
+            // could not resolve this component; without a line like this, "the game never ran"
+            // and "the game crashed on the first frame" look identical on a phone.
+            Debug.Log($"[PRIZMA] AppController.Awake — {Application.version} / {Application.platform}");
+
             QualitySettings.vSyncCount = 0;
             Application.targetFrameRate = TargetFrameRate;
 
             ConfigureCamera();
             BuildCanvas();
+            MeasureSafeArea();
+
+            // The page metrics have to be known before anything is built: the backdrop's glow and
+            // the board both sit at GameScreen.BoardCenterY, which depends on them.
+            GameScreen.SetPageHeight(PageHeight);
 
             Audio = gameObject.AddComponent<AudioKit>();
             Music = gameObject.AddComponent<MusicPlayer>();
@@ -67,6 +109,7 @@ namespace BlockPuzzle.Game
 
             _pageLayer = UiBuilder.Child(_root, "Pages");
             _modalLayer = UiBuilder.Child(_root, "Modals");
+            ApplySafeArea();
 
             _menu = CreateScreen<MainMenuScreen>("MainMenu", _pageLayer);
             _game = CreateScreen<GameScreen>("Game", _pageLayer);
@@ -301,12 +344,66 @@ namespace BlockPuzzle.Game
             PointerRouter.PushBlocker(modal.RootRect);
         }
 
+        /// <summary>
+        /// Works out how much of the screen the system keeps for itself. The backdrop deliberately
+        /// ignores this and stays full-bleed — it is the notch that should be filled with colour,
+        /// not left black — while everything the player touches is inset inside it.
+        /// </summary>
+        void MeasureSafeArea()
+        {
+            var safe = Screen.safeArea;
+            _measuredSafeArea = safe;
+            _measuredScreen = new Vector2Int(Screen.width, Screen.height);
+
+            float scale = Mathf.Min(Screen.width / ReferenceWidth, Screen.height / ReferenceHeight);
+            if (scale <= 0.0001f) scale = 1f;
+
+            float left = safe.xMin / scale;
+            float right = (Screen.width - safe.xMax) / scale;
+            float top = (Screen.height - safe.yMax) / scale;
+            float bottom = Mathf.Max(safe.yMin / scale, GestureBarMargin);
+
+            _safeInsets = new Vector4(left, bottom, right, top);
+            SafeInsets = _safeInsets;
+            PageHeight = Screen.height / scale - top - bottom;
+        }
+
+        void ApplySafeArea()
+        {
+            foreach (var layer in new[] { _pageLayer, _modalLayer })
+            {
+                if (layer == null) continue;
+                layer.offsetMin = new Vector2(_safeInsets.x, _safeInsets.y);
+                layer.offsetMax = new Vector2(-_safeInsets.z, -_safeInsets.w);
+            }
+        }
+
         // ------------------------------------------------------------------ platform
 
         /// <summary>A haptic pulse for a big moment — multi-line clears, the end of a run. Honours the setting.</summary>
         public void Vibrate(bool strong = false)
         {
             if (GameSettings.Haptics) Haptics.Pulse(strong ? 45 : 22);
+        }
+
+        /// <summary>
+        /// A clear, felt rather than heard. The pulse grows with the number of lines the one move
+        /// took, so the hand is told the same thing the ear is told by <see cref="AudioKit.PlayClear"/>
+        /// — and a player with the sound off still gets the difference between a tidy move and a
+        /// very good one.
+        /// </summary>
+        public void VibrateClear(int lines, bool perfectClear)
+        {
+            if (!GameSettings.Haptics) return;
+
+            if (perfectClear)
+            {
+                Haptics.Pulse(60, 255);
+                return;
+            }
+
+            int steps = Mathf.Clamp(lines, 1, 4);
+            Haptics.Pulse(14 + 10 * steps, 90 + 45 * steps);
         }
 
         /// <summary>The lightest tick there is, for a piece landing. Felt more than noticed.</summary>
@@ -317,6 +414,14 @@ namespace BlockPuzzle.Game
 
         void Update()
         {
+            // Rotation, a foldable opening, or the editor's game view being resized.
+            if (Screen.width != _measuredScreen.x || Screen.height != _measuredScreen.y ||
+                Screen.safeArea != _measuredSafeArea)
+            {
+                MeasureSafeArea();
+                ApplySafeArea();
+            }
+
             // Android back button: close the top modal; in a run, let the page back out of a result
             // card or an armed power before pausing; elsewhere go home.
             if (UnityEngine.InputSystem.Keyboard.current != null &&

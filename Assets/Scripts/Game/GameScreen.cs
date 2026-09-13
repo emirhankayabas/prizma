@@ -30,12 +30,35 @@ namespace BlockPuzzle.Game
         const float BottomStack = TrayBottomOffset + TrayHeight + PowerBarGap + PowerBarHeight;
 
         /// <summary>
-        /// The board is centred in the band the HUD and the bottom stack leave behind, not on the
-        /// canvas. Written as a difference so it follows those when they move, and because the
-        /// canvas is taller than 1920 on a long phone — the surplus has to split evenly above and
-        /// below the board instead of pooling under it.
+        /// How much of the height a tall phone adds over the 1920 reference goes into lifting the
+        /// bottom stack, rather than being split evenly above and below the board.
+        ///
+        /// An even split is what the first version did, and on a 20:9 phone it read badly: the
+        /// surplus arrived as 227 units above the board and 227 below, but the top already carries
+        /// the HUD's own reserved band, so the gap over the board looked like a hole while the
+        /// tray stayed pinned near the bottom edge. Sending most of it downwards pulls the board
+        /// up towards the score and lifts the tray into reach at the same time.
         /// </summary>
-        public const float BoardCenterY = (BottomStack - HudHeight) * 0.5f;
+        const float SurplusToBottom = 0.62f;
+
+        static float _pageHeight = AppController.ReferenceHeight;
+
+        /// <summary>
+        /// Told to the page by <see cref="AppController"/> before anything is built, because the
+        /// backdrop's glow is positioned from <see cref="BoardCenterY"/> too.
+        /// </summary>
+        public static void SetPageHeight(float height) =>
+            _pageHeight = Mathf.Max(AppController.ReferenceHeight, height);
+
+        /// <summary>How far the tray and power bar rise above their 16:9 position.</summary>
+        public static float BottomLift =>
+            (_pageHeight - AppController.ReferenceHeight) * SurplusToBottom;
+
+        /// <summary>
+        /// The board is centred in the band the HUD and the bottom stack leave behind, not on the
+        /// page. Written as a difference so it follows those when they move.
+        /// </summary>
+        public static float BoardCenterY => (BottomStack + BottomLift - HudHeight) * 0.5f;
 
         GameSession _session;
 
@@ -90,7 +113,7 @@ namespace BlockPuzzle.Game
             _hud.Build(Root, HudHeight, () => { Audio.PlayClick(); App.OpenPause(); });
 
             _powers = new PowerBar();
-            _powers.Build(Root, boardSize, PowerBarHeight, TrayBottomOffset + TrayHeight + PowerBarGap);
+            _powers.Build(Root, boardSize, PowerBarHeight, TrayBottomOffset + BottomLift + TrayHeight + PowerBarGap);
             _powers.PowerClicked += OnPowerClicked;
             _powers.EndClicked += () => { Audio.PlayClick(); _session?.Concede(); };
 
@@ -141,7 +164,7 @@ namespace BlockPuzzle.Game
             var trayRect = (RectTransform)trayGo.transform;
             trayRect.anchorMin = trayRect.anchorMax = new Vector2(0.5f, 0f);
             trayRect.pivot = new Vector2(0.5f, 0f);
-            trayRect.anchoredPosition = new Vector2(0f, TrayBottomOffset);
+            trayRect.anchoredPosition = new Vector2(0f, TrayBottomOffset + BottomLift);
 
             _tray = trayGo.AddComponent<TrayView>();
             _tray.Build(boardSize, TrayHeight, _board.CellSize, _board.Gap, GameSession.TraySlots);
@@ -296,15 +319,19 @@ namespace BlockPuzzle.Game
             if (clear.Any)
             {
                 var tint = Design.Blocks[result.PlacedColorIndex % Design.Blocks.Length];
+
+                // One call, first thing: the clear speaks as a single phrase, sized by how many
+                // lines went in this one move and pitched by how long the streak has run. Before
+                // this, a good move fired the clear, the combo, the prism line and the fanfare as
+                // four separate one-shots that simply summed on top of each other.
+                Audio.PlayClear(clear.LinesCleared, result.ComboStreak, clear.MonoLines, clear.PerfectClear);
+
                 _board.PlayLineSweep(clear, Color.white);
                 _board.PlayClearBurst(clear.ClearedCells, Color.white);
                 _board.PulseEdge(tint);
 
                 if (clear.MonoLines > 0)
-                {
                     _board.PlayPrismSweep(clear);
-                    Audio.PlayPrism();
-                }
 
                 if (clear.CrackedIce.Count > 0)
                 {
@@ -319,7 +346,6 @@ namespace BlockPuzzle.Game
                 {
                     _board.PlayBoardWave();
                     _board.PulseEdge(Design.Gold);
-                    Audio.PlayFanfare();
                 }
 
                 _hud.ShowCombo(this, result.ComboStreak);
@@ -327,15 +353,14 @@ namespace BlockPuzzle.Game
                 var popupCells = clear.ClearedCells.Count > 0 ? clear.ClearedCells : clear.CrackedIce;
                 ShowScorePopup(result.ClearScore, popupCells, clear.PerfectClear ? Design.Gold : tint, clear.PerfectClear);
 
-                if (result.ComboStreak > 1) Audio.PlayCombo(result.ComboStreak);
-                else Audio.PlayClear();
-
                 if (clear.LinesCleared > 1 || clear.PerfectClear)
                 {
                     // The board itself takes the hit: a small swell that grows with the clear.
                     float punch = clear.PerfectClear ? 0.045f : 0.012f * Mathf.Min(clear.LinesCleared, 4);
                     StartCoroutine(Tween.Punch(_board.transform, punch, 0.24f));
-                    App.Vibrate();
+
+                    // The same ladder through the skin, so the hand is told what the ear was told.
+                    App.VibrateClear(clear.LinesCleared, clear.PerfectClear);
                 }
             }
             else

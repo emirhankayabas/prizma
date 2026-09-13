@@ -115,6 +115,21 @@ namespace BlockPuzzle.Game
             material.SetFloat(ShaderUtilities.ID_UnderlaySoftness, softness);
         }
 
+        /// <summary>
+        /// Stretches over the parent and then back out over the safe-area inset, so a full-screen
+        /// dim actually reaches the screen edges. Pages are inset inside the notch and the gesture
+        /// bar; a scrim that stopped at that inset left a bright strip along the bottom of every
+        /// dimmed screen.
+        /// </summary>
+        public static void StretchFullScreen(RectTransform rect)
+        {
+            Stretch(rect);
+
+            var insets = AppController.SafeInsets;
+            rect.offsetMin = new Vector2(-insets.x, -insets.y);
+            rect.offsetMax = new Vector2(insets.z, insets.w);
+        }
+
         public static void Stretch(RectTransform rect)
         {
             rect.anchorMin = Vector2.zero;

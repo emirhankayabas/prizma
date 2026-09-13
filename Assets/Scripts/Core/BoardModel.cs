@@ -28,6 +28,24 @@ namespace BlockPuzzle.Core
         /// <summary>The clear left the board completely empty.</summary>
         public bool PerfectClear;
 
+        /// <summary>
+        /// Empties this result so it can be filled again. The dealer plays out tens of candidate
+        /// trays per deal and only ever reads <see cref="LinesCleared"/>; letting it hand the same
+        /// instance back in kept a hundred-odd of these off the heap every deal.
+        /// </summary>
+        public void Reset()
+        {
+            ClearedRows.Clear();
+            ClearedColumns.Clear();
+            ClearedCells.Clear();
+            CollectedGems.Clear();
+            CrackedIce.Clear();
+            MonoRows.Clear();
+            MonoColumns.Clear();
+            MonoLines = 0;
+            PerfectClear = false;
+        }
+
         public int LinesCleared => ClearedRows.Count + ClearedColumns.Count;
         public bool Any => LinesCleared > 0;
 
@@ -61,6 +79,14 @@ namespace BlockPuzzle.Core
         readonly int[] _rowAdd;
         readonly int[] _colAdd;
 
+        /// <summary>
+        /// Which cells a clear is about to wipe. This used to be a <c>HashSet</c> built from
+        /// scratch on every resolved placement — including every one of the hundred-odd
+        /// simulated placements the dealer makes per deal — which is where most of the garbage
+        /// in a move was coming from.
+        /// </summary>
+        readonly bool[,] _wiped;
+
         public int Size { get; }
 
         public BoardModel(int size = 8)
@@ -75,6 +101,7 @@ namespace BlockPuzzle.Core
             _colCount = new int[size];
             _rowAdd = new int[size];
             _colAdd = new int[size];
+            _wiped = new bool[size, size];
 
             Clear();
         }
@@ -295,7 +322,19 @@ namespace BlockPuzzle.Core
         /// Lines are detected before anything is wiped, so a placement that completes a row and a
         /// column at the same time scores both.
         /// </summary>
-        public ClearResult Place(PieceShape shape, int col, int row, int colorIndex)
+        public ClearResult Place(PieceShape shape, int col, int row, int colorIndex) =>
+            Place(shape, col, row, colorIndex, null);
+
+        /// <summary>
+        /// Places a piece and resolves whatever it completes.
+        ///
+        /// Pass <paramref name="reuse"/> to have the result written into an instance you own
+        /// instead of a fresh one. Only do that when nothing keeps the result past the call: the
+        /// game hands its <see cref="ClearResult"/> to animations that outlive the frame, so it
+        /// takes a new one every move, while the dealer — which throws tens of them away per deal
+        /// and reads a single integer off each — hands back the same one every time.
+        /// </summary>
+        public ClearResult Place(PieceShape shape, int col, int row, int colorIndex, ClearResult reuse)
         {
             if (!CanPlace(shape, col, row))
                 throw new InvalidOperationException($"{shape} does not fit at ({col},{row}).");
@@ -303,7 +342,7 @@ namespace BlockPuzzle.Core
             foreach (var cell in shape.Cells)
                 SetCell(col + cell.X, row + cell.Y, colorIndex);
 
-            return ResolveLines();
+            return ResolveLines(reuse);
         }
 
         /// <summary>
@@ -373,9 +412,18 @@ namespace BlockPuzzle.Core
             return true;
         }
 
-        ClearResult ResolveLines()
+        ClearResult ResolveLines(ClearResult reuse)
         {
-            var result = new ClearResult();
+            ClearResult result;
+            if (reuse == null)
+            {
+                result = new ClearResult();
+            }
+            else
+            {
+                result = reuse;
+                result.Reset();
+            }
 
             for (int y = 0; y < Size; y++)
                 if (_rowCount[y] == Size) result.ClearedRows.Add(y);
@@ -392,36 +440,41 @@ namespace BlockPuzzle.Core
                 if (ColumnIsMono(x)) result.MonoColumns.Add(x);
             result.MonoLines = result.MonoRows.Count + result.MonoColumns.Count;
 
-            var wiped = new HashSet<CellOffset>();
+            // A mask rather than a set: crossing rows and columns must not wipe a cell twice, and
+            // marking a flag is both cheaper and allocation-free next to hashing a struct.
+            Array.Clear(_wiped, 0, _wiped.Length);
 
             foreach (int y in result.ClearedRows)
             for (int x = 0; x < Size; x++)
-                wiped.Add(new CellOffset(x, y));
+                _wiped[x, y] = true;
 
             foreach (int x in result.ClearedColumns)
             for (int y = 0; y < Size; y++)
-                wiped.Add(new CellOffset(x, y));
+                _wiped[x, y] = true;
 
-            foreach (var cell in wiped)
+            for (int y = 0; y < Size; y++)
+            for (int x = 0; x < Size; x++)
             {
+                if (!_wiped[x, y]) continue;
+
                 // Ice absorbs the clear: the block stays and only the ice gets thinner. A cell on a
                 // crossing row and column still loses a single layer — it was hit by one move.
-                if (_ice[cell.X, cell.Y] > 0)
+                if (_ice[x, y] > 0)
                 {
-                    _ice[cell.X, cell.Y]--;
-                    result.CrackedIce.Add(cell);
+                    _ice[x, y]--;
+                    result.CrackedIce.Add(new CellOffset(x, y));
                     continue;
                 }
 
-                if (_gems[cell.X, cell.Y])
+                if (_gems[x, y])
                 {
-                    _gems[cell.X, cell.Y] = false;
+                    _gems[x, y] = false;
                     GemCount--;
-                    result.CollectedGems.Add(cell);
+                    result.CollectedGems.Add(new CellOffset(x, y));
                 }
 
-                SetCell(cell.X, cell.Y, Empty);
-                result.ClearedCells.Add(cell);
+                SetCell(x, y, Empty);
+                result.ClearedCells.Add(new CellOffset(x, y));
             }
 
             result.PerfectClear = OccupiedCount == 0;

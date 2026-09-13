@@ -148,25 +148,63 @@ Bunu sağlayan iki mekanizma:
 ### Ayar noktaları
 | Sabit | Anlamı |
 |---|---|
-| `BaseAssist` 0.16 | Boş tahtada bile uygulanan taban |
+| `BaseAssist` 0.26 | Boş tahtada bile uygulanan taban |
 | `AssistCeiling` 0.82 | **Tavan. Turun bitmesini garantiler — kaldırma** |
-| `PressureStart/Full` 0.35 / 0.80 | Yardımın başladığı ve tam güce ulaştığı doluluk |
-| `FatigueScore/Max` 3500 / 0.5 | Uzun turda yardımın geri çekilme rampası |
+| `PressureStart/Full` 0.25 / 0.68 | Yardımın başladığı ve tam güce ulaştığı doluluk |
+| `PressureCurve` 1.25 | Rampanın şekli. Kareli hâli fazla arkaya yüklüydü: yarı dolu tahta tam gücün onda birini alıyordu, yani yardım ancak tur zaten kaybedilmişken geliyordu |
+| `FatigueStart/Score/Max` 3000 / 14000 / 0.5 | Uzun tur rampası. Öncesi 0'dan başlayıp 3500'de yarıyı alıyordu — sıradan bir casual tur (2000 puan) daha kısacıkken yardımının üçte birini teslim etmiş oluyordu. Artık casual'ın ulaştığı yerin ötesinde başlıyor |
+| `MaxSmallBias` 1.15 | Tahta sıkışıkken **ve** boşalmak üzereyken küçük parçaya yönelme |
 | `DriftAmount/Memory` 0.55 / 0.7 | Dalgalanmanın genliği ve hafızası |
-| `CandidateCount` 16 | Aday sayısı (maliyet burada) |
+| `CandidateCount` 16 + `CandidateBonus` 28 | Aday sayısı. Açık tahtada 16 yeter; **sıkışık tahtada asıl tavan buydu** — bütün ayarlar sonuna kadar açıkken bile dağıtıcı 16 rastgele tepsinin en iyisini seçebiliyordu ve hiçbiri uymuyor olabilirdi. Ek adaylar yalnız yardım gerekirken üretiliyor |
+
+### Sıralama terimleri — hangisi neyi satın alıyor
+`ScoreOutcome` içindeki her terim oyuncunun hissettiği ayrı bir şeye karşılık geliyor:
+
+| Terim | Ne satın alıyor |
+|---|---|
+| `Placed` eksikse ceza (150 + 650·assist) | **Turun uyarısız bitmemesi.** Eskiden 200·assist idi, yani yüzlerce puanlık terimlerin yanında ~60 puan ederdi ve hiç yarışamıyordu |
+| `FitsNow` eksikse ceza (120 + 520·assist) | **İnsanın kendini kilitlememesi.** `Placed` aynı sözü vermiyor: o, tepsiyi *en iyi sırayla* oynayan bir simülasyondan geliyor. Oyuncu altı sıralamayı deneyip iyisini seçemez — yanlış parçayı önce koyar ve kalan ikisi sığmaz. Bu terim "şu anda, herhangi bir sırayla kaç parça sığıyor"u sayar |
+| `ClearingMoves` (60 + 170·assist) | **Serinin yaşaması.** Ekrandaki çarpan üst üste temizleyen *hamleleri* sayıyor |
+| `BestSingle > 1` (70 + 150·assist) | **Tek hamlede çok satır.** `Lines` bunu göremiyordu: üç hamlede üç satır ile tek hamlede üç satır ona aynı görünüyordu |
+| `Primed` (9 + 26·assist) | **Bir sonraki temizlemenin var olması.** Tahtayı boşa itmek oyuncuya yer açar ama boş tahtada temizlenecek bir şey de yoktur — bu terim olmadan seri 1.3'te çakılı kalıyordu |
+| `FinalOccupancy` cezası (7 + 20·assist) | Nefes alacak yer. Fazla bastırılırsa yukarıdaki terimle çelişir |
+| ≤12 hücre ve 0 hücre ikramiyeleri | Tahtayı bitirme anı |
 
 ### Ölçülen denge
-Casual oyuncu simülasyonu (skill 0.55) ve iyi oyuncu (0.80), her tur doğal bitiyor:
+`Tools/CoreHarness balance 60`, palet 7, güçler açık, her tur doğal bitiyor (**capped 0**).
+Süpürmeye **skill 0.40 eklendi** — 0.55 ve 0.80 ile ölçerken asıl zorlanan oyuncu hiç görünmüyordu,
+ve şikâyet eden oyuncu oydu.
 
-| | Rastgele | Akıllı |
+| | Önce | Sonra |
 |---|---|---|
-| casual — hamle | 34 | **44** (+29%) |
-| casual — temizleme | 9.5 | **14.9** (+57%) |
-| iyi — hamle | 63 | **74** (+17%) |
-| iyi — temizleme | 22.6 | **28.0** (+24%) |
+| zorlanan (0.40) — hamle (ort / medyan) | — | **110.0 / 112** |
+| zorlanan — temizleme / skor | — | **38.7 / 4698** |
+| casual (0.55) — hamle (ort / medyan) | 52.1 / 53 | **166.1 / 185** |
+| casual — temizleme | 17.1 | **62.5** |
+| casual — skor | 1995 | **7461** |
+| casual — en uzun seri | 2.6 | **3.4** |
+| iyi (0.80) — hamle | 150.5 | **498.3** |
+| iyi — skor | 6936 | **24184** |
 
-İyi oyuncuda ortalama assist **0.09** — neredeyse hiç karışmıyor. Zayıf oyuncuya daha çok,
-iyi oyuncuya daha az dokunuyor. Doğru şekil bu.
+Casual tur **3.2 kat** uzadı. Medyanın ortalamaya yaklaşması (0.40'ta 112 / 110) en az uzunluk
+kadar önemli: dağılım daraldı, yani **ani erken ölümler** kalktı.
+
+Çok satırlı temizlemenin **oranı** benzer kaldı (%7-11), **adedi** ise tur başına ~1.2'den
+~5'e çıktı. Daha sık temizlendiği için iki satırın aynı anda olgunlaşmasına daha az fırsat kalıyor;
+oyuncunun gördüğü şey yine de kat kat fazla combo.
+
+### Ölçümün ortaya çıkardığı iki şey — tahminle değiştirme
+1. **Turlar tahta dolduğu için bitmiyor.** Bitişte tahta ortalama **%52-61 dolu**, ve tur boyunca
+   %60'ın üstünde geçen süre sadece **%1-7**. Yani ölüm "yer kalmadı"dan değil, **elindeki parça
+   deliklere uymuyor**dan geliyor. "Boş yerim oldukça az" şikâyetinin gerçek karşılığı bu —
+   ve çaresi `MaxSmallBias` ile oynanamaz-tepsi cezası, doluluk tavanı değil.
+2. **Tahtayı tamamen temizlemek ikramiyeyle satın alınmıyor, adayla satın alınıyor.** Tahta
+   neredeyse her turda bir noktada **~3.9 hücreye** kadar iniyor ama kalanlar 2.4 satır × 2.3
+   sütuna dağılmış oluyor. İkramiyeyi 900·assist'e kadar çıkarmak hiçbir şey değiştirmedi — çünkü
+   sorun dağıtıcının *istemesi* değildi, 16 adayın arasında işi bitirecek tepsinin **bulunmamasıydı**.
+   Aday havuzu yardım altında genişleyince tahta boşalmaya başladı: 0 → iyi oyuncuda turların
+   **%7'si**. Ders: bir şey sıralamayla düzelmiyorsa, önce o şeyin aday havuzunda var olup
+   olmadığına bak.
 
 ### Performans
 **0.17 ms/dağıtım.** Bu ucuzluk şuna bağlı, bozma:
@@ -199,9 +237,12 @@ bir daha çıkmaz. Bölüm kazanınca yıldızlar bir temanın eşiğini geçtiy
 
 | `PowerRules` | Değer | Anlamı |
 |---|---|---|
-| `StartCharges` | 1 | Klasik/günlük başlangıç. Casual oyuncunun gerçekten kullandığı kurtarış |
-| `LinesPerCharge` / `ChargeStep` | 30 / 20 | İlk şarj 30 satır, her sonraki 20 satır daha pahalı |
+| `StartCharges` | 2 | Klasik/günlük başlangıç. 1 iken zorlanan oyuncu bütün turu o tek şarjla geçiriyordu: kurtarış bir kez vardı, sonra bir daha yoktu |
+| `LinesPerCharge` / `ChargeStep` | 12 / 26 | İlk şarj ucuz, sonrakiler dik. **30 / 20 iken ilk şarj, kurtarmayı amaçladığı oyuncunun menzilinin dışındaydı**: zorlanan bir tur toplam ~20 satır temizliyor, yani tek bir şarj bile kazanamıyordu |
 | `MaxCharges` | 3 | |
+
+Ölçülen: zorlanan oyuncu (0.40) tur başına 1.2 güçten **2.5 güce** çıktı. Dik `ChargeStep` sayesinde
+iyi oyuncu 3.8'de kaldı — kurtarış olmayı sürdürüyor, yaşam biçimi olmadı.
 
 Ölçülen (`Tools/CoreHarness balance 40`, palet 7, her tur doğal bitti — capped 0):
 
@@ -279,6 +320,25 @@ Unity'ye dokunmadığı için güvenli.
   Auto. Editor açılışında ve her Android build'inden önce uygulanıyor. Development Build açıksa
   uyarı veriyor — FPS'i development build'de ölçme.
 
+- **Çöp, kare süresi kadar önemli.** Kare süresi rahat olsa bile hamle başına ayrılan bellek GC
+  duraklamasına, o da tam sürükleme sırasında takılmaya dönüşür. Ölçülen ve düzeltilenler:
+  - `BoardModel.ResolveLines` her çözümlenen yerleştirmede bir `ClearResult` (7 liste) **ve bir
+    `HashSet<CellOffset>`** ayırıyordu. Artık yeniden kullanılan bir `bool[,]` maske var, ve
+    `Place` isteğe bağlı bir `ClearResult` alıyor. Oyunun kendi hamlesi hâlâ taze bir sonuç alıyor
+    (animasyonlar onu kareden sonra da tutuyor); dağıtıcı aynı örneği geri veriyor.
+  - Dağıtıcı aday başına `PieceShape[]`, dağıtım başına `List<Candidate>` ayırıyordu. İkisi de
+    havuzlandı.
+  - Sonuç: **dağıtım başına 148 KB → 0 KB.** Çekirdek tarafı (model + dağıtıcı) artık hamle başına
+    **sıfır** tahsisat yapıyor; görünümle birlikte toplam 4.3 KB/hamle.
+- **`AudioKit` sentezi ana iş parçacığını bloklamamalı.** Tüm seti `Awake` içinde üretmek masaüstünde
+  **197 ms** sürüyordu — telefonda birkaç katı, ve her milisaniyesi açılışta donmuş bir kare.
+  Şimdi yalnız menünün hemen üretebileceği dört ses `Awake`'te kuruluyor (**2 ms**), kalan 26 klip
+  `ThreadPool`'da hesaplanıp karede altışar tane klibe dönüştürülüyor. `Play` hazır olmayan klibi
+  sessizce atlıyor. Örnekler birebir aynı kaldı (30 klibin hepsi bayt bayt doğrulandı).
+
+Ölçülen (editör, oyun içi): ana iş parçacığı **0.97 ms/kare**, GPU 0.27 ms, 36 draw call.
+Bütçe 16.7 ms — bolca yer var.
+
 Hâlâ 60 tutmazsa sıradaki aday: backdrop'un 5 tam ekran katmanını (Deep/Glow/Grid/Vignette/Grain)
 tek bir RenderTexture'a bir kez çizmek. Görünüm birebir kalmalı — Linear renk uzayında sRGB RT şart.
 
@@ -305,6 +365,55 @@ göze sokmuyor. Yoğunluk ayarı: `BoardView.AddPreviewBar` içindeki iki alfa d
 
 ---
 
+## Ses — `AudioKit`
+
+Dosya yok, her şey açılışta sentezleniyor (`Tone` + `Chime`, sinüs + ikinci harmonik, yumuşak
+zarf, tek kutuplu alçak geçiren). Set sade ve bu **kasıtlı** — aşağıdaki nota bak.
+
+### Temizleme tek çağrı
+`PlayClear(lines, comboStreak, monoLines, perfectClear)`. Öncesinde iyi bir hamle
+`PlayClear + PlayCombo + PlayPrism + PlayFanfare`'ı **aynı karede** tetikliyor, tepeler
+toplanıyor ve sertleşiyordu. Artık parçalar sırayla geliyor: temizleme, +70 ms combo cevabı,
++130 ms tek renk satır, +220 ms tahta boşaldı.
+
+İki eksen, aynı tını:
+- **Tek hamledeki satır sayısı** → çanın merdivende ne kadar yukarı çıktığı (`_clear`, 1-4 nota sayısı artar)
+- **Combo serisi** → bir tık daha yukarıdan gelen cevap (`ComboLadder`, 9 basamak)
+
+1 satırlık temizleme **birebir eskisi gibi** — turun %95'i o ve dokunulmadı. Çok satır aynı çanı
+aynı skalada daha yukarı taşır: yeni bir tını değil, aynı ses daha fazlasını söylüyor. Farklı bir
+tını "daha iyi bir hamle" değil "farklı bir olay" diye okunur.
+
+Eski `_combo` 5 basamakta durup kendini tekrar ediyordu; oyuncu tam iyi giderken merdiven
+düzleşiyordu. `ComboLadder` 9 basamak.
+
+### Ses estetiği notu — buradan ders çıkar
+Bir kez ses seti baştan yazıldı: katmanlı sentez, inharmonik çanlar, pişirilmiş Schroeder reverb,
+stereo genişlik, sub ağırlığı, parıltı tanecikleri, ducking, vuruş eşitlemesi. Ölçümler kusursuzdu
+(kademeler arası 0.08 dB, merdiven 7 sent içinde doğru). **Ve kullanıcı hepsini reddetti.**
+
+Söylediği şey teşhisin kendisiydi:
+
+> "sanki mobil bir oyun oynamıyorum da başka bir şeyin sesi gibi"
+
+Uzun reverb kuyruğu + inharmonik çan + sub ağırlığı = Monument Valley / Alto estetiği. Block Blast
+türü **kuru, kısa, parlak** ister. Ölçüm *yapıyı* doğrular, *tınıyı* doğrulamaz — ve bu projede
+tını yargısı kullanıcınındır.
+
+Buradan üç kural:
+1. **Ses tınısına dokunmadan önce sor.** Yapı (ne zaman, ne kadar, hangi sırayla) serbest; tını değil.
+2. **Eskiyi koru.** 1 satırlık temizleme, bırakma ve seçme sesleri turun neredeyse tamamı —
+   onlar beğenildi, elleme.
+3. **Kulağın yoksa dinlet.** Klipleri WAV'a çıkarıp oyundaki gerçek zamanlamayla kurgula
+   (bırakma + temizleme + combo üst üste), kullanıcı tek tıkla dinlesin. Tek vuruş güzel gelip
+   seri hâlinde yorucu olabilir; hep **diziyi** dinlet.
+
+### Ayarlar tuzağı
+Ses gelmiyorsa önce `GameSettings`'e bak: `Muted` ayrı bir bayrak ve ses seviyesinden bağımsız.
+Bir kez mute açık **ve** efekt %5 / müzik %1'e çekilmişken "ses bozuk" sanıldı.
+`AudioManager.asset` → `m_DSPBufferSize: 512` ("Good latency"); 1024'te dokunma-ses arası gecikme
+fark ediliyordu, 256 zayıf cihazda underrun riski.
+
 ## Doğrulama yöntemi
 
 Ekran görüntüsüne güvenme — **durumu koda sor**. `mcp__unity-editor-mcp__eval` ile private
@@ -315,9 +424,14 @@ Denge değişikliklerinden sonra simülasyonla ölç (casual/iyi oyuncu, rastgel
 **Hamle sınırı koymayı unutma** — sınırsız döngü Unity'yi kilitler.
 
 ### Unity'siz doğrulama (`Tools/`)
-- `Tools/CoreHarness` — Core'u Unity olmadan derleyip kural testlerini, dengeyi ve bölüm eğrisini koşar.
-  Unity'nin kendi SDK'sı yeter: `<Unity>/Editor/Data/DotNetSdk/dotnet.exe build Tools/CoreHarness -c Release`,
-  sonra `...Harness.dll tests` / `balance 40` / `levels 1 60`. Denge ya da kural değişince **önce bunu koş**.
+- `Tools/CoreHarness` — Core'u Unity olmadan derleyip kural testlerini, dengeyi, bölüm eğrisini ve
+  dağıtıcı maliyetini koşar. Unity'nin kendi SDK'sı yeter:
+  `<Unity>/Editor/Data/DotNetSdk/dotnet.exe build Tools/CoreHarness -c Release`, sonra
+  `...Harness.dll tests` / `balance 40` / `levels 1 60` / **`perf`**.
+  Denge ya da kural değişince **önce bunu koş**.
+  `perf` dağıtım başına **süreyi ve ayrılan belleği** doluluk kademelerine göre yazar — dağıtıcı
+  ana iş parçacığında, oyunun ortasında çalışıyor, yani ikisi de kare süresidir. Aday sayısını ya da
+  sıralama terimlerini büyüttükten sonra bunu koş.
 - `Tools/compile-check.ps1` — oyun (normal + `PRIZMA_AUTOTEST`) ve editor kodunu Unity'nin derleyici
   argümanlarıyla derler. Editor kapalıyken/odakta değilken derleme hatası yakalar.
 - `Tools/autotest.ps1` — projeyi geçici klasöre kopyalar, batchmode Unity ile `PRIZMA_AUTOTEST` tanımlı
@@ -333,7 +447,8 @@ Denge değişikliklerinden sonra simülasyonla ölç (casual/iyi oyuncu, rastgel
 
 **Bitti:** çekirdek oynanış · akıllı dağıtıcı · ana menü · duraklatma menüsü (yeniden başlat dahil) ·
 ayarlar (müzik/efekt + sessize alma + titreşim + renk körü modu) · yerel ilk 10 skor ·
-prosedürel görsel dil · sentezlenmiş ses ve müzik · ön-temizleme önizlemesi · combo göstergesi ·
+prosedürel görsel dil · sentezlenmiş ses ve müzik (+ çok satır / combo ödül sesi) ·
+ön-temizleme önizlemesi · combo göstergesi ·
 +N puan balonu · **Prizma güçleri** (döndür/yenile/bomba, sıkışma durumu) · tek renk satır ve
 tahtayı sıfırlama bonusları · **Macera modu** (sonsuz, kristal/buz, yıldız, harita) ·
 **Günlük bulmaca** + seri · **kaldığın yerden devam** (her mod) · istatistikler · temalar ·
@@ -341,8 +456,9 @@ yazısız el öğreticisi · kısa native haptik · uygulama ikonu + açılış 
 
 **Sırada:** Android'de **gerçek cihazda denemek**. Masaüstünde ölçülemeyecek şeyler:
 önizlemenin parmak altında okunurluğu, yardımın gerçekten fark edilmezliği, seslerin telefon
-hoparlöründe tınısı, sürükleme mesafesi (`GameScreen._liftPixels`), güç çubuğunun başparmak
-erişimi, bomba nişanının parmak altında görünürlüğü, haptik şiddeti (`AppController.Tick/Vibrate`).
+hoparlöründe tınısı, dokunma-ses gecikmesi (DSP tamponu 512), sürükleme mesafesi
+(`GameScreen._liftPixels`), güç çubuğunun başparmak erişimi, bomba nişanının parmak altında
+görünürlüğü, haptik şiddeti (`AppController.Tick/VibrateClear`).
 
 Sonrası: çevrimiçi lig (günlük tohum hazır, motor deterministik), başarımlar, sürüm numarası ve
 mağaza hazırlığı (imzalama anahtarı, gizlilik metni).
