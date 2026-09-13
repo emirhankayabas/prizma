@@ -15,7 +15,7 @@ namespace BlockPuzzle.Game
         /// Largest scale a piece sits at in the tray; long pieces shrink further to fit their
         /// slot. Pieces grow back to board size when picked up.
         /// </summary>
-        public const float MaxScale = 0.6f;
+        public const float MaxScale = 0.66f;
 
         const float SlotInset = 26f;
 

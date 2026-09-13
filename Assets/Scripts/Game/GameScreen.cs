@@ -20,45 +20,115 @@ namespace BlockPuzzle.Game
     {
         const float BoardPadding = 20f;
         const float BoardGap = 10f;
-        const float HudHeight = 440f;
-        const float TrayHeight = 280f;
-        const float TrayBottomOffset = 60f;
-        const float PowerBarHeight = 110f;
-        const float PowerBarGap = 20f;
-
-        /// <summary>Everything stacked under the board: the tray and the power bar over it.</summary>
-        const float BottomStack = TrayBottomOffset + TrayHeight + PowerBarGap + PowerBarHeight;
 
         /// <summary>
-        /// How much of the height a tall phone adds over the 1920 reference goes into lifting the
-        /// bottom stack, rather than being split evenly above and below the board.
+        /// The play page's vertical layout, solved once from the page height.
         ///
-        /// An even split is what the first version did, and on a 20:9 phone it read badly: the
-        /// surplus arrived as 227 units above the board and 227 below, but the top already carries
-        /// the HUD's own reserved band, so the gap over the board looked like a hole while the
-        /// tray stayed pinned near the bottom edge. Sending most of it downwards pulls the board
-        /// up towards the score and lifts the tray into reach at the same time.
+        /// It used to be fixed numbers for a 1920-unit page with the surplus of a tall phone split
+        /// around them. That left two problems: a 20:9 phone showed a quarter of the screen empty
+        /// under a tray of tiny pieces, and a 16:9 phone — whose page is shorter than 1920 once the
+        /// gesture bar is out — had the stack clamped to 1920 and pushed into the gesture bar.
+        ///
+        /// Now every band has a size it wants and a size it can live with. Room left over goes
+        /// into the tray and the gaps; room missing comes out of the gaps first, then the tray and
+        /// the HUD, and the board — the one thing the player is here for — gives way last.
         /// </summary>
-        const float SurplusToBottom = 0.62f;
+        public readonly struct PlayLayout
+        {
+            public readonly float Hud;
+            public readonly float GapTop;
+            public readonly float Board;
+            public readonly float GapMid;
+            public readonly float Power;
+            public readonly float GapLow;
+            public readonly float Tray;
+            public readonly float GapBottom;
+            public readonly float PageHeight;
 
-        static float _pageHeight = AppController.ReferenceHeight;
+            const float HudWant = 500f, HudMin = 400f;
+            const float GapTopWant = 24f, GapTopMin = 8f;
+            const float GapMidWant = 36f, GapMidMin = 16f;
+            const float GapLowWant = 12f, GapLowMin = 4f;
+            const float TrayWant = 360f, TrayMin = 300f, TrayMax = 440f;
+            const float BoardMin = 760f;
+            const float PowerHeight = 150f;
+
+            PlayLayout(float page, float hud, float gapTop, float board, float gapMid, float gapLow, float tray, float gapBottom)
+            {
+                PageHeight = page;
+                Hud = hud;
+                GapTop = gapTop;
+                Board = board;
+                GapMid = gapMid;
+                Power = PowerHeight;
+                GapLow = gapLow;
+                Tray = tray;
+                GapBottom = gapBottom;
+            }
+
+            public static PlayLayout Solve(float page)
+            {
+                float hud = HudWant, gapTop = GapTopWant, gapMid = GapMidWant, gapLow = GapLowWant;
+                float tray = TrayWant, gapBottom = 0f;
+                float board = 1080f - Design.BoardGutter * 2f;
+
+                float slack = page - (hud + gapTop + board + gapMid + PowerHeight + gapLow + tray);
+
+                if (slack >= 0f)
+                {
+                    // The tray takes a share first: a taller rack is a bigger target and sits the
+                    // pieces lower, into the thumb's reach. Then the gaps, evenly.
+                    float toTray = Mathf.Min(slack * 0.4f, TrayMax - tray);
+                    tray += toTray;
+                    slack -= toTray;
+
+                    gapTop += slack * 0.34f;
+                    gapMid += slack * 0.33f;
+                    gapBottom += slack * 0.33f;
+                }
+                else
+                {
+                    float missing = -slack;
+                    missing = Take(ref gapTop, GapTopMin, missing);
+                    missing = Take(ref gapMid, GapMidMin, missing);
+                    missing = Take(ref gapLow, GapLowMin, missing);
+                    missing = Take(ref tray, TrayMin, missing);
+                    missing = Take(ref hud, HudMin, missing);
+                    Take(ref board, BoardMin, missing);
+                }
+
+                return new PlayLayout(page, hud, gapTop, board, gapMid, gapLow, tray, gapBottom);
+            }
+
+            static float Take(ref float value, float min, float amount)
+            {
+                float taken = Mathf.Min(amount, Mathf.Max(0f, value - min));
+                value -= taken;
+                return amount - taken;
+            }
+
+            /// <summary>Board centre, measured from the page centre.</summary>
+            public float BoardCenterY => PageHeight * 0.5f - Hud - GapTop - Board * 0.5f;
+
+            /// <summary>Tray's bottom edge above the page's bottom edge.</summary>
+            public float TrayBottom => GapBottom;
+
+            /// <summary>Power bar's bottom edge above the page's bottom edge.</summary>
+            public float PowerBottom => GapBottom + Tray + GapLow;
+        }
+
+        static PlayLayout _layout = PlayLayout.Solve(AppController.ReferenceHeight);
 
         /// <summary>
         /// Told to the page by <see cref="AppController"/> before anything is built, because the
         /// backdrop's glow is positioned from <see cref="BoardCenterY"/> too.
         /// </summary>
-        public static void SetPageHeight(float height) =>
-            _pageHeight = Mathf.Max(AppController.ReferenceHeight, height);
+        public static void SetPageHeight(float height) => _layout = PlayLayout.Solve(height);
 
-        /// <summary>How far the tray and power bar rise above their 16:9 position.</summary>
-        public static float BottomLift =>
-            (_pageHeight - AppController.ReferenceHeight) * SurplusToBottom;
+        public static PlayLayout Layout => _layout;
 
-        /// <summary>
-        /// The board is centred in the band the HUD and the bottom stack leave behind, not on the
-        /// page. Written as a difference so it follows those when they move.
-        /// </summary>
-        public static float BoardCenterY => (BottomStack + BottomLift - HudHeight) * 0.5f;
+        /// <summary>Board centre relative to the page centre. The popups and the backdrop glow follow it.</summary>
+        public static float BoardCenterY => _layout.BoardCenterY;
 
         GameSession _session;
 
@@ -105,19 +175,20 @@ namespace BlockPuzzle.Game
 
         protected override void Build()
         {
-            float boardSize = 1080f - Design.Gutter * 2f;
+            var layout = _layout;
+            float rowWidth = 1080f - Design.BoardGutter * 2f;
 
-            BuildBoard(boardSize);
+            BuildBoard(layout.Board);
 
             _hud = new GameHud();
-            _hud.Build(Root, HudHeight, () => { Audio.PlayClick(); App.OpenPause(); });
+            _hud.Build(Root, layout.Hud, () => { Audio.PlayClick(); App.OpenPause(); });
 
             _powers = new PowerBar();
-            _powers.Build(Root, boardSize, PowerBarHeight, TrayBottomOffset + BottomLift + TrayHeight + PowerBarGap);
+            _powers.Build(Root, rowWidth, layout.Power, layout.PowerBottom);
             _powers.PowerClicked += OnPowerClicked;
             _powers.EndClicked += () => { Audio.PlayClick(); _session?.Concede(); };
 
-            BuildTray(boardSize);
+            BuildTray(rowWidth, layout);
 
             _popupLayer = UiBuilder.Child(Root, "Popups");
             _flyLayer = UiBuilder.Child(Root, "Fly");
@@ -130,7 +201,7 @@ namespace BlockPuzzle.Game
 
             _hand = UiBuilder.Image(Root, "TutorialHand", Icons.Hand, Color.white);
             _hand.type = Image.Type.Simple;
-            _hand.rectTransform.sizeDelta = new Vector2(150f, 150f);
+            _hand.rectTransform.sizeDelta = new Vector2(180f, 180f);
             // The fingertip, not the middle of the glyph, is what lands on the target.
             _hand.rectTransform.pivot = new Vector2(0.45f, 0.94f);
             _hand.gameObject.AddComponent<Canvas>();
@@ -156,7 +227,7 @@ namespace BlockPuzzle.Game
             _liftPixels = _board.CellSize * 1.55f;
         }
 
-        void BuildTray(float boardSize)
+        void BuildTray(float width, PlayLayout layout)
         {
             var trayGo = new GameObject("Tray", typeof(RectTransform));
             trayGo.transform.SetParent(Root, false);
@@ -164,10 +235,10 @@ namespace BlockPuzzle.Game
             var trayRect = (RectTransform)trayGo.transform;
             trayRect.anchorMin = trayRect.anchorMax = new Vector2(0.5f, 0f);
             trayRect.pivot = new Vector2(0.5f, 0f);
-            trayRect.anchoredPosition = new Vector2(0f, TrayBottomOffset + BottomLift);
+            trayRect.anchoredPosition = new Vector2(0f, layout.TrayBottom);
 
             _tray = trayGo.AddComponent<TrayView>();
-            _tray.Build(boardSize, TrayHeight, _board.CellSize, _board.Gap, GameSession.TraySlots);
+            _tray.Build(width, layout.Tray, _board.CellSize, _board.Gap, GameSession.TraySlots);
         }
 
         // ------------------------------------------------------------------ run lifecycle
@@ -463,7 +534,7 @@ namespace BlockPuzzle.Game
                     return _popupPool[i];
 
             var label = UiBuilder.Label(_popupLayer, "Popup", "", Design.Title, Design.TextPrimary, Design.FontDisplay);
-            label.rectTransform.sizeDelta = new Vector2(600f, 140f);
+            label.rectTransform.sizeDelta = new Vector2(720f, 180f);
             UiBuilder.TextShadow(label, 0.5f, -0.3f, 0.4f);
             label.gameObject.SetActive(false);
             _popupPool.Add(label);

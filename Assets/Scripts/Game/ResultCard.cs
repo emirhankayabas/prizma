@@ -13,7 +13,15 @@ namespace BlockPuzzle.Game
     /// </summary>
     public sealed class ResultCard
     {
-        static readonly Vector2 CardSize = new Vector2(880f, 900f);
+        static readonly Vector2 CardSize = new Vector2(Design.ContentWidth, 1070f);
+
+        // Distances from the card's top edge to the centre of each line.
+        const float TitleLine = 104f;
+        const float StarLine = 250f;
+        const float NoteIconSize = 56f;
+        const float NoteIconGap = 16f;
+
+        float Top => CardSize.y * 0.5f;
 
         RectTransform _panel;
         Image _scrim;
@@ -49,40 +57,45 @@ namespace BlockPuzzle.Game
             UiBuilder.Hairline(_card, "Hairline", CardSize, Design.RadiusLg);
 
             _title = UiBuilder.Label(_card, "Title", "", Design.Title, Design.TextSecondary, Design.FontMedium);
-            _title.rectTransform.anchoredPosition = new Vector2(0f, 340f);
+            _title.rectTransform.sizeDelta = new Vector2(CardSize.x - Design.CardPadding * 2f, 110f);
+            _title.rectTransform.anchoredPosition = new Vector2(0f, Top - TitleLine);
 
             _starRow = UiBuilder.Node(_card, "Stars");
-            _starRow.anchoredPosition = new Vector2(0f, 222f);
+            _starRow.anchoredPosition = new Vector2(0f, Top - StarLine);
             for (int i = 0; i < _stars.Length; i++)
             {
                 var star = UiBuilder.Image(_starRow, "Star" + i, Icons.Star, Design.Gold);
                 star.type = Image.Type.Simple;
                 // The middle star sits higher and larger, the way a podium does.
-                float size = i == 1 ? 132f : 104f;
+                float size = i == 1 ? 156f : 124f;
                 star.rectTransform.sizeDelta = new Vector2(size, size);
-                star.rectTransform.anchoredPosition = new Vector2((i - 1) * 150f, i == 1 ? 18f : 0f);
+                star.rectTransform.anchoredPosition = new Vector2((i - 1) * 176f, i == 1 ? 22f : 0f);
                 _stars[i] = star;
             }
 
             _score = UiBuilder.Label(_card, "Score", "0", Design.Readout, Design.TextPrimary,
                 Design.FontDisplay, tracking: Design.TrackingDisplay);
+            _score.rectTransform.sizeDelta = new Vector2(CardSize.x, 210f);
 
             _noteIcon = UiBuilder.Image(_card, "NoteIcon", Icons.Flame, Design.Gold);
             _noteIcon.type = Image.Type.Simple;
-            _noteIcon.rectTransform.sizeDelta = new Vector2(44f, 44f);
+            _noteIcon.rectTransform.sizeDelta = new Vector2(NoteIconSize, NoteIconSize);
 
             _note = UiBuilder.Label(_card, "Note", "", Design.Label, Design.Mint,
                 Design.FontMedium, tracking: Design.TrackingLabel);
+            _note.rectTransform.sizeDelta = new Vector2(CardSize.x - Design.CardPadding * 2f, 70f);
 
-            _primary = UiBuilder.Button(_card, "Primary", new Vector2(600f, 156f), UiButton.Style.Primary,
+            float inner = CardSize.x - Design.CardPadding * 2f;
+
+            _primary = UiBuilder.Button(_card, "Primary", new Vector2(inner, Design.ButtonLg), UiButton.Style.Primary,
                 "TEKRAR OYNA", Design.Headline);
-            _primary.Rect.anchoredPosition = new Vector2(0f, -170f);
             _primary.Clicked += () => PrimaryClicked?.Invoke();
 
-            _secondary = UiBuilder.Button(_card, "Secondary", new Vector2(600f, 136f), UiButton.Style.Secondary,
+            _secondary = UiBuilder.Button(_card, "Secondary", new Vector2(inner, Design.ButtonMd), UiButton.Style.Secondary,
                 "ANA MENÜ", Design.Body);
-            _secondary.Rect.anchoredPosition = new Vector2(0f, -340f);
             _secondary.Clicked += () => SecondaryClicked?.Invoke();
+
+            ModalCard.StackFromBottom(_card, Design.Space3, _primary.Rect, _secondary.Rect);
 
             _panel.gameObject.SetActive(false);
         }
@@ -104,9 +117,9 @@ namespace BlockPuzzle.Game
             bool withStars = stars >= 0;
             _starRow.gameObject.SetActive(withStars);
 
-            // Without stars the number moves up into the space they would have used.
-            float scoreY = withStars ? 76f : 170f;
-            float noteY = withStars ? -30f : 50f;
+            // Without stars the number moves up into part of the space they would have used.
+            float scoreY = Top - (withStars ? 430f : 360f);
+            float noteY = Top - (withStars ? 566f : 496f);
             _score.rectTransform.anchoredPosition = new Vector2(0f, scoreY);
 
             _noteIcon.gameObject.SetActive(noteIcon != null && !string.IsNullOrEmpty(note));
@@ -116,9 +129,9 @@ namespace BlockPuzzle.Game
                 _noteIcon.color = noteColor;
 
                 float width = _note.GetPreferredValues(note).x;
-                float group = 44f + 14f + width;
-                _noteIcon.rectTransform.anchoredPosition = new Vector2(-group * 0.5f + 22f, noteY);
-                _note.rectTransform.anchoredPosition = new Vector2(-group * 0.5f + 58f + width * 0.5f, noteY);
+                float group = NoteIconSize + NoteIconGap + width;
+                _noteIcon.rectTransform.anchoredPosition = new Vector2(-group * 0.5f + NoteIconSize * 0.5f, noteY);
+                _note.rectTransform.anchoredPosition = new Vector2(-group * 0.5f + NoteIconSize + NoteIconGap + width * 0.5f, noteY);
             }
             else
             {

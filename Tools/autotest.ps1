@@ -5,8 +5,16 @@
 #
 #   powershell -File Tools/autotest.ps1            # sync + build + run
 #   powershell -File Tools/autotest.ps1 -SkipBuild # run the last build again
+#   powershell -File Tools/autotest.ps1 -SkipBuild -Width 540 -Height 960 -Tag 16x9
+#
+# -TopInset simulates a phone's camera cutout, in canvas units: the Windows player has no safe
+# area of its own, so without it every shot shows more room at the top than a phone has.
 param(
     [switch]$SkipBuild,
+    [int]$Width = 432,
+    [int]$Height = 936,
+    [int]$TopInset = 90,
+    [string]$Tag = "",
     [string]$Unity = "C:\Program Files\Unity\Hub\Editor\6000.6.0f1"
 )
 
@@ -14,7 +22,7 @@ $project = Split-Path $PSScriptRoot -Parent
 $work = Join-Path $env:TEMP "prizma_autotest"
 $copy = "$work\project"
 $player = "$work\player\PRIZMA.exe"
-$shots = "$work\shots"
+$shots = if ($Tag) { "$work\shots_$Tag" } else { "$work\shots" }
 New-Item -ItemType Directory -Force $work | Out-Null
 
 if (-not $SkipBuild) {
@@ -42,7 +50,8 @@ if (Test-Path $shots) { Remove-Item $shots -Recurse -Force }
 New-Item -ItemType Directory $shots | Out-Null
 
 $run = Start-Process -FilePath $player -ArgumentList @(
-    "-screen-fullscreen", "0", "-screen-width", "432", "-screen-height", "936",
+    "-screen-fullscreen", "0", "-screen-width", "$Width", "-screen-height", "$Height",
+    "-autotestTopInset", "$TopInset",
     "-autotestOut", "`"$shots`"", "-logFile", "`"$work\player.log`"") -PassThru
 if (-not $run.WaitForExit(300000)) { $run.Kill(); "player timed out" }
 "player exit: $($run.ExitCode)"

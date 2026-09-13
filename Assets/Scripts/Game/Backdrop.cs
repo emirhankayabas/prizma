@@ -67,7 +67,10 @@ namespace BlockPuzzle.Game
 
             _glowRect = _glow.rectTransform;
             _glowRect.sizeDelta = new Vector2(GlowSize, GlowSize);
-            _glowRect.anchoredPosition = new Vector2(0f, GameScreen.BoardCenterY);
+            // The backdrop is full-bleed while the page is inset, and the insets are not symmetric
+            // (a cutout on top, the gesture bar below), so the page centre is not the screen centre.
+            var insets = AppController.SafeInsets;
+            _glowRect.anchoredPosition = new Vector2(0f, GameScreen.BoardCenterY + (insets.y - insets.w) * 0.5f);
         }
 
         void Update()

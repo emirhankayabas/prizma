@@ -16,9 +16,12 @@ namespace BlockPuzzle.Game
     public sealed class PowerBar
     {
         const float MeterWidth = 300f;
-        const float TrackWidth = 236f;
-        const float ButtonWidth = 188f;
-        const float ButtonGap = 42f;
+        const float TrackWidth = 250f;
+        const float TrackHeight = 16f;
+        const float CrystalSize = 72f;
+        const float ButtonGap = 24f;
+
+        float _buttonWidth;
 
         RectTransform _root;
         RectTransform _meter;
@@ -53,37 +56,39 @@ namespace BlockPuzzle.Game
             {
                 var crystal = UiBuilder.Image(_meter, $"Charge{i}", Art.Crystal, Design.Prism);
                 crystal.type = Image.Type.Simple;
-                crystal.rectTransform.sizeDelta = new Vector2(54f, 54f);
-                crystal.rectTransform.anchoredPosition = new Vector2((i - 1) * 70f, 16f);
+                crystal.rectTransform.sizeDelta = new Vector2(CrystalSize, CrystalSize);
+                crystal.rectTransform.anchoredPosition = new Vector2((i - 1) * 86f, 20f);
                 _crystals[i] = crystal;
             }
 
-            var track = UiBuilder.Panel(_meter, "Track", new Vector2(TrackWidth, 14f), Design.SurfaceTrack, 7f);
-            track.rectTransform.anchoredPosition = new Vector2(0f, -32f);
+            var track = UiBuilder.Panel(_meter, "Track", new Vector2(TrackWidth, TrackHeight), Design.SurfaceTrack, TrackHeight * 0.5f);
+            track.rectTransform.anchoredPosition = new Vector2(0f, -44f);
 
-            _meterFill = UiBuilder.Image(track.rectTransform, "Fill", Art.Panel(7f), Design.Prism);
+            _meterFill = UiBuilder.Image(track.rectTransform, "Fill", Art.Panel(TrackHeight * 0.5f), Design.Prism);
             _meterFill.rectTransform.anchorMin = _meterFill.rectTransform.anchorMax = new Vector2(0f, 0.5f);
             _meterFill.rectTransform.pivot = new Vector2(0f, 0.5f);
-            _meterFill.rectTransform.sizeDelta = new Vector2(0f, 14f);
+            _meterFill.rectTransform.sizeDelta = new Vector2(0f, TrackHeight);
 
-            _end = UiBuilder.Button(_root, "End", new Vector2(MeterWidth - 20f, 96f), UiButton.Style.Secondary,
+            _end = UiBuilder.Button(_root, "End", new Vector2(MeterWidth - 16f, height - 12f), UiButton.Style.Secondary,
                 "BİTİR", Design.Body);
             _end.Rect.anchoredPosition = _meter.anchoredPosition;
             _end.Clicked += () => EndClicked?.Invoke();
             _end.gameObject.SetActive(false);
 
-            float x = left + MeterWidth + 20f + ButtonWidth * 0.5f;
+            // The three powers share whatever the prism leaves of the row.
+            _buttonWidth = (width - MeterWidth - ButtonGap * 3f) / 3f;
+            float x = left + MeterWidth + ButtonGap + _buttonWidth * 0.5f;
             _rotate = BuildPower(PowerKind.Rotate, Icons.Rotate, x, height);
-            _reroll = BuildPower(PowerKind.Reroll, Icons.Dice, x + ButtonWidth + ButtonGap, height);
-            _bomb = BuildPower(PowerKind.Bomb, Icons.Bomb, x + (ButtonWidth + ButtonGap) * 2f, height);
+            _reroll = BuildPower(PowerKind.Reroll, Icons.Dice, x + _buttonWidth + ButtonGap, height);
+            _bomb = BuildPower(PowerKind.Bomb, Icons.Bomb, x + (_buttonWidth + ButtonGap) * 2f, height);
         }
 
         UiButton BuildPower(PowerKind kind, Sprite icon, float x, float height)
         {
-            var button = UiBuilder.Button(_root, kind.ToString(), new Vector2(ButtonWidth, height - 6f),
+            var button = UiBuilder.Button(_root, kind.ToString(), new Vector2(_buttonWidth, height - 6f),
                 UiButton.Style.Icon, null, Design.Body, icon);
             button.Rect.anchoredPosition = new Vector2(x, 0f);
-            button.Icon.rectTransform.anchoredPosition = new Vector2(0f, 8f);
+            button.Icon.rectTransform.anchoredPosition = new Vector2(0f, 12f);
             button.Clicked += () => PowerClicked?.Invoke(kind);
 
             // The price in dots under the glyph, so cost is read the same way charges are.
@@ -92,8 +97,8 @@ namespace BlockPuzzle.Game
             {
                 var pip = UiBuilder.Image(button.Rect, "Cost" + i, Art.Disc, Design.Prism);
                 pip.type = Image.Type.Simple;
-                pip.rectTransform.sizeDelta = new Vector2(12f, 12f);
-                pip.rectTransform.anchoredPosition = new Vector2((i - (cost - 1) * 0.5f) * 20f, -32f);
+                pip.rectTransform.sizeDelta = new Vector2(16f, 16f);
+                pip.rectTransform.anchoredPosition = new Vector2((i - (cost - 1) * 0.5f) * 26f, -46f);
             }
 
             return button;
@@ -112,7 +117,7 @@ namespace BlockPuzzle.Game
             float fill = session.Charges >= PowerRules.MaxCharges
                 ? 1f
                 : Mathf.Clamp01(session.ChargeProgress / (float)Mathf.Max(1, session.ChargeTarget));
-            _meterFill.rectTransform.sizeDelta = new Vector2(TrackWidth * fill, 14f);
+            _meterFill.rectTransform.sizeDelta = new Vector2(TrackWidth * fill, TrackHeight);
 
             bool stuck = session.State == SessionState.Stuck;
             _meter.gameObject.SetActive(!stuck);

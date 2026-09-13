@@ -12,18 +12,27 @@ namespace BlockPuzzle.Game
     {
         // ------------------------------------------------------------------ type
 
-        /// <summary>Type scale. Ratios are roughly 1.3, so sizes read as clearly distinct steps.</summary>
-        public const float Readout = 156f; // the live score, the biggest thing on screen
-        public const float Display = 118f; // app title
-        public const float Title = 64f;    // card headings
-        public const float Headline = 50f;
-        public const float Body = 40f;
-        public const float Label = 34f;
-        public const float Caption = 28f;
+        // How big a canvas unit really is. The scaler matches width on every phone, so 1080 units
+        // are the screen's width whatever its density — and about a third of Android phones are
+        // 360dp wide or narrower. Sizes are therefore chosen for 1 unit = 1/3 dp: 3 units per sp.
+        //
+        // The first scale was set by eye on a desktop and sat well under the platform minimums
+        // there: captions at 9sp, body at 13sp, the pause button at 35dp. On a phone it read as
+        // a game that did not trust the player to see it. Every step below is now at or above
+        // what Material asks for (12sp caption, 14-16sp body, 48dp touch target).
+
+        /// <summary>Type scale. Ratios are roughly 1.25, so sizes read as clearly distinct steps.</summary>
+        public const float Readout = 180f; // the live score, the biggest thing on screen — 60sp
+        public const float Display = 150f; // app title — 50sp
+        public const float Title = 80f;    // card headings — 27sp
+        public const float Headline = 62f; // 21sp
+        public const float Body = 50f;     // 17sp
+        public const float Label = 44f;    // 15sp
+        public const float Caption = 38f;  // 13sp — nothing the player reads goes smaller
 
         /// <summary>Display type is set tight; small labels are tracked out to stay legible.</summary>
         public const float TrackingDisplay = -3f;
-        public const float TrackingLabel = 8f;
+        public const float TrackingLabel = 6f;
 
         // ------------------------------------------------------------------ space
 
@@ -36,19 +45,46 @@ namespace BlockPuzzle.Game
         public const float Space7 = 112f;
 
         /// <summary>Side gutter for full-width content.</summary>
-        public const float Gutter = 56f;
+        public const float Gutter = 48f;
 
-        /// <summary>Minimum comfortable touch target.</summary>
-        public const float TouchTarget = 120f;
+        /// <summary>
+        /// Side gutter for the board alone. The board is the game; the genre gives it almost the
+        /// whole width, and every unit of gutter comes straight out of the cell size.
+        /// </summary>
+        public const float BoardGutter = 24f;
+
+        /// <summary>Width of anything that spans the page between the gutters: modal cards, the play button.</summary>
+        public const float ContentWidth = 1080f - Gutter * 2f;
+
+        /// <summary>Minimum touch target: 48dp on a 360dp-wide phone.</summary>
+        public const float TouchTarget = 144f;
+
+        /// <summary>The main action of a screen or card.</summary>
+        public const float ButtonLg = 176f;
+
+        /// <summary>Every other full-width button.</summary>
+        public const float ButtonMd = 156f;
+
+        /// <summary>Icons that sit beside text in a row.</summary>
+        public const float IconSm = 60f;
+
+        /// <summary>Icons that carry a card or a tile on their own.</summary>
+        public const float IconMd = 88f;
 
         /// <summary>Padding between a modal card's edge and the content inside it.</summary>
         public const float CardPadding = 56f;
 
+        /// <summary>From a modal card's top edge to the centre of its heading.</summary>
+        public const float CardHeading = 104f;
+
+        /// <summary>From a modal card's top edge to where its content starts, under the heading.</summary>
+        public const float CardHeader = 200f;
+
         // ------------------------------------------------------------------ shape
 
-        public const float RadiusSm = 20f;
-        public const float RadiusMd = 34f;
-        public const float RadiusLg = 48f;
+        public const float RadiusSm = 22f;
+        public const float RadiusMd = 38f;
+        public const float RadiusLg = 52f;
 
         // ------------------------------------------------------------------ colour
 

@@ -361,6 +361,11 @@ namespace BlockPuzzle.Game
             float left = safe.xMin / scale;
             float right = (Screen.width - safe.xMax) / scale;
             float top = (Screen.height - safe.yMax) / scale;
+#if PRIZMA_AUTOTEST
+            // The desktop player has no cutout; the test run asks for one so its shots show the
+            // room a phone really has.
+            top = Mathf.Max(top, AutoTest.TopInsetArg);
+#endif
             float bottom = Mathf.Max(safe.yMin / scale, GestureBarMargin);
 
             _safeInsets = new Vector4(left, bottom, right, top);

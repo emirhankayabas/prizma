@@ -15,6 +15,11 @@ namespace BlockPuzzle.Game
     /// </summary>
     public sealed class AutoTest : MonoBehaviour
     {
+        /// <summary>Simulated camera cutout, in canvas units. Read before the first layout.</summary>
+        public static float TopInsetArg =>
+            float.TryParse(Arg("-autotestTopInset"), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : 0f;
+
         string _out;
         AppController _app;
         GameScreen _game;

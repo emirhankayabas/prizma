@@ -13,8 +13,16 @@ namespace BlockPuzzle.Game
     /// </summary>
     public sealed class GameHud
     {
-        const float GoalIconSize = 92f;
-        const float GoalIconGap = 18f;
+        const float GoalIconSize = 108f;
+        const float GoalIconGap = 20f;
+
+        /// <summary>The height the HUD is laid out for; a short page squeezes it towards 400.</summary>
+        const float FullHeight = 500f;
+
+        /// <summary>Top row: best score on the left, the pause button on the right, a chip between.</summary>
+        const float RowTop = 16f;
+        const float RowCenter = RowTop + Design.TouchTarget * 0.5f;
+        const float ReadoutBox = 200f;
 
         static readonly string[] Months =
         {
@@ -38,6 +46,7 @@ namespace BlockPuzzle.Game
         TextMeshProUGUI _comboLabel;
 
         GameSession _session;
+        float _readoutTop;
 
         public RectTransform Root => _root;
         public Transform Readout => _readout.transform;
@@ -54,37 +63,41 @@ namespace BlockPuzzle.Game
             _root.pivot = new Vector2(0.5f, 1f);
             _root.sizeDelta = new Vector2(1080f, height);
 
+            // What a short page takes from the HUD comes out of the air between its three rows.
+            float squeeze = Mathf.Max(0f, FullHeight - height);
+            _readoutTop = -(RowTop + Design.TouchTarget + 4f) + squeeze * 0.4f;
+
             _leftIcon = UiBuilder.Image(_root, "LeftIcon", Icons.Gem, Design.Gold);
             _leftIcon.type = Image.Type.Simple;
             _leftIcon.rectTransform.anchorMin = _leftIcon.rectTransform.anchorMax = new Vector2(0f, 1f);
-            _leftIcon.rectTransform.pivot = new Vector2(0f, 1f);
-            _leftIcon.rectTransform.sizeDelta = new Vector2(44f, 44f);
-            _leftIcon.rectTransform.anchoredPosition = new Vector2(Design.Gutter, -Design.Space6);
+            _leftIcon.rectTransform.pivot = new Vector2(0f, 0.5f);
+            _leftIcon.rectTransform.sizeDelta = new Vector2(Design.IconSm, Design.IconSm);
+            _leftIcon.rectTransform.anchoredPosition = new Vector2(Design.Gutter, -RowCenter);
 
             _leftLabel = UiBuilder.Label(_root, "LeftLabel", "0", Design.Headline, Design.Gold,
                 Design.FontDisplay, TextAlignmentOptions.Left);
             _leftLabel.rectTransform.anchorMin = _leftLabel.rectTransform.anchorMax = new Vector2(0f, 1f);
-            _leftLabel.rectTransform.pivot = new Vector2(0f, 1f);
-            _leftLabel.rectTransform.sizeDelta = new Vector2(360f, 64f);
-            _leftLabel.rectTransform.anchoredPosition = new Vector2(Design.Gutter + 62f, -Design.Space6 + 8f);
+            _leftLabel.rectTransform.pivot = new Vector2(0f, 0.5f);
+            _leftLabel.rectTransform.sizeDelta = new Vector2(360f, 90f);
+            _leftLabel.rectTransform.anchoredPosition = new Vector2(Design.Gutter + Design.IconSm + Design.Space2, -RowCenter + 2f);
 
             // One control in the corner. It pauses; settings and quitting live inside that menu,
             // which is where a player looks for them mid-run.
-            var pause = UiBuilder.Button(_root, "Pause", new Vector2(104f, 104f), UiButton.Style.Icon,
+            var pause = UiBuilder.Button(_root, "Pause", new Vector2(Design.TouchTarget, Design.TouchTarget), UiButton.Style.Icon,
                 null, Design.Body, Icons.Pause);
             pause.Rect.anchorMin = pause.Rect.anchorMax = new Vector2(1f, 1f);
             pause.Rect.pivot = new Vector2(1f, 1f);
-            pause.Rect.anchoredPosition = new Vector2(-Design.Gutter, -Design.Space5);
+            pause.Rect.anchoredPosition = new Vector2(-Design.Gutter, -RowTop);
             pause.Clicked += () => onPause?.Invoke();
 
-            // A small chip above the readout: moves left in a level, the date in the daily.
+            // A chip in the top row: moves left in a level, the date in the daily.
             _chip = UiBuilder.Node(_root, "Chip");
             _chip.anchorMin = _chip.anchorMax = new Vector2(0.5f, 1f);
-            _chip.pivot = new Vector2(0.5f, 1f);
-            _chip.sizeDelta = new Vector2(300f, 64f);
-            _chip.anchoredPosition = new Vector2(0f, -Design.Space5 - 12f);
-            UiBuilder.Panel(_chip, "Fill", _chip.sizeDelta, Design.SurfaceInset, 32f);
-            UiBuilder.Hairline(_chip, "Edge", _chip.sizeDelta, 32f);
+            _chip.pivot = new Vector2(0.5f, 0.5f);
+            _chip.sizeDelta = new Vector2(340f, 100f);
+            _chip.anchoredPosition = new Vector2(0f, -RowCenter);
+            UiBuilder.Panel(_chip, "Fill", _chip.sizeDelta, Design.SurfaceInset, 50f);
+            UiBuilder.Hairline(_chip, "Edge", _chip.sizeDelta, 50f);
             _chipLabel = UiBuilder.Label(_chip, "Label", "", Design.Label, Design.TextPrimary,
                 Design.FontDisplay, tracking: 4f);
             _chipLabel.rectTransform.sizeDelta = _chip.sizeDelta;
@@ -94,8 +107,8 @@ namespace BlockPuzzle.Game
             _readout.rectTransform.anchorMin = _readout.rectTransform.anchorMax = new Vector2(0.5f, 1f);
             _readout.rectTransform.pivot = new Vector2(0.5f, 1f);
             // A tight box: the default line box would reserve enough room to collide with the chip.
-            _readout.rectTransform.sizeDelta = new Vector2(960f, 170f);
-            _readout.rectTransform.anchoredPosition = new Vector2(0f, -170f);
+            _readout.rectTransform.sizeDelta = new Vector2(1000f, ReadoutBox);
+            _readout.rectTransform.anchoredPosition = new Vector2(0f, _readoutTop);
             UiBuilder.TextShadow(_readout, 0.45f, -0.3f, 0.45f);
 
             _goalIcon = UiBuilder.Image(_root, "GoalIcon", Art.Crystal, Design.Crystal);
@@ -109,11 +122,13 @@ namespace BlockPuzzle.Game
             _comboChip = UiBuilder.Node(_root, "ComboChip");
             _comboChip.anchorMin = _comboChip.anchorMax = new Vector2(0.5f, 1f);
             _comboChip.pivot = new Vector2(0.5f, 1f);
-            _comboChip.sizeDelta = new Vector2(330f, 72f);
-            _comboChip.anchoredPosition = new Vector2(0f, -352f);
+            _comboChip.sizeDelta = new Vector2(400f, 100f);
+            // Under the score, or pinned to the HUD's bottom edge when a short page has pulled that up.
+            _comboChip.anchoredPosition = new Vector2(0f,
+                Mathf.Max(_readoutTop - ReadoutBox - 12f, -(height - _comboChip.sizeDelta.y - 8f)));
 
-            UiBuilder.Panel(_comboChip, "Fill", _comboChip.sizeDelta, Design.SurfaceInset, 36f);
-            _comboChipEdge = UiBuilder.Hairline(_comboChip, "Edge", _comboChip.sizeDelta, 36f, Design.Mint.WithAlpha(0.5f));
+            UiBuilder.Panel(_comboChip, "Fill", _comboChip.sizeDelta, Design.SurfaceInset, 50f);
+            _comboChipEdge = UiBuilder.Hairline(_comboChip, "Edge", _comboChip.sizeDelta, 50f, Design.Mint.WithAlpha(0.5f));
 
             _comboLabel = UiBuilder.Label(_comboChip, "Label", "", Design.Body, Design.Mint,
                 Design.FontDisplay, tracking: 4f);
@@ -139,7 +154,7 @@ namespace BlockPuzzle.Game
                     break;
 
                 case GameMode.Level:
-                    SetLeft(Icons.Flag, Design.TextPrimary, Design.FontDisplay, Design.Label);
+                    SetLeft(Icons.Flag, Design.TextPrimary, Design.FontDisplay, Design.Headline);
                     _goalIcon.gameObject.SetActive(true);
                     ConfigureGoalIcon(session.Level.Goal);
                     break;
@@ -207,7 +222,9 @@ namespace BlockPuzzle.Game
                 case GameMode.Level:
                 {
                     var level = _session.Level;
-                    _leftLabel.text = $"BÖLÜM {level.Number}";
+                    // The flag already says "level". The word beside it was the one thing that
+                    // did not fit next to the moves chip once the type grew.
+                    _leftLabel.text = level.Number.ToString();
 
                     int moves = _session.MovesLeft;
                     // Low on moves: the chip turns rose. A steady colour, not a pulse.
@@ -231,7 +248,7 @@ namespace BlockPuzzle.Game
 
             if (!_goalIcon.gameObject.activeSelf)
             {
-                _readout.rectTransform.anchoredPosition = new Vector2(0f, -170f);
+                _readout.rectTransform.anchoredPosition = new Vector2(0f, _readoutTop);
                 return;
             }
 
@@ -240,8 +257,8 @@ namespace BlockPuzzle.Game
             float group = GoalIconSize + GoalIconGap + width;
             float left = -group * 0.5f;
 
-            _goalIcon.rectTransform.anchoredPosition = new Vector2(left + GoalIconSize * 0.5f, -170f - 84f);
-            _readout.rectTransform.anchoredPosition = new Vector2(left + GoalIconSize + GoalIconGap + width * 0.5f, -170f);
+            _goalIcon.rectTransform.anchoredPosition = new Vector2(left + GoalIconSize * 0.5f, _readoutTop - ReadoutBox * 0.5f);
+            _readout.rectTransform.anchoredPosition = new Vector2(left + GoalIconSize + GoalIconGap + width * 0.5f, _readoutTop);
         }
 
         // ------------------------------------------------------------------ combo

@@ -348,12 +348,33 @@ tek bir RenderTexture'a bir kez çizmek. Görünüm birebir kalmalı — Linear 
 
 `Design.cs` **tek kaynak**. Çağrı yerinde ham sayı yazma; token ekle.
 
-- Tipografi ölçeği: Readout 156 / Display 118 / Title 64 / Headline 50 / Body 40 / Label 34 / Caption 28
-- Aralık: 8 / 16 / 24 / 40 / 56 / 80 / 112 · kenar boşluğu 56 · min dokunma hedefi 120
+- Tipografi ölçeği: Readout 180 / Display 150 / Title 80 / Headline 62 / Body 50 / Label 44 / Caption 38
+- Aralık: 8 / 16 / 24 / 40 / 56 / 80 / 112 · kenar boşluğu 48 · tahta kenarı 24 · min dokunma hedefi 144
+- Kontroller: `ButtonLg` 176 / `ButtonMd` 156 · ikon `IconSm` 60 / `IconMd` 88 · modal genişliği `ContentWidth` (984)
 - Şekil: **squircle** (süperelips) — düz yuvarlak dikdörtgen değil. `Raster.FillSquircle`
 - Derinlik: **bulanık ambient gölge**, sert alt dudak değil. Offset küçük, yayılım büyük —
   büyük offset gölgenin dolu çekirdeğini elemanın altından taşırır ve "dudak" gibi okunur
 - Renk: neredeyse siyah taban + mor/turkuaz/erik mesh gradyan havuzları + tek canlı vurgu
+
+### Ölçüler dp'den seçilir, gözle değil
+Scaler dikey telefonda genişliği eşler: **1080 birim = ekran genişliği**, yoğunluk ne olursa olsun.
+Android trafiğinin ~%31'i ≤360dp genişlikte → hedef hesap **1 birim = 1/3 dp** (3 birim = 1sp).
+İlk ölçek masaüstünde gözle kurulmuştu ve telefonda platform alt sınırlarının altındaydı:
+caption 9sp, gövde 13sp, duraklat butonu 35dp, güç butonları 35dp yüksek, tahta genişliğin %90'ı.
+Kullanıcının şikâyeti "arayüz çok küçük, ekranı verimli kullanmıyor" buydu.
+
+Kurallar:
+- Oyuncunun okuduğu hiçbir şey `Caption` (38 = 13sp) altına inmez. Dokunulan hiçbir şey 144 (48dp) altına inmez.
+- Ekranlar **sabit ofsetle ortaya dizilmez**, `App.PageHeight`'tan yerleşir. Eskiden her şey 1920'lik
+  bir bantta ortalanıyordu; 19.5:9'da sayfa ~2120, yani menünün ve oyunun altında çeyrek ekran boş kalıyordu.
+  - Oyun: `GameScreen.PlayLayout.Solve` — her bandın istediği ve razı olduğu boy var. Fazlalık tepsiye
+    ve boşluklara, eksik önce boşluklardan → tepsiden → HUD'dan, **tahta en son** küçülür.
+  - Menü alttan yukarı (başparmak), başlık kalan üst alanda ortalı. Macera haritası sığdığı kadar satır
+    (19.5:9'da 6 → sayfa başı 24). Modallar içerikten boylanır, listeler `ModalCard.FitRows` ile sayfaya sığar.
+- 16:9'da `PageHeight` eskiden 1920'ye clamp ediliyordu; gerçek sayfa ~1700 olduğu için alt yığın jest
+  çubuğuna biniyordu. Clamp kaldırıldı — geri koyma.
+- Yerleşim `Awake`'te bir kez kurulur; çalışırken ekran boyutu değişirse (katlanabilir) yalnız safe area yenilenir.
+- Tablet (3:4) bilinçli olarak telefon sütunu: içerik 1080 genişlikte ortada, tahta daha küçük.
 
 ### Arayüz kuralı — bunu ihlal etme
 > **Yazıyla anlatma. Yanıp söndürme.**
@@ -438,6 +459,10 @@ Denge değişikliklerinden sonra simülasyonla ölç (casual/iyi oyuncu, rastgel
   Windows build alır, dikey pencerede çalıştırır. `AutoTest` her ekranın görüntüsünü (ikon dahil)
   `%TEMP%\prizma_autotest\shots` altına yazar. Tahtalar gerçek bot hamlelerinden ve elle kurulmuş
   kayıtlardan geldiği için görüntü ile durum aynı anda doğrulanır. Tanım gerçek build'e girmez.
+  **Arayüz değişikliğini tek oranda doğrulama.** `-SkipBuild -Width 540 -Height 960 -Tag 16x9` ile aynı
+  build'i başka oranlarda koş (19.5:9 varsayılan 432x936, 20:9 432x960, 16:9 540x960, tablet 720x960).
+  `-TopInset` (varsayılan 90) telefon çentiğini simüle eder — masaüstü oyuncusunun safe area'sı yoktur
+  ve onsuz her görüntü telefondakinden fazla üst alan gösterir. Bir oran ~5 dk sürer.
 
 `eval` çağrıları 60 saniyede zaman aşımına uğrar; ağır simülasyonu küçük parçalara böl.
 
