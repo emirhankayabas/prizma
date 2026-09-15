@@ -13,15 +13,27 @@ namespace BlockPuzzle.Game
     /// </summary>
     public sealed class ResultCard
     {
-        static readonly Vector2 CardSize = new Vector2(Design.ContentWidth, 1070f);
+        static readonly Vector2 CardSize = new Vector2(Design.ContentWidth, 1180f);
+
+        /// <summary>
+        /// Without the star row the card is shorter by what the stars took, rather than keeping
+        /// their height as an empty band between the note and the buttons.
+        /// </summary>
+        const float HeightNoStars = 1100f;
 
         // Distances from the card's top edge to the centre of each line.
-        const float TitleLine = 104f;
-        const float StarLine = 250f;
-        const float NoteIconSize = 56f;
+        const float TitleLine = Design.CardHeading;
+        const float StarLine = 280f;
+        const float ScoreLine = 470f, ScoreLineNoStars = 380f;
+        const float NoteLine = 612f, NoteLineNoStars = 522f;
+        const float NoteIconSize = 68f;
         const float NoteIconGap = 16f;
 
-        float Top => CardSize.y * 0.5f;
+        float Top => _card.sizeDelta.y * 0.5f;
+
+        Image _shadow;
+        Image _fill;
+        Image _hairline;
 
         RectTransform _panel;
         Image _scrim;
@@ -52,9 +64,9 @@ namespace BlockPuzzle.Game
             _card = UiBuilder.Node(_panel, "Card");
             _card.sizeDelta = CardSize;
 
-            UiBuilder.Shadow(_card, "Shadow", CardSize, Design.RadiusLg, Design.E3);
-            UiBuilder.Panel(_card, "Fill", CardSize, Design.SurfaceHigh, Design.RadiusLg);
-            UiBuilder.Hairline(_card, "Hairline", CardSize, Design.RadiusLg);
+            _shadow = UiBuilder.Shadow(_card, "Shadow", CardSize, Design.RadiusLg, Design.E3);
+            _fill = UiBuilder.Panel(_card, "Fill", CardSize, Design.SurfaceHigh, Design.RadiusLg);
+            _hairline = UiBuilder.Hairline(_card, "Hairline", CardSize, Design.RadiusLg);
 
             _title = UiBuilder.Label(_card, "Title", "", Design.Title, Design.TextSecondary, Design.FontMedium);
             _title.rectTransform.sizeDelta = new Vector2(CardSize.x - Design.CardPadding * 2f, 110f);
@@ -67,46 +79,57 @@ namespace BlockPuzzle.Game
                 var star = UiBuilder.Image(_starRow, "Star" + i, Icons.Star, Design.Gold);
                 star.type = Image.Type.Simple;
                 // The middle star sits higher and larger, the way a podium does.
-                float size = i == 1 ? 156f : 124f;
+                float size = i == 1 ? 180f : 144f;
                 star.rectTransform.sizeDelta = new Vector2(size, size);
-                star.rectTransform.anchoredPosition = new Vector2((i - 1) * 176f, i == 1 ? 22f : 0f);
+                star.rectTransform.anchoredPosition = new Vector2((i - 1) * 200f, i == 1 ? 26f : 0f);
                 _stars[i] = star;
             }
 
             _score = UiBuilder.Label(_card, "Score", "0", Design.Readout, Design.TextPrimary,
                 Design.FontDisplay, tracking: Design.TrackingDisplay);
-            _score.rectTransform.sizeDelta = new Vector2(CardSize.x, 210f);
+            _score.rectTransform.sizeDelta = new Vector2(CardSize.x, 230f);
+            UiBuilder.TextShadow(_score, 0.4f, -0.3f, 0.45f);
 
             _noteIcon = UiBuilder.Image(_card, "NoteIcon", Icons.Flame, Design.Gold);
             _noteIcon.type = Image.Type.Simple;
             _noteIcon.rectTransform.sizeDelta = new Vector2(NoteIconSize, NoteIconSize);
 
-            _note = UiBuilder.Label(_card, "Note", "", Design.Label, Design.Mint,
-                Design.FontMedium, tracking: Design.TrackingLabel);
-            _note.rectTransform.sizeDelta = new Vector2(CardSize.x - Design.CardPadding * 2f, 70f);
+            _note = UiBuilder.Label(_card, "Note", "", Design.Body, Design.Mint,
+                Design.FontDisplay, tracking: Design.TrackingLabel);
+            _note.rectTransform.sizeDelta = new Vector2(CardSize.x - Design.CardPadding * 2f, 80f);
 
             float inner = CardSize.x - Design.CardPadding * 2f;
 
             _primary = UiBuilder.Button(_card, "Primary", new Vector2(inner, Design.ButtonLg), UiButton.Style.Primary,
-                "TEKRAR OYNA", Design.Headline);
+                Str.PlayAgain, Design.Headline);
             _primary.Clicked += () => PrimaryClicked?.Invoke();
 
             _secondary = UiBuilder.Button(_card, "Secondary", new Vector2(inner, Design.ButtonMd), UiButton.Style.Secondary,
-                "ANA MENÜ", Design.Body);
+                Str.MainMenu, Design.Body);
             _secondary.Clicked += () => SecondaryClicked?.Invoke();
 
             ModalCard.StackFromBottom(_card, Design.Space3, _primary.Rect, _secondary.Rect);
 
+            // Top-right corner of the card, only on endings worth telling someone about.
+            _share = UiBuilder.Button(_card, "Share", new Vector2(Design.TouchTarget, Design.TouchTarget), UiButton.Style.Icon,
+                null, Design.Body, Icons.Share);
+            _share.Clicked += () => _shareAction?.Invoke();
+
             _panel.gameObject.SetActive(false);
         }
+
+        UiButton _share;
+        Action _shareAction;
 
         /// <summary>
         /// Shows the card. <paramref name="stars"/> is -1 to leave the star row out, otherwise
         /// 0..3 earned stars, which pop in one by one through <paramref name="onStar"/>.
         /// </summary>
         public void Show(MonoBehaviour host, string title, string score, string note, Color noteColor, Sprite noteIcon,
-            int stars, string primary, string secondary, Action<int> onStar = null)
+            int stars, string primary, string secondary, Action<int> onStar = null, Action share = null)
         {
+            _shareAction = share;
+            _share.gameObject.SetActive(share != null);
             _title.text = title;
             _score.text = score;
             _note.text = note;
@@ -116,10 +139,11 @@ namespace BlockPuzzle.Game
 
             bool withStars = stars >= 0;
             _starRow.gameObject.SetActive(withStars);
+            SetHeight(withStars ? CardSize.y : HeightNoStars);
 
-            // Without stars the number moves up into part of the space they would have used.
-            float scoreY = Top - (withStars ? 430f : 360f);
-            float noteY = Top - (withStars ? 566f : 496f);
+            // Without stars the number moves up into the space they would have used.
+            float scoreY = Top - (withStars ? ScoreLine : ScoreLineNoStars);
+            float noteY = Top - (withStars ? NoteLine : NoteLineNoStars);
             _score.rectTransform.anchoredPosition = new Vector2(0f, scoreY);
 
             _noteIcon.gameObject.SetActive(noteIcon != null && !string.IsNullOrEmpty(note));
@@ -148,6 +172,23 @@ namespace BlockPuzzle.Game
             host.StartCoroutine(Tween.Scale(_card, Vector3.one * 0.86f, Vector3.one, 0.32f, Ease.OutBack));
 
             if (withStars) host.StartCoroutine(StarRoutine(stars, onStar));
+        }
+
+        void SetHeight(float height)
+        {
+            var size = new Vector2(CardSize.x, height);
+            var shadowPad = _shadow.rectTransform.sizeDelta - _card.sizeDelta;
+
+            _card.sizeDelta = size;
+            _fill.rectTransform.sizeDelta = size;
+            _hairline.rectTransform.sizeDelta = size;
+            _shadow.rectTransform.sizeDelta = size + shadowPad;
+
+            _title.rectTransform.anchoredPosition = new Vector2(0f, Top - TitleLine);
+            _starRow.anchoredPosition = new Vector2(0f, Top - StarLine);
+            ModalCard.StackFromBottom(_card, Design.Space3, _primary.Rect, _secondary.Rect);
+            _share.Rect.anchoredPosition = new Vector2(CardSize.x * 0.5f - Design.Space3 - Design.TouchTarget * 0.5f,
+                Top - Design.Space3 - Design.TouchTarget * 0.5f);
         }
 
         IEnumerator StarRoutine(int earned, Action<int> onStar)

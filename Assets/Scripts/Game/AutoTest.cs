@@ -142,9 +142,59 @@ namespace BlockPuzzle.Game
 
             _app.ShowMenu();
             _app.OpenStats();
+            _app.StatsPage.ShowTab(false);
             yield return Wait(0.5f);
             yield return Shot("15_stats");
+            _app.StatsPage.ShowTab(true);
+            yield return Wait(0.3f);
+            yield return Shot("15b_achievements");
             _app.CloseModal();
+
+            _app.OpenDaily();
+            yield return Wait(0.5f);
+            yield return Shot("14b_daily_calendar");
+            _app.CloseModal();
+
+            // A catch-up day from the calendar, finished: the share button and the day's name on the card.
+            _app.PlayDaily(DateTime.Now.Date.AddDays(-3), fresh: true);
+            var dailyBot = new Autoplayer(9, 0.5f);
+            guard = 0;
+            while (!_game.Session.IsFinished && guard++ < 1500)
+            {
+                if (!_game.AutoStep(dailyBot)) break;
+                if (guard % 8 == 0) yield return null;
+            }
+            yield return Wait(1.2f);
+            yield return Shot("14c_daily_past_result");
+
+            for (int n = 12; n <= 24; n++) Progress.RecordLevel(n, 2);
+            _app.PlayLevel(25);
+            yield return Wait(0.8f);
+            yield return Shot("12b_level25_stone");
+
+            // English: the same key screens after a language switch, which rebuilds in place.
+            _app.ShowMenu();
+            _app.SetLanguage(Language.English);
+            yield return Wait(0.5f);
+            yield return Shot("20_en_menu");
+            _app.OpenSettings();
+            yield return Wait(0.4f);
+            yield return Shot("21_en_settings");
+            _app.CloseModal();
+            _app.OpenStats();
+            _app.StatsPage.ShowTab(true);
+            yield return Wait(0.4f);
+            yield return Shot("22_en_achievements");
+            _app.CloseModal();
+            _app.OpenDaily();
+            yield return Wait(0.4f);
+            yield return Shot("23_en_calendar");
+            _app.CloseModal();
+            _app.PlayLevel(25);
+            yield return Wait(0.8f);
+            yield return Shot("24_en_level");
+            _app.ShowMenu();
+            _app.SetLanguage(Language.Turkish);
 
             _app.OpenThemes();
             yield return Wait(0.5f);

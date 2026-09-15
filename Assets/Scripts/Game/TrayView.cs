@@ -14,10 +14,14 @@ namespace BlockPuzzle.Game
         /// <summary>
         /// Largest scale a piece sits at in the tray; long pieces shrink further to fit their
         /// slot. Pieces grow back to board size when picked up.
+        ///
+        /// It was 0.66, and next to published block puzzles the rack looked sparse — small
+        /// pieces floating in a wide band. 0.74 is the most a 3x3 piece can take and still
+        /// leave air between neighbouring slots.
         /// </summary>
-        public const float MaxScale = 0.66f;
+        public const float MaxScale = 0.74f;
 
-        const float SlotInset = 26f;
+        const float SlotInset = 18f;
 
         RectTransform _rect;
         RectTransform[] _slots;

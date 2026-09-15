@@ -65,6 +65,9 @@ sysinfo.txt
 !/Tools/CoreHarness/Harness.csproj
 /Tools/CoreHarness/bin/
 /Tools/CoreHarness/obj/
+!/Tools/AudioCheck/AudioCheck.csproj
+/Tools/AudioCheck/bin/
+/Tools/AudioCheck/obj/
 
 # Build sirasinda test paketinin urettigi gecici dosyalar
 /Assets/Resources/PerformanceTestRunInfo.json*

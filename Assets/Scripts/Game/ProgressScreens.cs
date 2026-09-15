@@ -37,16 +37,16 @@ namespace BlockPuzzle.Game
         protected override void Build()
         {
             float half = App.PageHeight * 0.5f;
-            float headerCenter = -(Design.Space2 + Design.TouchTarget * 0.5f);
+            float headerCenter = -(Design.Space2 + Design.IconButton * 0.5f);
 
-            var back = UiBuilder.Button(Root, "Back", new Vector2(Design.TouchTarget, Design.TouchTarget), UiButton.Style.Icon,
+            var back = UiBuilder.Button(Root, "Back", new Vector2(Design.IconButton, Design.IconButton), UiButton.Style.Icon,
                 null, Design.Body, Icons.ChevronLeft);
             back.Rect.anchorMin = back.Rect.anchorMax = new Vector2(0f, 1f);
             back.Rect.pivot = new Vector2(0f, 0.5f);
             back.Rect.anchoredPosition = new Vector2(Design.Gutter, headerCenter);
             back.Clicked += () => { Audio.PlayClick(); App.ShowMenu(); };
 
-            var heading = UiBuilder.Label(Root, "Heading", "MACERA", Design.Title, Design.TextPrimary,
+            var heading = UiBuilder.Label(Root, "Heading", Str.Adventure, Design.Headline, Design.TextPrimary,
                 Design.FontDisplay, tracking: Design.TrackingLabel * 0.5f);
             heading.rectTransform.anchorMin = heading.rectTransform.anchorMax = new Vector2(0.5f, 1f);
             heading.rectTransform.pivot = new Vector2(0.5f, 0.5f);
@@ -58,39 +58,40 @@ namespace BlockPuzzle.Game
             var chip = UiBuilder.Node(Root, "Stars");
             chip.anchorMin = chip.anchorMax = new Vector2(1f, 1f);
             chip.pivot = new Vector2(1f, 0.5f);
-            chip.sizeDelta = new Vector2(240f, 112f);
+            chip.sizeDelta = new Vector2(224f, 124f);
             chip.anchoredPosition = new Vector2(-Design.Gutter, headerCenter);
-            UiBuilder.Panel(chip, "Fill", chip.sizeDelta, Design.SurfaceInset, 56f);
+            UiBuilder.Panel(chip, "Fill", chip.sizeDelta, Design.SurfaceInset, 62f);
             var star = UiBuilder.Image(chip, "Icon", Icons.Star, Design.Gold);
             star.type = Image.Type.Simple;
             star.rectTransform.sizeDelta = new Vector2(Design.IconSm, Design.IconSm);
-            star.rectTransform.anchoredPosition = new Vector2(-56f, 0f);
-            _starTotal = UiBuilder.Label(chip, "Total", "0", Design.Headline, Design.Gold, Design.FontDisplay,
+            star.rectTransform.anchoredPosition = new Vector2(-50f, 0f);
+            // Three-digit totals are the common case a few dozen levels in; sized so they stay inside the chip.
+            _starTotal = UiBuilder.Label(chip, "Total", "0", Design.Body, Design.Gold, Design.FontDisplay,
                 TextAlignmentOptions.Left);
-            _starTotal.rectTransform.sizeDelta = new Vector2(130f, 90f);
-            _starTotal.rectTransform.anchoredPosition = new Vector2(51f, 2f);
+            _starTotal.rectTransform.sizeDelta = new Vector2(124f, 100f);
+            _starTotal.rectTransform.anchoredPosition = new Vector2(58f, 3f);
 
             // Footer: page arrows along the bottom edge, in thumb reach.
-            float footerCenter = -half + Design.Space3 + Design.TouchTarget * 0.5f;
-            float arrowX = Design.ContentWidth * 0.5f - Design.TouchTarget * 0.5f;
+            float footerCenter = -half + Design.Space3 + Design.IconButton * 0.5f;
+            float arrowX = Design.ContentWidth * 0.5f - Design.IconButton * 0.5f;
 
-            _prev = UiBuilder.Button(Root, "Prev", new Vector2(Design.TouchTarget, Design.TouchTarget), UiButton.Style.Icon, null, Design.Body, Icons.ChevronLeft);
+            _prev = UiBuilder.Button(Root, "Prev", new Vector2(Design.IconButton, Design.IconButton), UiButton.Style.Icon, null, Design.Body, Icons.ChevronLeft);
             _prev.Rect.anchoredPosition = new Vector2(-arrowX, footerCenter);
             _prev.Clicked += () => { Audio.PlayClick(); _page--; Populate(); };
 
-            _next = UiBuilder.Button(Root, "Next", new Vector2(Design.TouchTarget, Design.TouchTarget), UiButton.Style.Icon, null, Design.Body, Icons.ChevronRight);
+            _next = UiBuilder.Button(Root, "Next", new Vector2(Design.IconButton, Design.IconButton), UiButton.Style.Icon, null, Design.Body, Icons.ChevronRight);
             _next.Rect.anchoredPosition = new Vector2(arrowX, footerCenter);
             _next.Clicked += () => { Audio.PlayClick(); _page++; Populate(); };
 
-            _pageLabel = UiBuilder.Label(Root, "Page", "", Design.Body, Design.TextOnGround, Design.FontDisplay,
+            _pageLabel = UiBuilder.Label(Root, "Page", "", Design.Headline, Design.TextOnGround, Design.FontDisplay,
                 tracking: Design.TrackingLabel * 0.5f);
             _pageLabel.rectTransform.sizeDelta = new Vector2(420f, 80f);
             _pageLabel.rectTransform.anchoredPosition = new Vector2(0f, footerCenter);
 
             // The grid fills the band between header and footer with as many rows as fit.
             float tile = (Design.ContentWidth - TileGap * (Columns - 1)) / Columns;
-            float bandTop = half - Design.Space2 - Design.TouchTarget - Design.Space4;
-            float bandBottom = -half + Design.Space3 + Design.TouchTarget + Design.Space4;
+            float bandTop = half - Design.Space2 - Design.IconButton - Design.Space4;
+            float bandBottom = -half + Design.Space3 + Design.IconButton + Design.Space4;
             int rows = Mathf.Clamp(Mathf.FloorToInt((bandTop - bandBottom + TileGap) / (tile + TileGap)), MinRows, MaxRows);
             _perPage = Columns * rows;
 
@@ -119,8 +120,8 @@ namespace BlockPuzzle.Game
                 {
                     var icon = UiBuilder.Image(button.Content, "Star" + s, Icons.Star, Design.Gold);
                     icon.type = Image.Type.Simple;
-                    icon.rectTransform.sizeDelta = new Vector2(46f, 46f);
-                    icon.rectTransform.anchoredPosition = new Vector2((s - 1) * 54f, -tile * 0.29f);
+                    icon.rectTransform.sizeDelta = new Vector2(56f, 56f);
+                    icon.rectTransform.anchoredPosition = new Vector2((s - 1) * 62f, -tile * 0.28f);
                     stars[s] = icon;
                 }
 
@@ -190,64 +191,165 @@ namespace BlockPuzzle.Game
         }
     }
 
-    /// <summary>Lifetime numbers. Read-only, one quiet table.</summary>
+    /// <summary>
+    /// Lifetime numbers and the achievements built on them, as two tabs of one card. Achievements
+    /// open first while there is a tier the player has not seen; the menu's dot is cleared here.
+    /// </summary>
     public sealed class StatsScreen : AppScreen
     {
         public override bool IsModal => true;
 
-        const float PreferredRow = 100f;
+        const float PreferredRow = 112f;
+        const float TabRow = 132f;
+        const float StarSize = 36f;
 
         readonly List<TextMeshProUGUI> _values = new List<TextMeshProUGUI>();
+        readonly List<TextMeshProUGUI> _achievementValues = new List<TextMeshProUGUI>();
+        readonly List<Image[]> _achievementStars = new List<Image[]>();
+        readonly List<TextMeshProUGUI> _goals = new List<TextMeshProUGUI>();
 
-        static readonly string[] Labels =
-        {
-            "OYNANAN OYUN", "EN İYİ SKOR", "TOPLAM PUAN", "TEMİZLENEN SATIR", "YERLEŞTİRİLEN PARÇA",
-            "EN UZUN COMBO", "TEK RENK SATIR", "TAHTAYI SIFIRLAMA", "SERBEST KRİSTAL", "KULLANILAN GÜÇ",
-            "BÖLÜM YILDIZI", "EN UZUN GÜNLÜK SERİ"
-        };
+        RectTransform _statsPanel;
+        RectTransform _achievementPanel;
+        UiButton _statsTab;
+        UiButton _achievementTab;
 
         protected override void Build()
         {
-            float rowHeight = ModalCard.FitRows(App.PageHeight, Labels.Length, PreferredRow, Design.ButtonLg);
-            var size = new Vector2(Design.ContentWidth, ModalCard.HeightFor(rowHeight * Labels.Length, Design.ButtonLg));
-            ModalCard.Build(Root, "İstatistikler", size, out var content);
+            var labels = Str.StatLabels;
+            int rows = Mathf.Max(labels.Length, Achievements.All.Length);
+            float rowHeight = ModalCard.FitRows(App.PageHeight - TabRow, rows, PreferredRow, Design.ButtonLg);
+            var size = new Vector2(Design.ContentWidth, ModalCard.HeightFor(TabRow + rowHeight * rows, Design.ButtonLg));
+            ModalCard.Build(Root, Str.StatsHeading, size, out var content);
 
             float inner = ModalCard.InnerWidth(size);
             float left = -inner * 0.5f;
-            const float valueWidth = 300f;
-            float labelWidth = inner - valueWidth - Design.Space3 * 2f;
+            float tabY = ModalCard.ContentTop(size) - TabRow * 0.5f + Design.Space2;
+            float tabWidth = (inner - Design.Space3) * 0.5f;
 
-            float top = ModalCard.ContentTop(size) - rowHeight * 0.5f;
-            for (int i = 0; i < Labels.Length; i++)
+            _statsTab = UiBuilder.Button(content, "StatsTab", new Vector2(tabWidth, TabRow - Design.Space4), UiButton.Style.Secondary,
+                Str.StatsTab, Design.Label);
+            _statsTab.Rect.anchoredPosition = new Vector2(-(tabWidth + Design.Space3) * 0.5f, tabY);
+            _statsTab.Clicked += () => { Audio.PlayClick(); ShowTab(false); };
+
+            _achievementTab = UiBuilder.Button(content, "AchievementTab", new Vector2(tabWidth, TabRow - Design.Space4), UiButton.Style.Secondary,
+                Str.AchievementsTab, Design.Label);
+            _achievementTab.Rect.anchoredPosition = new Vector2((tabWidth + Design.Space3) * 0.5f, tabY);
+            _achievementTab.Clicked += () => { Audio.PlayClick(); ShowTab(true); };
+
+            float top = ModalCard.ContentTop(size) - TabRow - rowHeight * 0.5f;
+
+            _statsPanel = UiBuilder.Node(content, "Stats");
+            const float valueWidth = 240f;
+            float labelWidth = inner - valueWidth - Design.Space3 * 2f;
+            for (int i = 0; i < labels.Length; i++)
             {
                 float y = top - i * rowHeight;
+                if (i % 2 == 0) Band(_statsPanel, i, inner, rowHeight, y);
 
-                if (i % 2 == 0)
-                {
-                    var band = UiBuilder.Panel(content, "Band" + i, new Vector2(inner, rowHeight - 8f), Design.SurfaceInset, Design.RadiusSm);
-                    band.rectTransform.anchoredPosition = new Vector2(0f, y);
-                }
-
-                var label = UiBuilder.Label(content, "Label" + i, Labels[i], Design.Caption, Design.TextSecondary,
-                    Design.FontMedium, TextAlignmentOptions.Left, Design.TrackingLabel * 0.5f);
+                var label = UiBuilder.Label(_statsPanel, "Label" + i, labels[i], Design.Caption, Design.TextSecondary,
+                    Design.FontDisplay, TextAlignmentOptions.Left, Design.TrackingLabel * 0.5f);
                 label.rectTransform.sizeDelta = new Vector2(labelWidth, rowHeight);
                 label.rectTransform.anchoredPosition = new Vector2(left + Design.Space3 + labelWidth * 0.5f, y);
 
-                var value = UiBuilder.Label(content, "Value" + i, "0", Design.Body, Design.TextPrimary,
+                var value = UiBuilder.Label(_statsPanel, "Value" + i, "0", Design.Headline, Design.TextPrimary,
                     Design.FontDisplay, TextAlignmentOptions.Right);
                 value.rectTransform.sizeDelta = new Vector2(valueWidth, rowHeight);
                 value.rectTransform.anchoredPosition = new Vector2(inner * 0.5f - Design.Space3 - valueWidth * 0.5f, y);
                 _values.Add(value);
             }
 
+            // One line each: icon, the goal in words, how far along, and the tiers reached as stars —
+            // the same stars the themes are bought with.
+            _achievementPanel = UiBuilder.Node(content, "Achievements");
+            const float countWidth = 160f;
+            float starsWidth = StarSize * 3f + Design.Space1 * 2f;
+            float goalLeft = left + Design.Space3 + Design.IconSm + Design.Space2;
+            float goalWidth = inner * 0.5f - Design.Space3 - starsWidth - Design.Space2 - countWidth - goalLeft;
+            for (int i = 0; i < Achievements.All.Length; i++)
+            {
+                var entry = Achievements.All[i];
+                float y = top - i * rowHeight;
+                if (i % 2 == 0) Band(_achievementPanel, i, inner, rowHeight, y);
+
+                var icon = UiBuilder.Image(_achievementPanel, "Icon" + i, entry.Icon(), Design.TextSecondary);
+                icon.type = Image.Type.Simple;
+                icon.rectTransform.sizeDelta = new Vector2(Design.IconSm * 0.8f, Design.IconSm * 0.8f);
+                icon.rectTransform.anchoredPosition = new Vector2(left + Design.Space3 + Design.IconSm * 0.5f, y);
+
+                var goal = UiBuilder.Label(_achievementPanel, "Goal" + i, "", Design.Caption, Design.TextPrimary,
+                    Design.FontDisplay, TextAlignmentOptions.Left);
+                goal.rectTransform.sizeDelta = new Vector2(goalWidth, rowHeight);
+                goal.rectTransform.anchoredPosition = new Vector2(goalLeft + goalWidth * 0.5f, y);
+                goal.enableAutoSizing = true;
+                goal.fontSizeMin = Design.Caption * 0.9f;
+                goal.fontSizeMax = Design.Caption;
+                _goals.Add(goal);
+
+                var count = UiBuilder.Label(_achievementPanel, "Count" + i, "0", Design.Body, Design.TextSecondary,
+                    Design.FontDisplay, TextAlignmentOptions.Right);
+                count.rectTransform.sizeDelta = new Vector2(countWidth, rowHeight);
+                // A five-digit best score must shrink to fit, never wrap onto a second line.
+                count.textWrappingMode = TextWrappingModes.NoWrap;
+                count.enableAutoSizing = true;
+                count.fontSizeMin = Design.Caption;
+                count.fontSizeMax = Design.Body;
+                count.rectTransform.anchoredPosition = new Vector2(inner * 0.5f - Design.Space3 - starsWidth - Design.Space2 - countWidth * 0.5f, y);
+                _achievementValues.Add(count);
+
+                var stars = new Image[entry.Tiers.Length];
+                for (int s = 0; s < stars.Length; s++)
+                {
+                    var star = UiBuilder.Image(_achievementPanel, $"Star{i}_{s}", Icons.Star, Design.Gold);
+                    star.type = Image.Type.Simple;
+                    star.rectTransform.sizeDelta = new Vector2(StarSize, StarSize);
+                    star.rectTransform.anchoredPosition = new Vector2(
+                        inner * 0.5f - Design.Space3 - starsWidth + StarSize * 0.5f + s * (StarSize + Design.Space1), y);
+                    stars[s] = star;
+                }
+                _achievementStars.Add(stars);
+            }
+
             var close = UiBuilder.Button(content, "Close", new Vector2(inner, Design.ButtonLg), UiButton.Style.Primary,
-                "KAPAT", Design.Headline);
+                Str.Close, Design.Headline);
             close.Clicked += () => { Audio.PlayClick(); App.CloseModal(); };
             ModalCard.StackFromBottom(content, Design.Space3, close.Rect);
         }
 
+        static void Band(RectTransform parent, int i, float width, float rowHeight, float y)
+        {
+            var band = UiBuilder.Panel(parent, "Band" + i, new Vector2(width, rowHeight - 8f), Design.SurfaceInset, Design.RadiusSm);
+            band.rectTransform.anchoredPosition = new Vector2(0f, y);
+        }
+
+        public void ShowTab(bool achievements)
+        {
+            _statsPanel.gameObject.SetActive(!achievements);
+            _achievementPanel.gameObject.SetActive(achievements);
+            _statsTab.SetHighlighted(!achievements, Design.SurfaceLeader);
+            _achievementTab.SetHighlighted(achievements, Design.SurfaceLeader);
+            if (achievements) Progress.MarkAchievementsSeen();
+        }
+
         protected override void OnShow()
         {
+            ShowTab(Progress.HasUnseenAchievements);
+
+            for (int i = 0; i < Achievements.All.Length; i++)
+            {
+                var entry = Achievements.All[i];
+                long target = entry.NextTarget;
+                int reached = entry.Reached;
+                bool done = reached == entry.Tiers.Length;
+
+                _goals[i].text = Str.AchievementGoal(entry.Id, target);
+                _achievementValues[i].text = System.Math.Min(entry.Value(), target).ToString();
+                _achievementValues[i].color = done ? Design.Mint : Design.TextSecondary;
+
+                var stars = _achievementStars[i];
+                for (int s = 0; s < stars.Length; s++)
+                    stars[s].color = s < reached ? Design.Gold : Color.white.WithAlpha(0.16f);
+            }
+
             var numbers = new[]
             {
                 Progress.Games.ToString(),
@@ -260,7 +362,7 @@ namespace BlockPuzzle.Game
                 Progress.PerfectClears.ToString(),
                 Progress.GemsCollected.ToString(),
                 Progress.PowersUsed.ToString(),
-                $"{Progress.TotalStars} / {Progress.LevelsCompleted * 3}",
+                $"{Progress.LevelStars} / {Progress.LevelsCompleted * 3}",
                 Progress.DailyBestStreak.ToString()
             };
 
@@ -281,10 +383,10 @@ namespace BlockPuzzle.Game
     {
         public override bool IsModal => true;
 
-        const float MaxRow = 176f;
-        const float MinRow = 150f;
-        const float SwatchSize = 52f;
-        const float SwatchStep = 60f;
+        const float MaxRow = 196f;
+        const float MinRow = 160f;
+        /// <summary>Largest block swatch; a short page's rows take smaller ones so they stay inside the row.</summary>
+        const float MaxSwatch = 60f;
 
         readonly List<UiButton> _rows = new List<UiButton>();
         readonly List<Image> _checks = new List<Image>();
@@ -307,7 +409,7 @@ namespace BlockPuzzle.Game
 
             float body = previewHeight + previewGap + rowHeight * count - Design.Space3;
             var size = new Vector2(Design.ContentWidth, ModalCard.HeightFor(body, Design.ButtonLg));
-            ModalCard.Build(Root, "Temalar", size, out var content);
+            ModalCard.Build(Root, Str.ThemesHeading, size, out var content);
 
             float inner = ModalCard.InnerWidth(size);
             float top = ModalCard.ContentTop(size);
@@ -319,7 +421,11 @@ namespace BlockPuzzle.Game
             float rowTall = rowHeight - Design.Space3;
             float left = -inner * 0.5f + Design.Space4;
             float right = inner * 0.5f - Design.Space4;
-            float line = rowTall * 0.22f;
+            float swatch = Mathf.Min(MaxSwatch, rowTall * 0.34f);
+            float swatchY = -rowTall * 0.5f + swatch * 0.5f + Design.Space3 * 0.75f;
+            // The name sits on the swatches rather than at a fraction of the row, so a short row cannot overlap them.
+            float nameY = swatchY + swatch * 0.5f + Design.Space1 + Design.Body * 0.5f;
+            float swatchStep = swatch * 1.17f;
 
             float firstRow = top - previewHeight - previewGap - rowTall * 0.5f;
             for (int i = 0; i < count; i++)
@@ -333,19 +439,19 @@ namespace BlockPuzzle.Game
                 row.Clicked += () => Select(index);
 
                 const float nameWidth = 440f;
-                var name = UiBuilder.Label(row.Content, "Name", theme.Name, Design.Body, Design.TextPrimary,
+                var name = UiBuilder.Label(row.Content, "Name", Str.ThemeName(theme.Name), Design.Body, Design.TextPrimary,
                     Design.FontDisplay, TextAlignmentOptions.Left);
-                name.rectTransform.sizeDelta = new Vector2(nameWidth, 70f);
-                name.rectTransform.anchoredPosition = new Vector2(left + nameWidth * 0.5f, line + 4f);
+                name.rectTransform.sizeDelta = new Vector2(nameWidth, 84f);
+                name.rectTransform.anchoredPosition = new Vector2(left + nameWidth * 0.5f, nameY);
 
                 var swatchRoot = UiBuilder.Node(row.Content, "Swatches");
-                swatchRoot.anchoredPosition = new Vector2(left + SwatchSize * 0.5f, -line - 4f);
+                swatchRoot.anchoredPosition = new Vector2(left + swatch * 0.5f, swatchY);
                 var group = swatchRoot.gameObject.AddComponent<CanvasGroup>();
                 for (int c = 0; c < theme.Blocks.Length; c++)
                 {
                     var block = UiBuilder.Image(swatchRoot, "B" + c, Art.Block, theme.Blocks[c]);
-                    block.rectTransform.sizeDelta = new Vector2(SwatchSize, SwatchSize);
-                    block.rectTransform.anchoredPosition = new Vector2(c * SwatchStep, 0f);
+                    block.rectTransform.sizeDelta = new Vector2(swatch, swatch);
+                    block.rectTransform.anchoredPosition = new Vector2(c * swatchStep, 0f);
                 }
 
                 var check = UiBuilder.Image(row.Content, "Check", Icons.Check, Design.Mint);
@@ -372,7 +478,7 @@ namespace BlockPuzzle.Game
             }
 
             var close = UiBuilder.Button(content, "Close", new Vector2(inner, Design.ButtonLg), UiButton.Style.Primary,
-                "KAPAT", Design.Headline);
+                Str.Close, Design.Headline);
             close.Clicked += () => { Audio.PlayClick(); App.CloseModal(); };
             ModalCard.StackFromBottom(content, Design.Space3, close.Rect);
         }
@@ -523,7 +629,7 @@ namespace BlockPuzzle.Game
             _primary = UiBuilder.Image(Root, "Primary", Art.PanelGradient(Design.RadiusMd), Color.white);
             _primary.rectTransform.sizeDelta = new Vector2(columnWidth, 104f);
             _primary.rectTransform.anchoredPosition = new Vector2(columnX, 6f);
-            var play = UiBuilder.Label(_primary.rectTransform, "Label", "OYNA", Design.Headline, Design.OnAccent, Design.FontDisplay);
+            var play = UiBuilder.Label(_primary.rectTransform, "Label", Str.Play, Design.Headline, Design.OnAccent, Design.FontDisplay);
             play.rectTransform.sizeDelta = _primary.rectTransform.sizeDelta;
 
             float half = (columnWidth - Design.Space2) * 0.5f;

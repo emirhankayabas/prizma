@@ -116,7 +116,7 @@ namespace BlockPuzzle.Game
                 _icon = UiBuilder.Image(_content, "Icon", icon, iconColor);
                 _icon.type = Image.Type.Simple;
 
-                float glyph = Mathf.Min(size.x, size.y) * (string.IsNullOrEmpty(label) ? 0.44f : 0.38f);
+                float glyph = Mathf.Min(size.x, size.y) * (string.IsNullOrEmpty(label) ? Design.GlyphFill : 0.42f);
                 _icon.rectTransform.sizeDelta = new Vector2(glyph, glyph);
 
                 if (!string.IsNullOrEmpty(label))

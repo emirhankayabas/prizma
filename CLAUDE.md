@@ -273,6 +273,9 @@ bir sütun, ilk buz. Yazı yok — tahta, doğru hamle bariz olacak şekilde kur
 
 - **Kristal** (`BoardModel` katmanı): hücresi temizlenince toplanır, HUD'daki sayaca uçar.
 - **Buz**: her temizleme bir kat kırar, blok ancak buz bitince gider (1 veya 2 kat). Bomba ikisini de alır.
+- **Taş** (21. bölümden): satırını/sütununu doldurmaya sayılır ama temizlemeyle **hiç** gitmez, yalnız bomba
+  kırar. Buz katmanında `BoardModel.Stone` (9) değeri — kayıt, dağıtıcı ve bot değişmeden taşır. Satır/sütun
+  başına en çok bir taş. Taşlı tahtada tahtayı sıfırlama olmaz. Ölçülen (21–32): iyi %83–100, casual %33–92.
 - Hedefler: kristal (çoğu) / satır (her 6. bölüm) / puan (6k+3). 1-3 yıldız artan hamleye göre.
 - Hamle biterken 2 şarj varsa tur hemen bitmez (`SessionState.OutOfMoves`): sonuç kartı
   **+5 hamle** teklif eder, bölüm denemesi başına bir kez. Ek hamleyle bitirilen bölüm **1 yıldız** —
@@ -290,6 +293,30 @@ toplanıyordu; bütçeler hem gevşek hem düzensizdi ve bölüm 1'i iyi bot bil
 Unity'ye dokunmadığı için güvenli.
 
 ---
+
+## Dil — `Str`
+
+Arayüz **Türkçe + İngilizce**. Oyuncunun okuduğu her kelime `Str.cs`'te (`T(tr, en)`); çağrı yerinde metin
+yazma — grep ile Türkçe sabit kalmadığı doğrulandı, öyle kalsın. Varsayılan telefon dilinden
+(`GameSettings.Language`: Türkçe telefon → TR, diğerleri → EN). Değiştirmek `AppController.SetLanguage` →
+tema değişimi gibi arayüzü yeniden kurar. Ayarların ilk satırı, satır adı iki dilde ("DİL · LANGUAGE").
+Büyük harf `Str.Upper` ile — Türkçe i/İ kuralı. Yeni dil: `Language` enum'una ekle, `T`'ye sütun.
+İngilizce metinler Türkçeden uzun: sabit genişlikli etiketleri **iki dilde** görüntüyle doğrula
+(AutoTest `20_en_*` görüntüleri bunun için).
+
+## Günlük takvim, paylaşım, başarımlar
+
+- **Takvim** (`DailyScreen`, günlük kartı açar): oynanan günler nane tik, geçmiş günler oynanabilir (o günün
+  tohumu). Kayıt `Progress.DailyMonths/DailyDays` (ay başına bit maskesi). **Seriyi ve günün rekorunu yalnız
+  bugünün bulmacası** değiştirir — telafi edilen gün seriye geriye yazılmaz. `AppController.DailyDate` hangi günün
+  oynandığını tutar.
+- **Paylaş** (`ShareSheet`): günlük sonuç kartında; Android'in kendi paylaş penceresi (intent), eklenti yok.
+  Editör/masaüstünde panoya kopyalar. Metin `Str.ShareText` + mağaza linki (`Application.identifier`).
+- **Başarımlar** (`Achievements`): mevcut istatistikler üzerinde 11 × 3 kademe; **hiçbir şey saklanmaz**, kademe
+  sayıdan hesaplanır. Kademe 1/2/3 yıldız verir → `Progress.TotalStars` = bölüm + başarım yıldızı → temalar.
+  İstatistik ekranında ikinci sekme; görülmemiş kademe varsa menüdeki kısayolda sabit nane nokta (nabız yok).
+- **Reklam planı:** yayınla birlikte reklam gelecek, yani internet izni gerekecek. `docs/YAYIN-HAZIRLIK.md`'deki
+  "INTERNET izni yok" kontrolü o zaman kaldırılmalı; Veri güvenliği formu ve gizlilik politikası buna göre.
 
 ## Kayıt ve ilerleme
 
@@ -380,9 +407,10 @@ tek bir RenderTexture'a bir kez çizmek. Görünüm birebir kalmalı — Linear 
 
 `Design.cs` **tek kaynak**. Çağrı yerinde ham sayı yazma; token ekle.
 
-- Tipografi ölçeği: Readout 180 / Display 150 / Title 80 / Headline 62 / Body 50 / Label 44 / Caption 38
+- Tipografi ölçeği: Readout 200 / Display 184 / Title 92 / Headline 72 / Body 58 / Label 50 / Caption 42
 - Aralık: 8 / 16 / 24 / 40 / 56 / 80 / 112 · kenar boşluğu 48 · tahta kenarı 24 · min dokunma hedefi 144
-- Kontroller: `ButtonLg` 176 / `ButtonMd` 156 · ikon `IconSm` 60 / `IconMd` 88 · modal genişliği `ContentWidth` (984)
+- Kontroller: `ButtonLg` 204 / `ButtonMd` 176 · köşe ikon butonu `IconButton` 168 · ikon `IconSm` 72 / `IconMd` 108 ·
+  ikon-buton dolumu `GlyphFill` %54 · modal genişliği `ContentWidth` (984)
 - Şekil: **squircle** (süperelips) — düz yuvarlak dikdörtgen değil. `Raster.FillSquircle`
 - Derinlik: **bulanık ambient gölge**, sert alt dudak değil. Offset küçük, yayılım büyük —
   büyük offset gölgenin dolu çekirdeğini elemanın altından taşırır ve "dudak" gibi okunur
@@ -395,8 +423,18 @@ Android trafiğinin ~%31'i ≤360dp genişlikte → hedef hesap **1 birim = 1/3 
 caption 9sp, gövde 13sp, duraklat butonu 35dp, güç butonları 35dp yüksek, tahta genişliğin %90'ı.
 Kullanıcının şikâyeti "arayüz çok küçük, ekranı verimli kullanmıyor" buydu.
 
+İkinci ölçek Material'ın alt sınırlarını tutturdu — ve kullanıcının bir sonraki şikâyeti tam oydu:
+**"indirdiğim oyunlara göre arayüz elemanları küçük kalıyor"**. Material ölçüleri uygulama içindir; casual oyun
+hamle aralarında bir bakışta okunur ve tür kontrolleri bir kademe büyük kurar. Fark başlıklarda değil **alt
+kademelerdeydi**: etiket 15sp, ikon 20dp, güç butonunda ikon butonun üçte biri, maliyet noktaları 5dp, slider
+9dp'lik bir çizgi, ayar etiketleri %70 beyaz orta kalınlıkta (telefonun ayarlar uygulaması gibi). Üçüncü ölçekte
+alt kademeler en çok büyüdü (caption +%10, label +%14, ikonlar +%20-30), zaten büyük olan skor ve başlık en az.
+Oyuncunun okuduğu her kelime artık ExtraBold; geniş harf aralığı (6) 3'e indi. Tepsi `MaxScale` 0.66 → 0.74.
+**Material alt sınırına geri çekme** — sınır tabandır, hedef değil.
+
 Kurallar:
-- Oyuncunun okuduğu hiçbir şey `Caption` (38 = 13sp) altına inmez. Dokunulan hiçbir şey 144 (48dp) altına inmez.
+- Oyuncunun okuduğu hiçbir şey `Caption` (42 = 14sp) altına inmez. Dokunulan hiçbir şey 144 (48dp) altına inmez;
+  sayfa köşelerindeki ikon butonları (duraklat, ayarlar, geri) `IconButton` 168 (56dp).
 - Ekranlar **sabit ofsetle ortaya dizilmez**, `App.PageHeight`'tan yerleşir. Eskiden her şey 1920'lik
   bir bantta ortalanıyordu; 19.5:9'da sayfa ~2120, yani menünün ve oyunun altında çeyrek ekran boş kalıyordu.
   - Oyun: `GameScreen.PlayLayout.Solve` — her bandın istediği ve razı olduğu boy var. Fazlalık tepsiye
@@ -422,6 +460,42 @@ göze sokmuyor. Yoğunluk ayarı: `BoardView.AddPreviewBar` içindeki iki alfa d
 
 Dosya yok, her şey açılışta sentezleniyor (`Tone` + `Chime`, sinüs + ikinci harmonik, yumuşak
 zarf, tek kutuplu alçak geçiren). Set sade ve bu **kasıtlı** — aşağıdaki nota bak.
+
+Zincir üç dosya: `SoundSynth` (tarifler, Unity'siz) → `SoundMaster` (seviye, Unity'siz) → `AudioKit` /
+`MusicPlayer` (çalma). Unity'siz ikisi `Tools/AudioCheck` ile ölçülüyor; araç oyunun çaldığının aynısını ölçer.
+
+### Seviye — `SoundMaster`
+Kullanıcı: **"oyun sesini fullesem bile az"**. Ölçünce haklıydı ve sebep ayar değil üretimdi: hiçbir klip tam
+ölçeğe yaklaşmıyordu. En yüksek klip −5 dBFS tepe; en sık duyulanlar (kaldırma, bırakma, menü tıkı) −13…−19.
+Zincirde onları yükselten hiçbir adım yoktu, yani "efekt %100" cihazın çalabildiğinin 5–24 dB altında bir tavandı.
+Müzik ayrıca 0.45 tavan × 0.55 varsayılan ile −27 dB'deydi.
+
+Şimdi her klip **rolüne göre bir yükseklik hedefine** getiriliyor (`SoundMaster.TargetFor`; ölçü: en yüksek
+100 ms, K-ağırlıklı RMS) ve −1 dBFS altında şeffaf bir look-ahead limiter'la tutuluyor. Tarif — perde, zarf,
+filtre, yani **tını — değişmedi**. Limiter en çok 1.1 dB çalışıyor; `MaxReductionDb` 6'yı aşacak bir hedefte
+klip ezilmek yerine sessiz bırakılır.
+
+| (`AudioCheck measure`, efekt %100) | Önce | Sonra |
+|---|---|---|
+| bırakma (turun en sık sesi) | −23.7 | **−12.1** |
+| kaldırma / menü tıkı | −26.6 / −29.7 | **−15 / −15** |
+| 1 satır temizleme | −16.2 | **−9.0** |
+| buz | −35 | **−13.9** |
+| müzik (varsayılan) | −26.9 | **−18.1** |
+
+Hiyerarşi hedeflerde: temizleme en üstte (−9), combo cevabı ondan 1.5 dB altta, bırakma −12, tık/kaldırma −15,
+müzik bir temizlemenin ~9 dB altında. Varsayılanlar efekt %100 / müzik %70 (`SoundMaster.Default*`).
+
+- **Çıkış limiteri** (`AudioBusLimiter`, AudioListener'da `OnAudioFilterRead`): her klip tek başına −1 dBFS'te
+  ama iyi bir hamle bırakma + temizleme + combo'yu 70 ms içinde üst üste çalıyor; toplam cihazda sert kırpılırdı.
+  Tek bir ses ona hiç ulaşmıyor. Kaldırma — kaldırırsan hedefleri de düşürmen gerekir.
+- Müzik döngüsü artık `ThreadPool`'da üretilip master'lanıyor; eskiden `Awake`'te senkrondu. Ana iş parçacığında
+  kalan: ilk dört klip, **1.3 ms**.
+- **Açık karar — telefon hoparlörü:** telefon hoparlörü ~700 Hz altını neredeyse çalmaz. Bırakma (130–220 Hz),
+  hatalı bırakma ve bomba seviyesi ne olursa olsun hoparlörde zayıf kalıyor (bırakma telefon modelinde −44 dB).
+  `SoundMaster.AddPresence` alçak bölgenin harmoniklerini 500 Hz üstüne ekler (bırakma −44 → −29). **Tınıyı
+  değiştirdiği için oyunda değil**; `AudioCheck wav` onu üçüncü varyant olarak çıkarıyor. Kullanıcı dinleyip
+  karar verecek.
 
 ### Temizleme tek çağrı
 `PlayClear(lines, comboStreak, monoLines, perfectClear)`. Öncesinde iyi bir hamle
@@ -485,6 +559,10 @@ Denge değişikliklerinden sonra simülasyonla ölç (casual/iyi oyuncu, rastgel
   `perf` dağıtım başına **süreyi ve ayrılan belleği** doluluk kademelerine göre yazar — dağıtıcı
   ana iş parçacığında, oyunun ortasında çalışıyor, yani ikisi de kare süresidir. Aday sayısını ya da
   sıralama terimlerini büyüttükten sonra bunu koş.
+- `Tools/AudioCheck` — `SoundSynth` + `SoundMaster`'ı Unity'siz derler. `measure`: her klibin tepe seviyesi,
+  yüksekliği, telefon hoparlörü modelinden geçmiş yüksekliği ve limiter'ın çalışması, önce/sonra; üretim süresi.
+  `wav <klasör>`: klipler + oyunun gerçek zamanlamasıyla kurgulanmış bir oyun dizisi (önce / sonra / telefon eki),
+  bir de hoparlör simülasyonu. **Ses seviyesine ya da tarife dokununca bunu koş ve diziyi dinlet.**
 - `Tools/compile-check.ps1` — oyun (normal + `PRIZMA_AUTOTEST`) ve editor kodunu Unity'nin derleyici
   argümanlarıyla derler. Editor kapalıyken/odakta değilken derleme hatası yakalar.
 - `Tools/autotest.ps1` — projeyi geçici klasöre kopyalar, batchmode Unity ile `PRIZMA_AUTOTEST` tanımlı

@@ -422,6 +422,23 @@ namespace BlockPuzzle.Game
             return Finish(r, "IconCheck");
         }
 
+        static Sprite _share;
+
+        /// <summary>Three nodes joined by two strokes: the platform's own share mark.</summary>
+        public static Sprite Share { get { if (_share == null) _share = BuildShare(); return _share; } }
+
+        static Sprite BuildShare()
+        {
+            var r = New(out float s);
+            float t = s * Stroke;
+            r.Line(P(s, 0.30f, 0.50f), P(s, 0.70f, 0.76f), t, Color.white);
+            r.Line(P(s, 0.30f, 0.50f), P(s, 0.70f, 0.24f), t, Color.white);
+            r.FillCircle(s * 0.30f, s * 0.50f, s * 0.13f, Color.white);
+            r.FillCircle(s * 0.70f, s * 0.76f, s * 0.13f, Color.white);
+            r.FillCircle(s * 0.70f, s * 0.24f, s * 0.13f, Color.white);
+            return Finish(r, "IconShare");
+        }
+
         static Sprite BuildFlag()
         {
             var r = New(out float s);

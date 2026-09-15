@@ -52,6 +52,21 @@ static class Program
         Console.WriteLine("== determinism");
         Check(PlayOut(123, 77, 0.7f, 400).Score == PlayOut(123, 77, 0.7f, 400).Score, "same seeds, same run");
 
+        Console.WriteLine("== stone");
+        {
+            var b = new BoardModel(8);
+            for (int x = 0; x < 5; x++) b.SetPrefill(x, 0, 1, false, x == 2 ? BoardModel.Stone : 0);
+            var r = b.Place(PieceLibrary.ById("bar3_h"), 5, 0, 1);
+            Check(r.ClearedRows.Count == 1, "a row with a stone still clears");
+            Check(b.IsStone(2, 0) && b.RowCount(0) == 1, "the stone stays, alone in its row");
+            Check(r.CrackedIce.Count == 0 && !r.PerfectClear, "stone is not cracked and blocks a perfect clear");
+            b.Blast(2, 0, 1);
+            Check(!b.IsOccupied(2, 0) && !b.IsStone(2, 0), "the bomb breaks a stone");
+            var level = LevelGenerator.Generate(30, 7);
+            Check(level.Prefill.Exists(c => c.Ice == BoardModel.Stone), "level 30 has stones");
+            Check(!LevelGenerator.Generate(12, 7).Prefill.Exists(c => c.Ice == BoardModel.Stone), "level 12 has none");
+        }
+
         Console.WriteLine("== snapshot");
         {
             var a = new GameSession(new SessionConfig { Seed = 99 });

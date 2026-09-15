@@ -144,7 +144,16 @@ namespace BlockPuzzle.Game
             _pause = CreateScreen<PauseScreen>("Pause", _modalLayer);
             _stats = CreateScreen<StatsScreen>("Stats", _modalLayer);
             _themes = CreateScreen<ThemesScreen>("Themes", _modalLayer);
+            _daily = CreateScreen<DailyScreen>("DailyCalendar", _modalLayer);
         }
+
+        DailyScreen _daily;
+
+        public void OpenDaily() => ShowModal(_daily);
+
+#if PRIZMA_AUTOTEST
+        public StatsScreen StatsPage => _stats;
+#endif
 
         // ------------------------------------------------------------------ theme
 
@@ -210,7 +219,7 @@ namespace BlockPuzzle.Game
 
         AppScreen ModalOfKind(Type kind)
         {
-            foreach (var modal in new AppScreen[] { _settings, _scores, _pause, _stats, _themes })
+            foreach (var modal in new AppScreen[] { _settings, _scores, _pause, _stats, _themes, _daily })
                 if (modal.GetType() == kind) return modal;
             return null;
         }
@@ -303,16 +312,35 @@ namespace BlockPuzzle.Game
             Begin(session);
         }
 
-        /// <summary>The daily puzzle. A saved daily run only resumes on the day it was started.</summary>
-        public void PlayDaily(bool fresh = false)
+        /// <summary>The day whose puzzle the current or last daily run is. Today unless one was picked on the calendar.</summary>
+        public DateTime DailyDate { get; private set; } = DateTime.Now.Date;
+
+        /// <summary>Today's puzzle.</summary>
+        public void PlayDaily(bool fresh = false) => PlayDaily(DateTime.Now.Date, fresh);
+
+        /// <summary>
+        /// The puzzle of any day up to today — the calendar's catch-up days use the same seed
+        /// everyone had on that day. A saved daily run only resumes for the day it belongs to.
+        /// </summary>
+        public void PlayDaily(DateTime date, bool fresh = false)
         {
+            date = date.Date > DateTime.Now.Date ? DateTime.Now.Date : date.Date;
+            DailyDate = date;
             if (fresh) RunStore.Clear(GameMode.Daily);
 
             var session = RunStore.Load(GameMode.Daily);
-            if (session == null || session.Seed != GameSession.DailySeed(DateTime.Now))
-                session = GameSession.NewDailyRun(DateTime.Now, _boardSize, Design.PaletteSize);
+            if (session == null || session.Seed != GameSession.DailySeed(date))
+                session = GameSession.NewDailyRun(date, _boardSize, Design.PaletteSize);
 
             Begin(session);
+        }
+
+        /// <summary>Switches the interface language and rebuilds it in place, like a theme change.</summary>
+        public void SetLanguage(Language language)
+        {
+            if (GameSettings.Language == language) return;
+            GameSettings.Language = language;
+            RebuildInterface();
         }
 
         /// <summary>A level. Resumes a saved attempt at the same level; anything else starts clean.</summary>
@@ -341,7 +369,7 @@ namespace BlockPuzzle.Game
             RunStore.Clear(session.Mode);
             switch (session.Mode)
             {
-                case GameMode.Daily: PlayDaily(fresh: true); break;
+                case GameMode.Daily: PlayDaily(DailyDate, fresh: true); break;
                 case GameMode.Level: PlayLevel(session.Level.Number); break;
                 default: PlayClassic(fresh: true); break;
             }

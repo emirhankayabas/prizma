@@ -25,7 +25,7 @@ namespace BlockPuzzle.Game
         {
             get
             {
-                if (_music < 0f) _music = PlayerPrefs.GetFloat(MusicKey, 0.55f);
+                if (_music < 0f) _music = PlayerPrefs.GetFloat(MusicKey, SoundMaster.DefaultMusicVolume);
                 return _music;
             }
             set
@@ -44,7 +44,7 @@ namespace BlockPuzzle.Game
         {
             get
             {
-                if (_sfx < 0f) _sfx = PlayerPrefs.GetFloat(SfxKey, 0.85f);
+                if (_sfx < 0f) _sfx = PlayerPrefs.GetFloat(SfxKey, SoundMaster.DefaultEffectsVolume);
                 return _sfx;
             }
             set
@@ -87,6 +87,34 @@ namespace BlockPuzzle.Game
 
         /// <summary>Effective effects level after the master mute.</summary>
         public static float EffectiveSfxVolume => Muted ? 0f : SfxVolume;
+
+        const string LanguageKey = "blockpuzzle.language";
+        static int _language = -1;
+
+        /// <summary>
+        /// The interface language. Until the player picks one it follows the phone: Turkish on a
+        /// Turkish phone, English everywhere else.
+        /// </summary>
+        public static Language Language
+        {
+            get
+            {
+                if (_language < 0)
+                {
+                    int system = Application.systemLanguage == SystemLanguage.Turkish ? (int)Language.Turkish : (int)Language.English;
+                    _language = PlayerPrefs.GetInt(LanguageKey, system);
+                }
+                return (Language)_language;
+            }
+            set
+            {
+                if (Language == value) return;
+                _language = (int)value;
+                PlayerPrefs.SetInt(LanguageKey, _language);
+                PlayerPrefs.Save();
+                Changed?.Invoke();
+            }
+        }
 
         public static bool Haptics
         {

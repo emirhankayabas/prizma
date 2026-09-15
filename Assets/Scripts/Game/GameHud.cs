@@ -13,22 +13,17 @@ namespace BlockPuzzle.Game
     /// </summary>
     public sealed class GameHud
     {
-        const float GoalIconSize = 108f;
+        const float GoalIconSize = 124f;
         const float GoalIconGap = 20f;
 
-        /// <summary>The height the HUD is laid out for; a short page squeezes it towards 400.</summary>
-        const float FullHeight = 500f;
+        /// <summary>The height the HUD is laid out for; a short page squeezes it towards its minimum.</summary>
+        public const float FullHeight = 540f;
 
         /// <summary>Top row: best score on the left, the pause button on the right, a chip between.</summary>
         const float RowTop = 16f;
-        const float RowCenter = RowTop + Design.TouchTarget * 0.5f;
-        const float ReadoutBox = 200f;
-
-        static readonly string[] Months =
-        {
-            "OCAK", "ŞUBAT", "MART", "NİSAN", "MAYIS", "HAZİRAN",
-            "TEMMUZ", "AĞUSTOS", "EYLÜL", "EKİM", "KASIM", "ARALIK"
-        };
+        const float RowCenter = RowTop + Design.IconButton * 0.5f;
+        const float ReadoutBox = 220f;
+        const float ChipHeight = 112f;
 
         RectTransform _root;
 
@@ -65,25 +60,28 @@ namespace BlockPuzzle.Game
 
             // What a short page takes from the HUD comes out of the air between its three rows.
             float squeeze = Mathf.Max(0f, FullHeight - height);
-            _readoutTop = -(RowTop + Design.TouchTarget + 4f) + squeeze * 0.4f;
+            // Never above the top row's chip, though: on a 16:9 page it used to touch the moves chip.
+            _readoutTop = Mathf.Min(-(RowTop + Design.IconButton + 4f) + squeeze * 0.4f, -(RowCenter + ChipHeight * 0.5f));
 
+            // The best score reads as the second number on the page, so it gets the second size.
+            const float bestIcon = Design.IconMd * 0.8f;
             _leftIcon = UiBuilder.Image(_root, "LeftIcon", Icons.Gem, Design.Gold);
             _leftIcon.type = Image.Type.Simple;
             _leftIcon.rectTransform.anchorMin = _leftIcon.rectTransform.anchorMax = new Vector2(0f, 1f);
             _leftIcon.rectTransform.pivot = new Vector2(0f, 0.5f);
-            _leftIcon.rectTransform.sizeDelta = new Vector2(Design.IconSm, Design.IconSm);
+            _leftIcon.rectTransform.sizeDelta = new Vector2(bestIcon, bestIcon);
             _leftIcon.rectTransform.anchoredPosition = new Vector2(Design.Gutter, -RowCenter);
 
             _leftLabel = UiBuilder.Label(_root, "LeftLabel", "0", Design.Headline, Design.Gold,
                 Design.FontDisplay, TextAlignmentOptions.Left);
             _leftLabel.rectTransform.anchorMin = _leftLabel.rectTransform.anchorMax = new Vector2(0f, 1f);
             _leftLabel.rectTransform.pivot = new Vector2(0f, 0.5f);
-            _leftLabel.rectTransform.sizeDelta = new Vector2(360f, 90f);
-            _leftLabel.rectTransform.anchoredPosition = new Vector2(Design.Gutter + Design.IconSm + Design.Space2, -RowCenter + 2f);
+            _leftLabel.rectTransform.sizeDelta = new Vector2(360f, 100f);
+            _leftLabel.rectTransform.anchoredPosition = new Vector2(Design.Gutter + bestIcon + Design.Space2, -RowCenter + 3f);
 
             // One control in the corner. It pauses; settings and quitting live inside that menu,
             // which is where a player looks for them mid-run.
-            var pause = UiBuilder.Button(_root, "Pause", new Vector2(Design.TouchTarget, Design.TouchTarget), UiButton.Style.Icon,
+            var pause = UiBuilder.Button(_root, "Pause", new Vector2(Design.IconButton, Design.IconButton), UiButton.Style.Icon,
                 null, Design.Body, Icons.Pause);
             pause.Rect.anchorMin = pause.Rect.anchorMax = new Vector2(1f, 1f);
             pause.Rect.pivot = new Vector2(1f, 1f);
@@ -94,12 +92,12 @@ namespace BlockPuzzle.Game
             _chip = UiBuilder.Node(_root, "Chip");
             _chip.anchorMin = _chip.anchorMax = new Vector2(0.5f, 1f);
             _chip.pivot = new Vector2(0.5f, 0.5f);
-            _chip.sizeDelta = new Vector2(340f, 100f);
+            _chip.sizeDelta = new Vector2(340f, ChipHeight);
             _chip.anchoredPosition = new Vector2(0f, -RowCenter);
-            UiBuilder.Panel(_chip, "Fill", _chip.sizeDelta, Design.SurfaceInset, 50f);
-            UiBuilder.Hairline(_chip, "Edge", _chip.sizeDelta, 50f);
+            UiBuilder.Panel(_chip, "Fill", _chip.sizeDelta, Design.SurfaceInset, ChipHeight * 0.5f);
+            UiBuilder.Hairline(_chip, "Edge", _chip.sizeDelta, ChipHeight * 0.5f);
             _chipLabel = UiBuilder.Label(_chip, "Label", "", Design.Label, Design.TextPrimary,
-                Design.FontDisplay, tracking: 4f);
+                Design.FontDisplay, tracking: Design.TrackingLabel * 0.5f);
             _chipLabel.rectTransform.sizeDelta = _chip.sizeDelta;
 
             _readout = UiBuilder.Label(_root, "Readout", "0", Design.Readout, Design.TextPrimary,
@@ -122,16 +120,16 @@ namespace BlockPuzzle.Game
             _comboChip = UiBuilder.Node(_root, "ComboChip");
             _comboChip.anchorMin = _comboChip.anchorMax = new Vector2(0.5f, 1f);
             _comboChip.pivot = new Vector2(0.5f, 1f);
-            _comboChip.sizeDelta = new Vector2(400f, 100f);
+            _comboChip.sizeDelta = new Vector2(460f, ChipHeight);
             // Under the score, or pinned to the HUD's bottom edge when a short page has pulled that up.
             _comboChip.anchoredPosition = new Vector2(0f,
-                Mathf.Max(_readoutTop - ReadoutBox - 12f, -(height - _comboChip.sizeDelta.y - 8f)));
+                Mathf.Max(_readoutTop - ReadoutBox - 8f, -(height - _comboChip.sizeDelta.y - 8f)));
 
-            UiBuilder.Panel(_comboChip, "Fill", _comboChip.sizeDelta, Design.SurfaceInset, 50f);
-            _comboChipEdge = UiBuilder.Hairline(_comboChip, "Edge", _comboChip.sizeDelta, 50f, Design.Mint.WithAlpha(0.5f));
+            UiBuilder.Panel(_comboChip, "Fill", _comboChip.sizeDelta, Design.SurfaceInset, ChipHeight * 0.5f);
+            _comboChipEdge = UiBuilder.Hairline(_comboChip, "Edge", _comboChip.sizeDelta, ChipHeight * 0.5f, Design.Mint.WithAlpha(0.5f));
 
-            _comboLabel = UiBuilder.Label(_comboChip, "Label", "", Design.Body, Design.Mint,
-                Design.FontDisplay, tracking: 4f);
+            _comboLabel = UiBuilder.Label(_comboChip, "Label", "", Design.Headline, Design.Mint,
+                Design.FontDisplay, tracking: Design.TrackingLabel * 0.5f);
             _comboLabel.rectTransform.sizeDelta = _comboChip.sizeDelta;
 
             _comboChip.gameObject.SetActive(false);
@@ -139,7 +137,8 @@ namespace BlockPuzzle.Game
 
         // ------------------------------------------------------------------ binding
 
-        public void Bind(GameSession session)
+        /// <param name="dailyDate">The day whose puzzle a daily run is — today, or a day caught up on from the calendar.</param>
+        public void Bind(GameSession session, DateTime dailyDate)
         {
             _session = session;
             HideCombo();
@@ -147,9 +146,9 @@ namespace BlockPuzzle.Game
             switch (session.Mode)
             {
                 case GameMode.Daily:
-                    SetLeft(Icons.Calendar, Design.Mint, Design.FontDisplay, Design.Headline);
-                    var today = DateTime.Now;
-                    ShowChip($"{today.Day} {Months[today.Month - 1]}", Design.TextPrimary);
+                    // Beside the date chip: a five-digit best at full size would run into it.
+                    SetLeft(Icons.Calendar, Design.Mint, Design.FontDisplay, Design.Body);
+                    ShowChip(Str.ShortDate(dailyDate), Design.TextPrimary);
                     _goalIcon.gameObject.SetActive(false);
                     break;
 
@@ -228,7 +227,7 @@ namespace BlockPuzzle.Game
 
                     int moves = _session.MovesLeft;
                     // Low on moves: the chip turns rose. A steady colour, not a pulse.
-                    ShowChip($"{moves} HAMLE", moves <= 5 ? Design.PreviewTint(3) : Design.TextPrimary);
+                    ShowChip(Str.Moves(moves),moves <= 5 ? Design.PreviewTint(3) : Design.TextPrimary);
 
                     int progress = level.Goal == GoalKind.Score ? displayedScore : _session.GoalProgress;
                     SetReadout(Mathf.Max(0, level.Target - progress).ToString());
@@ -275,7 +274,7 @@ namespace BlockPuzzle.Game
             float multiplier = ScoreRules.ComboMultiplier(streak);
             var tint = streak >= 4 ? Design.Gold : Design.Mint;
 
-            _comboLabel.text = $"COMBO ×{multiplier:0.#}";
+            _comboLabel.text = Str.Combo(multiplier);
             _comboLabel.color = tint;
             _comboChipEdge.color = tint.WithAlpha(0.55f);
 

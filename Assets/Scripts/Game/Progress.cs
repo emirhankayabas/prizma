@@ -36,6 +36,13 @@ namespace BlockPuzzle.Game
             public int PowersUsed;
             public int GemsCollected;
 
+            // The daily calendar: one entry per month played, yyyymm, with a bit per day.
+            // Parallel lists because JsonUtility cannot store a dictionary.
+            public List<int> DailyMonths = new List<int>();
+            public List<int> DailyDays = new List<int>();
+
+            public int AchievementStarsSeen;
+
             public int Theme;
             public bool ColorBlind;
             public bool TutorialSeen;
@@ -64,6 +71,11 @@ namespace BlockPuzzle.Game
                 }
 
                 if (_data.Stars == null) _data.Stars = new List<int>();
+                if (_data.DailyMonths == null || _data.DailyDays == null || _data.DailyMonths.Count != _data.DailyDays.Count)
+                {
+                    _data.DailyMonths = new List<int>();
+                    _data.DailyDays = new List<int>();
+                }
                 return _data;
             }
         }
@@ -84,7 +96,8 @@ namespace BlockPuzzle.Game
             return i >= 0 && i < D.Stars.Count ? D.Stars[i] : 0;
         }
 
-        public static int TotalStars
+        /// <summary>Stars won on levels alone.</summary>
+        public static int LevelStars
         {
             get
             {
@@ -92,6 +105,23 @@ namespace BlockPuzzle.Game
                 foreach (int s in D.Stars) total += s;
                 return total;
             }
+        }
+
+        /// <summary>
+        /// Every star the player holds — levels plus achievement tiers. This is what themes are
+        /// unlocked with, so a player who never touches the adventure can still earn them.
+        /// </summary>
+        public static int TotalStars => LevelStars + Achievements.EarnedStars;
+
+        /// <summary>Achievement stars the player has not looked at yet: the stats shortcut shows a dot.</summary>
+        public static bool HasUnseenAchievements => Achievements.EarnedStars > D.AchievementStarsSeen;
+
+        public static void MarkAchievementsSeen()
+        {
+            int earned = Achievements.EarnedStars;
+            if (D.AchievementStarsSeen == earned) return;
+            D.AchievementStarsSeen = earned;
+            Save();
         }
 
         public static int LevelsCompleted => D.Stars.Count;
@@ -142,10 +172,23 @@ namespace BlockPuzzle.Game
         public static bool PlayedDailyToday => D.DailyLastDate == TodayKey;
         public static int DailyBestToday => D.DailyBestDate == TodayKey ? D.DailyBestScore : 0;
 
-        /// <summary>Records a finished daily run. Returns true when it is today's best.</summary>
-        public static bool RecordDaily(int score)
+        /// <summary>
+        /// Records a finished daily run for the puzzle of <paramref name="date"/>. Any day marks the
+        /// calendar; only today's puzzle keeps the streak alive and counts for today's best — a
+        /// missed day can be caught up on, but not back-dated into a streak. Returns true when it
+        /// is today's best.
+        /// </summary>
+        public static bool RecordDaily(DateTime date, int score)
         {
+            MarkPlayed(date);
+            D.DailyGames++;
+
             string today = TodayKey;
+            if (DateKey(date) != today)
+            {
+                Save();
+                return false;
+            }
 
             if (D.DailyLastDate != today)
             {
@@ -153,8 +196,6 @@ namespace BlockPuzzle.Game
                 D.DailyLastDate = today;
                 if (D.DailyStreak > D.DailyBestStreak) D.DailyBestStreak = D.DailyStreak;
             }
-
-            D.DailyGames++;
 
             bool best = D.DailyBestDate != today || score > D.DailyBestScore;
             if (best)
@@ -165,6 +206,45 @@ namespace BlockPuzzle.Game
 
             Save();
             return best;
+        }
+
+        static int MonthKey(int year, int month) => year * 100 + month;
+
+        static void MarkPlayed(DateTime date)
+        {
+            int key = MonthKey(date.Year, date.Month);
+            int i = D.DailyMonths.IndexOf(key);
+            if (i < 0)
+            {
+                D.DailyMonths.Add(key);
+                D.DailyDays.Add(0);
+                i = D.DailyMonths.Count - 1;
+            }
+
+            D.DailyDays[i] |= 1 << (date.Day - 1);
+        }
+
+        public static bool PlayedDaily(DateTime date)
+        {
+            int i = D.DailyMonths.IndexOf(MonthKey(date.Year, date.Month));
+            return i >= 0 && (D.DailyDays[i] & (1 << (date.Day - 1))) != 0;
+        }
+
+        /// <summary>Months in which every day's puzzle was played.</summary>
+        public static int CompletedMonths
+        {
+            get
+            {
+                int count = 0;
+                for (int i = 0; i < D.DailyMonths.Count; i++)
+                {
+                    int key = D.DailyMonths[i];
+                    int days = DateTime.DaysInMonth(key / 100, key % 100);
+                    int full = (int)((1L << days) - 1);
+                    if ((D.DailyDays[i] & full) == full) count++;
+                }
+                return count;
+            }
         }
 
         // ------------------------------------------------------------------ lifetime

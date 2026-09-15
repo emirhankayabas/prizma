@@ -69,6 +69,15 @@ namespace BlockPuzzle.Core
     {
         public const int Empty = -1;
 
+        /// <summary>
+        /// The ice layer value that marks a stone. A stone is a block that counts towards filling
+        /// its row and column but is never cleared by them — only the bomb breaks it. Stored in the
+        /// ice layer so saves, the dealer and the computer player all handle it unchanged.
+        /// </summary>
+        public const int Stone = 9;
+
+        public bool IsStone(int col, int row) => InBounds(col, row) && _ice[col, row] >= Stone;
+
         readonly int[,] _cells;
         readonly bool[,] _gems;
         readonly int[,] _ice;
@@ -459,6 +468,9 @@ namespace BlockPuzzle.Core
 
                 // Ice absorbs the clear: the block stays and only the ice gets thinner. A cell on a
                 // crossing row and column still loses a single layer — it was hit by one move.
+                // Stone takes no hit at all: the line still clears around it. Only the bomb moves it.
+                if (_ice[x, y] >= Stone) continue;
+
                 if (_ice[x, y] > 0)
                 {
                     _ice[x, y]--;

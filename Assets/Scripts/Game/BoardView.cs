@@ -177,7 +177,12 @@ namespace BlockPuzzle.Game
 
                 image.type = Image.Type.Sliced;
 
-                bool glyph = _colorBlind && value != BoardModel.Empty;
+                // A stone is a grey block under a dark frost: no block colour, so it never reads as
+                // part of a single-colour line the player could be building.
+                bool stone = _board.IsStone(col, row);
+                if (stone) image.color = Design.Stone;
+
+                bool glyph = _colorBlind && value != BoardModel.Empty && !stone;
                 _glyphs[col, row].gameObject.SetActive(glyph);
                 if (glyph) _glyphs[col, row].sprite = Art.Glyph(value);
 
@@ -185,7 +190,11 @@ namespace BlockPuzzle.Game
 
                 int ice = _board.IceAt(col, row);
                 _ice[col, row].gameObject.SetActive(ice > 0);
-                if (ice > 0) _ice[col, row].sprite = Art.Ice(ice);
+                if (ice > 0)
+                {
+                    _ice[col, row].sprite = Art.Ice(stone ? 2 : ice);
+                    _ice[col, row].color = stone ? Design.StoneFrost : Design.Ice;
+                }
             }
         }
 

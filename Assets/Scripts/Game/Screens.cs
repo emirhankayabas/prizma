@@ -22,10 +22,10 @@ namespace BlockPuzzle.Game
         public const string GameName = "PRIZMA";
         public const string GameTagline = "BLOK BULMACA";
 
-        const float ShortcutHeight = 184f;
-        const float ModeCardHeight = 300f;
-        const float PlayHeight = 200f;
-        const float BadgeHeight = 120f;
+        const float ShortcutHeight = 216f;
+        const float ModeCardHeight = 340f;
+        const float PlayHeight = 232f;
+        const float BadgeHeight = 136f;
 
         TextMeshProUGUI _best;
         RectTransform _titleGroup;
@@ -43,31 +43,40 @@ namespace BlockPuzzle.Game
             // caption printed on the ground beneath — that caption was the smallest text in the game.
             float shortcutWidth = (Design.ContentWidth - Design.Space3 * 2f) / 3f;
             float shortcutY = cursor + ShortcutHeight * 0.5f;
-            BuildShortcut("Scores", Icons.List, "SKORLAR", -(shortcutWidth + Design.Space3), shortcutY, shortcutWidth,
+            BuildShortcut("Scores", Icons.List, Str.Scores, -(shortcutWidth + Design.Space3), shortcutY, shortcutWidth,
                 () => { Audio.PlayClick(); App.OpenScores(); });
-            BuildShortcut("Stats", Icons.Chart, "İSTATİSTİK", 0f, shortcutY, shortcutWidth,
+            var stats = BuildShortcut("Stats", Icons.Chart, Str.Stats, 0f, shortcutY, shortcutWidth,
                 () => { Audio.PlayClick(); App.OpenStats(); });
-            BuildShortcut("Themes", Icons.Palette, "TEMALAR", shortcutWidth + Design.Space3, shortcutY, shortcutWidth,
+            BuildShortcut("Themes", Icons.Palette, Str.Themes, shortcutWidth + Design.Space3, shortcutY, shortcutWidth,
                 () => { Audio.PlayClick(); App.OpenThemes(); });
+
+            // A quiet mint dot while an achievement tier has been reached and not yet looked at.
+            // Steady, not pulsing: it waits for the player rather than calling them.
+            _achievementDot = UiBuilder.Image(stats.Content, "NewDot", Art.Disc, Design.Mint);
+            _achievementDot.type = Image.Type.Simple;
+            _achievementDot.rectTransform.sizeDelta = new Vector2(Design.Space4 * 0.8f, Design.Space4 * 0.8f);
+            _achievementDot.rectTransform.anchoredPosition = new Vector2(shortcutWidth * 0.5f - Design.Space4, ShortcutHeight * 0.5f - Design.Space4);
             cursor += ShortcutHeight + Design.Space4;
 
             float cardWidth = (Design.ContentWidth - Design.Space4) * 0.5f;
             float cardX = (cardWidth + Design.Space4) * 0.5f;
             float cardY = cursor + ModeCardHeight * 0.5f;
-            _levelNote = BuildModeCard("Adventure", Icons.Flag, Design.TextPrimary, "MACERA", -cardX, cardY, cardWidth, out _,
+            _levelNote = BuildModeCard("Adventure", Icons.Flag, Design.TextPrimary, Str.Adventure, -cardX, cardY, cardWidth, out _,
                 () => { Audio.PlayClick(); App.ShowLevelSelect(); });
-            _dailyNote = BuildModeCard("Daily", Icons.Calendar, Design.Mint, "GÜNLÜK", cardX, cardY, cardWidth, out _dailyIcon,
-                () => { Audio.PlayClick(); App.PlayDaily(); });
+            // The daily card opens its calendar: today is one tap from there, and so are the days missed.
+            _dailyNote = BuildModeCard("Daily", Icons.Calendar, Design.Mint, Str.Daily, cardX, cardY, cardWidth, out _dailyIcon,
+                () => { Audio.PlayClick(); App.OpenDaily(); });
             cursor += ModeCardHeight + Design.Space4;
 
             // The main action spans the page, low on the screen, inside comfortable thumb reach.
             _play = UiBuilder.Button(Root, "Play", new Vector2(Design.ContentWidth, PlayHeight), UiButton.Style.Primary,
-                "OYNA", Design.Title);
+                Str.Play, Design.Title);
             _play.Rect.anchoredPosition = new Vector2(0f, cursor + PlayHeight * 0.5f);
             _play.Clicked += () => { Audio.PlayClick(); App.PlayClassic(); };
+            UiBuilder.TextShadow(_play.Label, 0.3f, -0.35f, 0.3f);
             cursor += PlayHeight;
 
-            var settings = UiBuilder.Button(Root, "Settings", new Vector2(Design.TouchTarget, Design.TouchTarget), UiButton.Style.Icon,
+            var settings = UiBuilder.Button(Root, "Settings", new Vector2(Design.IconButton, Design.IconButton), UiButton.Style.Icon,
                 null, Design.Body, Icons.Gear);
             settings.Rect.anchorMin = settings.Rect.anchorMax = new Vector2(1f, 1f);
             settings.Rect.pivot = new Vector2(1f, 1f);
@@ -76,10 +85,10 @@ namespace BlockPuzzle.Game
 
             // Title, tagline and best score as one block, centred in what is left between the
             // settings button and the play button.
-            const float titleBox = 180f;
-            const float taglineBox = 60f;
+            const float titleBox = 210f;
+            const float taglineBox = 66f;
             float block = titleBox + Design.Space2 + taglineBox + Design.Space5 + BadgeHeight;
-            float top = half - Design.Space2 - Design.TouchTarget;
+            float top = half - Design.Space2 - Design.IconButton;
             float blockTop = (top + cursor) * 0.5f + block * 0.5f;
 
             _titleGroup = UiBuilder.Node(Root, "TitleGroup");
@@ -92,8 +101,8 @@ namespace BlockPuzzle.Game
             title.rectTransform.anchoredPosition = new Vector2(0f, _titleGroup.sizeDelta.y * 0.5f - titleBox * 0.5f);
             UiBuilder.TextShadow(title, 0.4f, -0.3f, 0.45f);
 
-            var tagline = UiBuilder.Label(_titleGroup, "Tagline", GameTagline, Design.Label, Design.TextOnGround,
-                Design.FontMedium, tracking: Design.TrackingLabel);
+            var tagline = UiBuilder.Label(_titleGroup, "Tagline", Str.Tagline, Design.Body, Design.TextOnGround,
+                Design.FontDisplay, tracking: Design.TrackingLabel * 2f);
             tagline.rectTransform.sizeDelta = new Vector2(1000f, taglineBox);
             tagline.rectTransform.anchoredPosition = new Vector2(0f, -_titleGroup.sizeDelta.y * 0.5f + taglineBox * 0.5f);
 
@@ -102,20 +111,43 @@ namespace BlockPuzzle.Game
 
         void BuildBestBadge(float y)
         {
-            var size = new Vector2(500f, BadgeHeight);
+            var size = new Vector2(BadgeWidth, BadgeHeight);
             var badge = UiBuilder.Panel(Root, "BestBadge", size, Design.SurfaceInset, BadgeHeight * 0.5f);
             badge.rectTransform.anchoredPosition = new Vector2(0f, y);
+            _badge = badge.rectTransform;
             UiBuilder.Hairline(badge.rectTransform, "Hairline", size, BadgeHeight * 0.5f);
 
-            var gem = UiBuilder.Image(badge.rectTransform, "Gem", Icons.Gem, Design.Gold);
-            gem.type = Image.Type.Simple;
-            gem.rectTransform.sizeDelta = new Vector2(Design.IconSm, Design.IconSm);
-            gem.rectTransform.anchoredPosition = new Vector2(-150f, 0f);
+            _badgeGem = UiBuilder.Image(badge.rectTransform, "Gem", Icons.Gem, Design.Gold);
+            _badgeGem.type = Image.Type.Simple;
+            _badgeGem.rectTransform.sizeDelta = new Vector2(BadgeGem, BadgeGem);
 
             _best = UiBuilder.Label(badge.rectTransform, "Best", "0", Design.Headline, Design.Gold,
-                Design.FontDisplay, TextAlignmentOptions.Left);
-            _best.rectTransform.sizeDelta = new Vector2(300f, 90f);
-            _best.rectTransform.anchoredPosition = new Vector2(50f, 2f);
+                Design.FontDisplay, TextAlignmentOptions.Center);
+            _best.rectTransform.sizeDelta = new Vector2(BadgeWidth, 100f);
+        }
+
+        const float BadgeWidth = 440f;
+        const float BadgeGem = 80f;
+
+        RectTransform _badge;
+        Image _badgeGem;
+
+        /// <summary>
+        /// Gem and number centred as one group. With the gem pinned to the left, a best score of
+        /// "0" sat alone at one end of a wide empty pill.
+        /// </summary>
+        void LayoutBestBadge()
+        {
+            float text = _best.GetPreferredValues(_best.text).x;
+            float group = BadgeGem + Design.Space2 + text;
+            float width = Mathf.Max(BadgeWidth * 0.62f, group + BadgeHeight);
+
+            _badge.sizeDelta = new Vector2(width, BadgeHeight);
+            foreach (RectTransform child in _badge)
+                if (child.name == "Hairline") child.sizeDelta = _badge.sizeDelta;
+
+            _badgeGem.rectTransform.anchoredPosition = new Vector2(-group * 0.5f + BadgeGem * 0.5f, 0f);
+            _best.rectTransform.anchoredPosition = new Vector2(-group * 0.5f + BadgeGem + Design.Space2 + text * 0.5f, 3f);
         }
 
         /// <summary>A tall secondary button: an icon, the mode's name, and one line of status under it.</summary>
@@ -130,20 +162,22 @@ namespace BlockPuzzle.Game
             iconImage = UiBuilder.Image(card.Content, "Icon", icon, iconColor);
             iconImage.type = Image.Type.Simple;
             iconImage.rectTransform.sizeDelta = new Vector2(Design.IconMd, Design.IconMd);
-            iconImage.rectTransform.anchoredPosition = new Vector2(0f, 76f);
+            iconImage.rectTransform.anchoredPosition = new Vector2(0f, 86f);
 
             var title = UiBuilder.Label(card.Content, "Label", label, Design.Headline, Design.TextPrimary, Design.FontDisplay);
-            title.rectTransform.sizeDelta = new Vector2(size.x, 80f);
-            title.rectTransform.anchoredPosition = new Vector2(0f, -14f);
+            title.rectTransform.sizeDelta = new Vector2(size.x, 90f);
+            title.rectTransform.anchoredPosition = new Vector2(0f, -18f);
 
             var note = UiBuilder.Label(card.Content, "Note", "", Design.Caption, Design.TextSecondary,
-                Design.FontMedium, tracking: Design.TrackingLabel * 0.5f);
-            note.rectTransform.sizeDelta = new Vector2(size.x - Design.Space3, 56f);
-            note.rectTransform.anchoredPosition = new Vector2(0f, -86f);
+                Design.FontDisplay, tracking: Design.TrackingLabel * 0.5f);
+            note.rectTransform.sizeDelta = new Vector2(size.x - Design.Space3, 60f);
+            note.rectTransform.anchoredPosition = new Vector2(0f, -98f);
             return note;
         }
 
-        void BuildShortcut(string name, Sprite icon, string caption, float x, float y, float width, System.Action onClick)
+        Image _achievementDot;
+
+        UiButton BuildShortcut(string name, Sprite icon, string caption, float x, float y, float width, System.Action onClick)
         {
             var size = new Vector2(width, ShortcutHeight);
             var button = UiBuilder.Button(Root, name, size, UiButton.Style.Secondary, null, Design.Body);
@@ -152,33 +186,36 @@ namespace BlockPuzzle.Game
 
             var glyph = UiBuilder.Image(button.Content, "Icon", icon, Design.TextPrimary);
             glyph.type = Image.Type.Simple;
-            glyph.rectTransform.sizeDelta = new Vector2(68f, 68f);
-            glyph.rectTransform.anchoredPosition = new Vector2(0f, 30f);
+            glyph.rectTransform.sizeDelta = new Vector2(Design.IconMd * 0.8f, Design.IconMd * 0.8f);
+            glyph.rectTransform.anchoredPosition = new Vector2(0f, 36f);
 
-            var label = UiBuilder.Label(button.Content, "Caption", caption, Design.Caption, Design.TextSecondary,
-                Design.FontDisplay, tracking: Design.TrackingLabel * 0.3f);
-            label.rectTransform.sizeDelta = new Vector2(width - Design.Space2, 56f);
-            label.rectTransform.anchoredPosition = new Vector2(0f, -48f);
+            var label = UiBuilder.Label(button.Content, "Caption", caption, Design.Caption, Design.TextPrimary,
+                Design.FontDisplay);
+            label.rectTransform.sizeDelta = new Vector2(width - Design.Space2, 60f);
+            label.rectTransform.anchoredPosition = new Vector2(0f, -58f);
+            return button;
         }
 
         protected override void OnShow()
         {
             _best.text = HighScores.Best.ToString();
+            LayoutBestBadge();
 
             // A run left mid-way is waiting: the main button says so.
-            _play.Label.text = RunStore.Has(GameMode.Classic) ? "DEVAM ET" : "OYNA";
+            _play.Label.text = RunStore.Has(GameMode.Classic) ? Str.Continue : Str.Play;
+            _achievementDot.gameObject.SetActive(Progress.HasUnseenAchievements);
 
-            _levelNote.text = $"BÖLÜM {Progress.UnlockedLevel}";
+            _levelNote.text = Str.LevelN(Progress.UnlockedLevel);
 
             int streak = Progress.DailyStreak;
             if (Progress.PlayedDailyToday)
             {
-                _dailyNote.text = $"{streak} GÜN SERİ";
+                _dailyNote.text = Str.DayStreak(streak);
                 _dailyNote.color = Design.Gold;
             }
             else
             {
-                _dailyNote.text = streak > 0 ? $"SERİ {streak} · BUGÜN?" : "YENİ BULMACA";
+                _dailyNote.text = streak > 0 ? Str.StreakToday(streak) : Str.NewPuzzle;
                 _dailyNote.color = Design.TextSecondary;
             }
 
@@ -204,10 +241,18 @@ namespace BlockPuzzle.Game
     {
         public override bool IsModal => true;
 
-        const float ToggleRow = 150f;
-        const float SliderRow = 216f;
-        const float ToggleWidth = 184f;
-        const float ToggleHeight = 104f;
+        // Five switch rows since the language joined; trimmed so the card still fits a 16:9 page.
+        const float ToggleRow = 152f;
+        const float SliderRow = 226f;
+        const float LanguageButtonWidth = 300f;
+        const float ToggleWidth = 212f;
+        const float ToggleHeight = 118f;
+
+        /// <summary>
+        /// The visible slider track. It was 26 units — a 9dp hairline with a knob to match — which
+        /// is a system settings slider, not something a thumb finds without looking.
+        /// </summary>
+        const float SliderTrack = 36f;
 
         UiSlider _music;
         UiSlider _sfx;
@@ -223,15 +268,26 @@ namespace BlockPuzzle.Game
 
         protected override void Build()
         {
-            float body = ToggleRow * 3f + SliderRow * 2f;
+            float body = ToggleRow * 4f + SliderRow * 2f;
             var size = new Vector2(Design.ContentWidth, ModalCard.HeightFor(body, Design.ButtonLg));
-            ModalCard.Build(Root, "Ayarlar", size, out var content);
+            ModalCard.Build(Root, Str.Settings, size, out var content);
             _inner = ModalCard.InnerWidth(size);
 
             float y = ModalCard.ContentTop(size);
 
-            // Master mute first: it is the control someone reaches for in a hurry.
-            _muteIcon = BuildToggleRow(content, "Mute", "SESİ KAPAT", Icons.SpeakerMuted, ref y, GameSettings.Muted, out _mute);
+            // Language first: a player who cannot read the current one must not have to hunt for it.
+            // The button names the other language in that language, and switching rebuilds the interface.
+            float languageY = y - ToggleRow * 0.5f;
+            BuildLabelRow(content, "Language", Str.LanguageLabel, Icons.List, languageY, track: false);
+            var other = GameSettings.Language == Language.Turkish ? Language.English : Language.Turkish;
+            var language = UiBuilder.Button(content, "LanguageButton", new Vector2(LanguageButtonWidth, Design.TouchTarget - Design.Space2),
+                UiButton.Style.Secondary, Str.LanguageName(other), Design.Label);
+            language.Rect.anchoredPosition = new Vector2(_inner * 0.5f - LanguageButtonWidth * 0.5f, languageY);
+            language.Clicked += () => { Audio.PlayClick(); App.SetLanguage(other); };
+            y -= ToggleRow;
+
+            // Master mute next: it is the control someone reaches for in a hurry.
+            _muteIcon = BuildToggleRow(content, "Mute", Str.Mute, Icons.SpeakerMuted, ref y, GameSettings.Muted, out _mute);
             _mute.ValueChanged += v =>
             {
                 GameSettings.Muted = v;
@@ -239,25 +295,25 @@ namespace BlockPuzzle.Game
                 Audio.PlayClick(); // silent when muting, audible when unmuting
             };
 
-            _music = BuildSliderRow(content, "Music", "MÜZİK", Icons.Speaker, ref y, GameSettings.MusicVolume);
+            _music = BuildSliderRow(content, "Music", Str.Music, Icons.Speaker, ref y, GameSettings.MusicVolume);
             _music.ValueChanged += v => GameSettings.MusicVolume = v;
 
-            _sfx = BuildSliderRow(content, "Sfx", "EFEKTLER", Icons.Speaker, ref y, GameSettings.SfxVolume);
+            _sfx = BuildSliderRow(content, "Sfx", Str.Effects, Icons.Speaker, ref y, GameSettings.SfxVolume);
             _sfx.ValueChanged += v =>
             {
                 GameSettings.SfxVolume = v;
                 Audio.PlayClick(); // immediate feedback at the new level
             };
 
-            BuildToggleRow(content, "Haptic", "TİTREŞİM", Icons.Vibrate, ref y, GameSettings.Haptics, out _haptics);
+            BuildToggleRow(content, "Haptic", Str.Vibration, Icons.Vibrate, ref y, GameSettings.Haptics, out _haptics);
             _haptics.ValueChanged += v => { GameSettings.Haptics = v; Audio.PlayClick(); };
 
             // Colour-blind mode marks every block colour with its own small shape.
-            BuildToggleRow(content, "ColorBlind", "RENK KÖRÜ MODU", Icons.Palette, ref y, Progress.ColorBlind, out _colorBlind);
+            BuildToggleRow(content, "ColorBlind", Str.ColorBlind, Icons.Palette, ref y, Progress.ColorBlind, out _colorBlind);
             _colorBlind.ValueChanged += v => { Progress.ColorBlind = v; Audio.PlayClick(); };
 
             var close = UiBuilder.Button(content, "Close", new Vector2(_inner, Design.ButtonLg), UiButton.Style.Primary,
-                "TAMAM", Design.Headline);
+                Str.Ok, Design.Headline);
             close.Clicked += () => { Audio.PlayClick(); App.CloseModal(); };
 
             ModalCard.StackFromBottom(content, Design.Space3, close.Rect);
@@ -280,14 +336,16 @@ namespace BlockPuzzle.Game
         {
             float left = -_inner * 0.5f;
 
-            var glyph = UiBuilder.Image(parent, name + "Icon", icon, Design.TextTertiary);
+            var glyph = UiBuilder.Image(parent, name + "Icon", icon, Design.TextSecondary);
             glyph.type = Image.Type.Simple;
             glyph.rectTransform.sizeDelta = new Vector2(Design.IconSm, Design.IconSm);
             glyph.rectTransform.anchoredPosition = new Vector2(left + Design.IconSm * 0.5f, y);
 
+            // Bold white, like every other word the game says — the medium weight at 70% white
+            // was the one place the game looked like a phone's settings app.
             const float textWidth = 560f;
-            var text = UiBuilder.Label(parent, name + "Label", label, Design.Label, Design.TextSecondary,
-                Design.FontMedium, TextAlignmentOptions.Left, Design.TrackingLabel);
+            var text = UiBuilder.Label(parent, name + "Label", label, Design.Label, Design.TextPrimary,
+                Design.FontDisplay, TextAlignmentOptions.Left, Design.TrackingLabel * 0.5f);
             text.rectTransform.sizeDelta = new Vector2(textWidth, 70f);
             text.rectTransform.anchoredPosition = new Vector2(left + Design.IconSm + Design.Space3 + textWidth * 0.5f, y);
 
@@ -308,8 +366,8 @@ namespace BlockPuzzle.Game
             BuildLabelRow(parent, name, label, icon, y - 56f);
 
             // The knob overhangs the track by half its size at either end; inset so it stays inside the card.
-            var slider = UiSlider.Create(parent, name + "Slider", _inner - 64f, 26f, value);
-            slider.Rect.anchoredPosition = new Vector2(0f, y - 152f);
+            var slider = UiSlider.Create(parent, name + "Slider", _inner - SliderTrack * 2.6f, SliderTrack, value);
+            slider.Rect.anchoredPosition = new Vector2(0f, y - 158f);
 
             y -= SliderRow;
             return slider;
@@ -349,23 +407,23 @@ namespace BlockPuzzle.Game
         {
             float stack = Design.ButtonMd * 3f + Design.Space3 * 3f;
             var size = new Vector2(Design.ContentWidth, ModalCard.HeightFor(0f, Design.ButtonLg + stack, gap: 0f));
-            ModalCard.Build(Root, "Duraklatıldı", size, out var content);
+            ModalCard.Build(Root, Str.Paused, size, out var content);
             float inner = ModalCard.InnerWidth(size);
 
             var resume = UiBuilder.Button(content, "Resume", new Vector2(inner, Design.ButtonLg), UiButton.Style.Primary,
-                "DEVAM ET", Design.Headline);
+                Str.Continue, Design.Headline);
             resume.Clicked += () => { Audio.PlayClick(); App.CloseModal(); };
 
             var restart = UiBuilder.Button(content, "Restart", new Vector2(inner, Design.ButtonMd), UiButton.Style.Secondary,
-                "YENİDEN BAŞLA", Design.Body);
+                Str.Restart, Design.Body);
             restart.Clicked += () => { Audio.PlayClick(); App.RestartRun(); };
 
             var settings = UiBuilder.Button(content, "Settings", new Vector2(inner, Design.ButtonMd), UiButton.Style.Secondary,
-                "AYARLAR", Design.Body);
+                Str.SettingsButton, Design.Body);
             settings.Clicked += () => { Audio.PlayClick(); App.OpenSettings(); };
 
             var quit = UiBuilder.Button(content, "Quit", new Vector2(inner, Design.ButtonMd), UiButton.Style.Secondary,
-                "ANA SAYFAYA DÖN", Design.Body);
+                Str.Home, Design.Body);
             quit.Clicked += () => { Audio.PlayClick(); App.LeaveRun(); };
 
             ModalCard.StackFromBottom(content, Design.Space3, resume.Rect, restart.Rect, settings.Rect, quit.Rect);
@@ -377,7 +435,7 @@ namespace BlockPuzzle.Game
     {
         public override bool IsModal => true;
 
-        const float PreferredRow = 108f;
+        const float PreferredRow = 122f;
 
         float _rowHeight;
         RectTransform _list;
@@ -389,19 +447,19 @@ namespace BlockPuzzle.Game
             _rowHeight = ModalCard.FitRows(App.PageHeight, HighScores.Capacity, PreferredRow, Design.ButtonLg);
 
             var size = new Vector2(Design.ContentWidth, ModalCard.HeightFor(_rowHeight * HighScores.Capacity, Design.ButtonLg));
-            ModalCard.Build(Root, "En İyi Skorlar", size, out var content);
+            ModalCard.Build(Root, Str.BestScores, size, out var content);
 
             _list = UiBuilder.Node(content, "List");
             _list.sizeDelta = new Vector2(ModalCard.InnerWidth(size), _rowHeight * HighScores.Capacity);
             _list.anchoredPosition = new Vector2(0f, ModalCard.ContentTop(size) - _list.sizeDelta.y * 0.5f);
 
-            _empty = UiBuilder.Label(content, "Empty", "Henüz skor yok.\nİlk oyununu oyna.",
+            _empty = UiBuilder.Label(content, "Empty", Str.NoScores,
                 Design.Body, Design.TextTertiary, Design.FontBody);
             _empty.rectTransform.sizeDelta = new Vector2(ModalCard.InnerWidth(size), 240f);
             _empty.rectTransform.anchoredPosition = _list.anchoredPosition;
 
             var close = UiBuilder.Button(content, "Close", new Vector2(ModalCard.InnerWidth(size), Design.ButtonLg), UiButton.Style.Primary,
-                "KAPAT", Design.Headline);
+                Str.Close, Design.Headline);
             close.Clicked += () => { Audio.PlayClick(); App.CloseModal(); };
 
             ModalCard.StackFromBottom(content, Design.Space3, close.Rect);

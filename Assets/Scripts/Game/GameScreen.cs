@@ -45,13 +45,13 @@ namespace BlockPuzzle.Game
             public readonly float GapBottom;
             public readonly float PageHeight;
 
-            const float HudWant = 500f, HudMin = 400f;
+            const float HudWant = GameHud.FullHeight, HudMin = 420f;
             const float GapTopWant = 24f, GapTopMin = 8f;
-            const float GapMidWant = 36f, GapMidMin = 16f;
+            const float GapMidWant = 32f, GapMidMin = 16f;
             const float GapLowWant = 12f, GapLowMin = 4f;
-            const float TrayWant = 360f, TrayMin = 300f, TrayMax = 440f;
+            const float TrayWant = 380f, TrayMin = 300f, TrayMax = 480f;
             const float BoardMin = 760f;
-            const float PowerHeight = 150f;
+            const float PowerHeight = 172f;
 
             PlayLayout(float page, float hud, float gapTop, float board, float gapMid, float gapLow, float tray, float gapBottom)
             {
@@ -201,7 +201,7 @@ namespace BlockPuzzle.Game
 
             _hand = UiBuilder.Image(Root, "TutorialHand", Icons.Hand, Color.white);
             _hand.type = Image.Type.Simple;
-            _hand.rectTransform.sizeDelta = new Vector2(180f, 180f);
+            _hand.rectTransform.sizeDelta = new Vector2(200f, 200f);
             // The fingertip, not the middle of the glyph, is what lands on the target.
             _hand.rectTransform.pivot = new Vector2(0.45f, 0.94f);
             _hand.gameObject.AddComponent<Canvas>();
@@ -337,7 +337,7 @@ namespace BlockPuzzle.Game
             _tray.Refresh(session);
 
             _displayedScore = session.Score;
-            _hud.Bind(session);
+            _hud.Bind(session, App.DailyDate);
             _hud.Refresh(_displayedScore);
 
             _result.Hide();
@@ -755,8 +755,8 @@ namespace BlockPuzzle.Game
             };
             _resultSecondary = () => _session.Concede();
 
-            _result.Show(this, "Hamle Bitti", left.ToString(), $"{PowerRules.ExtraMovesCost} ŞARJ", Design.Prism, Art.Crystal,
-                -1, $"+{PowerRules.ExtraMoves} HAMLE", "BİTİR");
+            _result.Show(this, Str.OutOfMovesTitle, left.ToString(), Str.Charges(PowerRules.ExtraMovesCost), Design.Prism, Art.Crystal,
+                -1, Str.PlusMoves(PowerRules.ExtraMoves), Str.End);
             Audio.PlayStuck();
             SaveRun();
         }
@@ -785,22 +785,34 @@ namespace BlockPuzzle.Game
 
                     _resultPrimary = () => App.PlayLevel(n);
                     _resultSecondary = App.ShowLevelSelect;
-                    _result.Show(this, $"Bölüm {n}", left.ToString(),
-                        outOfMoves ? "HAMLE BİTTİ" : "YER KALMADI", Design.PreviewTint(3), GoalSprite(session.Level.Goal),
-                        -1, "TEKRAR DENE", "HARİTA");
+                    _result.Show(this, Str.LevelTitle(n), left.ToString(),
+                        outOfMoves ? Str.NoMovesLeft : Str.NoRoom, Design.PreviewTint(3), GoalSprite(session.Level.Goal),
+                        -1, Str.TryAgain, Str.Map);
                     Audio.PlayGameOver();
                     break;
                 }
 
                 case GameMode.Daily:
                 {
-                    bool best = Progress.RecordDaily(session.Score);
+                    var date = App.DailyDate;
+                    bool today = date.Date == DateTime.Now.Date;
+                    bool best = Progress.RecordDaily(date, session.Score);
                     int streak = Progress.DailyStreak;
+                    int score = session.Score;
 
-                    _resultPrimary = () => App.PlayDaily(fresh: true);
+                    _resultPrimary = () => App.PlayDaily(date, fresh: true);
                     _resultSecondary = App.ShowMenu;
-                    _result.Show(this, best ? "Bugünün Rekoru" : "Günlük Bulmaca", session.Score.ToString(),
-                        $"{streak} GÜN SERİ", Design.Gold, Icons.Flame, -1, "TEKRAR OYNA", "ANA MENÜ");
+
+                    // A catch-up day has no streak to show; its card names the day instead.
+                    string title = today && best ? Str.TodaysBest : Str.DailyPuzzle;
+                    string note = today ? Str.DayStreak(streak) : Str.Upper(Str.LongDate(date));
+                    _result.Show(this, title, score.ToString(), note, Design.Gold, today ? Icons.Flame : Icons.Calendar, -1,
+                        Str.PlayAgain, Str.MainMenu, null,
+                        () =>
+                        {
+                            Audio.PlayClick();
+                            ShareSheet.ShareText(Str.ShareText(date, score, today ? streak : 0, ShareSheet.StoreLink), Str.Share);
+                        });
 
                     if (best) Audio.PlayFanfare();
                     else Audio.PlayGameOver();
@@ -813,14 +825,14 @@ namespace BlockPuzzle.Game
                     string note;
                     Color color;
 
-                    if (rank == 1) { note = "YENİ REKOR"; color = Design.Gold; Audio.PlayFanfare(); }
-                    else if (rank > 1) { note = $"{rank}. SIRA"; color = Design.Mint; Audio.PlayGameOver(); }
-                    else { note = $"{session.LinesCleared} SATIR"; color = Design.TextTertiary; Audio.PlayGameOver(); }
+                    if (rank == 1) { note = Str.NewRecord; color = Design.Gold; Audio.PlayFanfare(); }
+                    else if (rank > 1) { note = Str.Rank(rank); color = Design.Mint; Audio.PlayGameOver(); }
+                    else { note = Str.Lines(session.LinesCleared); color = Design.TextTertiary; Audio.PlayGameOver(); }
 
                     _resultPrimary = () => App.PlayClassic(fresh: true);
                     _resultSecondary = App.ShowMenu;
-                    _result.Show(this, "Oyun Bitti", session.Score.ToString(), note, color, null, -1,
-                        "TEKRAR OYNA", "ANA MENÜ");
+                    _result.Show(this, Str.GameOver, session.Score.ToString(), note, color, null, -1,
+                        Str.PlayAgain, Str.MainMenu);
                     break;
                 }
             }
@@ -853,14 +865,14 @@ namespace BlockPuzzle.Game
             // A theme crossing its star threshold is news worth the note line; otherwise the moves saved.
             if (unlocked != null)
             {
-                _result.Show(this, $"Bölüm {n}", session.Score.ToString(),
-                    "YENİ TEMA: " + unlocked.Name.ToUpper(new System.Globalization.CultureInfo("tr-TR")),
-                    Design.Gold, Icons.Palette, stars, "SONRAKİ", "HARİTA", i => Audio.PlayStar(i));
+                _result.Show(this, Str.LevelTitle(n), session.Score.ToString(),
+                    Str.NewTheme(unlocked.Name),
+                    Design.Gold, Icons.Palette, stars, Str.Next, Str.Map, i => Audio.PlayStar(i));
             }
             else
             {
-                _result.Show(this, $"Bölüm {n}", session.Score.ToString(),
-                    $"{session.MovesLeft} HAMLE ARTTI", Design.Mint, Icons.Check, stars, "SONRAKİ", "HARİTA",
+                _result.Show(this, Str.LevelTitle(n), session.Score.ToString(),
+                    Str.MovesSaved(session.MovesLeft), Design.Mint, Icons.Check, stars, Str.Next, Str.Map,
                     i => Audio.PlayStar(i));
             }
 

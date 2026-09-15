@@ -176,10 +176,32 @@ namespace BlockPuzzle.Core
             float iceChance = number >= 6 ? 0.10f + 0.32f * t : 0f;
             float doubleIce = number >= 30 ? 0.25f * t : 0f;
 
+            // Stone arrives at level 21 as a new obstacle wave: a few cells that fill their lines but
+            // never leave them. At most one per row and column, so no line is ever made of stone.
+            int stones = number >= 21 ? 1 + (int)Math.Round(3 * t) : 0;
+            var stoneRows = new bool[BoardSize];
+            var stoneCols = new bool[BoardSize];
+            var stoneAt = new bool[BoardSize, BoardSize];
+            for (int tries = 0; stones > 0 && cells.Count > 0 && tries < 40; tries++)
+            {
+                var (sx, sy) = cells[rng.Next(cells.Count)];
+                if (gems[sx, sy] || stoneRows[sy] || stoneCols[sx]) continue;
+                stoneAt[sx, sy] = stoneRows[sy] = stoneCols[sx] = true;
+                stones--;
+            }
+
             foreach (var (x, y) in cells)
             {
                 int ice = 0;
-                if (rng.Chance(iceChance)) ice = rng.Chance(doubleIce) ? 2 : 1;
+                if (stoneAt[x, y])
+                {
+                    ice = BoardModel.Stone;
+                }
+                else if (rng.Chance(iceChance))
+                {
+                    ice = rng.Chance(doubleIce) ? 2 : 1;
+                }
+
                 def.Prefill.Add(new PrefillCell(x, y, colours[x, y], gems[x, y], ice));
             }
 

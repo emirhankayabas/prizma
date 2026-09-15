@@ -15,11 +15,19 @@ namespace BlockPuzzle.Game
     /// </summary>
     public sealed class PowerBar
     {
-        const float MeterWidth = 300f;
-        const float TrackWidth = 250f;
-        const float TrackHeight = 16f;
-        const float CrystalSize = 72f;
+        const float MeterWidth = 320f;
+        const float TrackWidth = 272f;
+        const float TrackHeight = 22f;
+        const float CrystalSize = 88f;
+        const float CrystalStep = 98f;
         const float ButtonGap = 24f;
+
+        /// <summary>
+        /// The cost dots under a power's glyph. They were 16 units — 5dp, the size of a speck on
+        /// the glass — for the one number that decides whether the player can afford the power.
+        /// </summary>
+        const float PipSize = 24f;
+        const float PipStep = 34f;
 
         float _buttonWidth;
 
@@ -57,12 +65,12 @@ namespace BlockPuzzle.Game
                 var crystal = UiBuilder.Image(_meter, $"Charge{i}", Art.Crystal, Design.Prism);
                 crystal.type = Image.Type.Simple;
                 crystal.rectTransform.sizeDelta = new Vector2(CrystalSize, CrystalSize);
-                crystal.rectTransform.anchoredPosition = new Vector2((i - 1) * 86f, 20f);
+                crystal.rectTransform.anchoredPosition = new Vector2((i - 1) * CrystalStep, 22f);
                 _crystals[i] = crystal;
             }
 
             var track = UiBuilder.Panel(_meter, "Track", new Vector2(TrackWidth, TrackHeight), Design.SurfaceTrack, TrackHeight * 0.5f);
-            track.rectTransform.anchoredPosition = new Vector2(0f, -44f);
+            track.rectTransform.anchoredPosition = new Vector2(0f, -54f);
 
             _meterFill = UiBuilder.Image(track.rectTransform, "Fill", Art.Panel(TrackHeight * 0.5f), Design.Prism);
             _meterFill.rectTransform.anchorMin = _meterFill.rectTransform.anchorMax = new Vector2(0f, 0.5f);
@@ -70,7 +78,7 @@ namespace BlockPuzzle.Game
             _meterFill.rectTransform.sizeDelta = new Vector2(0f, TrackHeight);
 
             _end = UiBuilder.Button(_root, "End", new Vector2(MeterWidth - 16f, height - 12f), UiButton.Style.Secondary,
-                "BİTİR", Design.Body);
+                Str.End, Design.Body);
             _end.Rect.anchoredPosition = _meter.anchoredPosition;
             _end.Clicked += () => EndClicked?.Invoke();
             _end.gameObject.SetActive(false);
@@ -88,7 +96,7 @@ namespace BlockPuzzle.Game
             var button = UiBuilder.Button(_root, kind.ToString(), new Vector2(_buttonWidth, height - 6f),
                 UiButton.Style.Icon, null, Design.Body, icon);
             button.Rect.anchoredPosition = new Vector2(x, 0f);
-            button.Icon.rectTransform.anchoredPosition = new Vector2(0f, 12f);
+            button.Icon.rectTransform.anchoredPosition = new Vector2(0f, 16f);
             button.Clicked += () => PowerClicked?.Invoke(kind);
 
             // The price in dots under the glyph, so cost is read the same way charges are.
@@ -97,8 +105,8 @@ namespace BlockPuzzle.Game
             {
                 var pip = UiBuilder.Image(button.Rect, "Cost" + i, Art.Disc, Design.Prism);
                 pip.type = Image.Type.Simple;
-                pip.rectTransform.sizeDelta = new Vector2(16f, 16f);
-                pip.rectTransform.anchoredPosition = new Vector2((i - (cost - 1) * 0.5f) * 26f, -46f);
+                pip.rectTransform.sizeDelta = new Vector2(PipSize, PipSize);
+                pip.rectTransform.anchoredPosition = new Vector2((i - (cost - 1) * 0.5f) * PipStep, -height * 0.5f + PipSize + 8f);
             }
 
             return button;
