@@ -110,7 +110,6 @@ namespace BlockPuzzle.Game
         public static string NoRoom => T("YER KALMADI", "NO ROOM LEFT");
         public static string TryAgain => T("TEKRAR DENE", "TRY AGAIN");
         public static string Map => T("HARİTA", "MAP");
-        public static string TodaysBest => T("Bugünün Rekoru", "Today's Best");
         public static string DailyPuzzle => T("Günlük Bulmaca", "Daily Puzzle");
         public static string PlayAgain => T("TEKRAR OYNA", "PLAY AGAIN");
         public static string MainMenu => T("ANA MENÜ", "MAIN MENU");
@@ -147,29 +146,150 @@ namespace BlockPuzzle.Game
             ? $"{MonthsEn[date.Month - 1]} {date.Day}"
             : $"{date.Day} {MonthsTr[date.Month - 1]}";
 
-        public static string MonthHeading(int year, int month) => $"{MonthName(month)} {year}";
 
         /// <summary>Monday first in both languages, as both regions count the week.</summary>
         public static string[] Weekdays => Current == Language.English
             ? new[] { "M", "T", "W", "T", "F", "S", "S" }
             : new[] { "Pt", "Sa", "Ça", "Pe", "Cu", "Ct", "Pz" };
 
-        // ------------------------------------------------------------------ daily calendar and sharing
+        // ------------------------------------------------------------------ the daily puzzle
 
-        public static string PlayToday => T("BUGÜNÜ OYNA", "PLAY TODAY");
-        public static string ContinueToday => T("BUGÜNE DEVAM ET", "CONTINUE TODAY");
-        public static string PlayedToday => T("BUGÜN OYNANDI", "PLAYED TODAY");
-        public static string DailyOn(DateTime date) => T($"Günlük · {LongDate(date)}", $"Daily · {LongDate(date)}");
-        public static string DailyScore(int score) => T($"{score} PUAN", $"{score} POINTS");
+        /// <summary>Short on purpose: it heads the daily card beside its close button, and the result card.</summary>
+        public static string DailyTitle(int number) => T($"Bulmaca #{number}", $"Puzzle #{number}");
+        public static string TodayTab => T("BUGÜN", "TODAY");
+        public static string BadgesTab => T("ROZETLER", "BADGES");
+        public static string StartPuzzle => T("BAŞLA", "START");
+        public static string Solved => T("ÇÖZÜLDÜ", "SOLVED");
         public static string Share => T("PAYLAŞ", "SHARE");
+        public static string StreakWord => T("GÜN SERİ", "DAY STREAK");
+        public static string BestStreak(int n) => T($"EN İYİ {n}", $"BEST {n}");
+        public static string Attempt(int n) => T($"{n}. DENEME", $"ATTEMPT {n}");
+        public static string TimeLabel => T("SÜRE", "TIME");
+        public static string MovesLabel => T("HAMLE", "MOVES");
+        public static string AttemptsLabel => T("DENEME", "TRIES");
+        public static string StarsLabel => T("YILDIZ", "STARS");
+        public static string Earned => T("KAZANILDI", "EARNED");
+        public static string NextPuzzleIn(string time) => T($"YENİ BULMACA  {time}", $"NEXT PUZZLE  {time}");
 
-        public static string ShareText(DateTime date, int score, int streak, string link)
+        public static string Grade(int grade)
         {
-            string line1 = T($"PRIZMA Günlük · {LongDate(date)}", $"PRIZMA Daily · {LongDate(date)}");
-            string line2 = T($"⭐ {score} puan", $"⭐ {score} points") +
-                           (streak > 0 ? T($" · 🔥 {streak} gün seri", $" · 🔥 {streak} day streak") : "");
-            string line3 = T("Sen kaç yapabilirsin?", "Can you beat it?");
-            return $"{line1}\n{line2}\n{line3}\n{link}";
+            switch (grade)
+            {
+                case 0: return T("KOLAY", "EASY");
+                case 1: return T("ORTA", "MEDIUM");
+                case 2: return T("ZOR", "HARD");
+                default: return T("ÇOK ZOR", "EXPERT");
+            }
+        }
+
+        static readonly string[] DaysTr = { "PAZAR", "PAZARTESİ", "SALI", "ÇARŞAMBA", "PERŞEMBE", "CUMA", "CUMARTESİ" };
+        static readonly string[] DaysEn = { "SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY" };
+
+        public static string DayName(DayOfWeek day) => (Current == Language.English ? DaysEn : DaysTr)[(int)day];
+
+        /// <summary>"12 KRİSTAL" / "8 SATIR" — what the day's puzzle asks for.</summary>
+        public static string GoalText(Core.GoalKind goal, int target) => goal == Core.GoalKind.Lines
+            ? T($"{target} SATIR", $"{target} LINES")
+            : T($"{target} KRİSTAL", $"{target} CRYSTALS");
+
+        /// <summary>"1:42", or "1:02:05" past an hour.</summary>
+        public static string Clock(float seconds)
+        {
+            int total = Math.Max(0, (int)seconds);
+            int h = total / 3600, m = total / 60 % 60, s = total % 60;
+            return h > 0 ? $"{h}:{m:00}:{s:00}" : $"{m}:{s:00}";
+        }
+
+        /// <summary>A countdown, always with hours: "07:12:44".</summary>
+        public static string Countdown(TimeSpan span)
+        {
+            if (span < TimeSpan.Zero) span = TimeSpan.Zero;
+            return $"{(int)span.TotalHours:00}:{span.Minutes:00}:{span.Seconds:00}";
+        }
+
+        public static string NewBadge(string name) => T("YENİ ROZET: ", "NEW BADGE: ") + Upper(name);
+
+        public static string ShareText(int number, float seconds, int stars, int attempts, int streak, string link)
+        {
+            string starRow = new string('★', Math.Max(0, stars)) + new string('☆', Math.Max(0, 3 - stars));
+            string line1 = T($"PRIZMA · Günün Bulmacası #{number}", $"PRIZMA · Daily Puzzle #{number}");
+            string line2 = $"⏱ {Clock(seconds)}  {starRow}  " +
+                           (attempts <= 1 ? T("ilk denemede", "first try") : T($"{attempts}. denemede", $"{attempts} tries"));
+            string line3 = streak > 0 ? T($"🔥 {streak} gün seri", $"🔥 {streak}-day streak") : "";
+            string line4 = T("Sen kaç dakikada çözersin?", "How fast can you solve it?");
+            return string.Join("\n", new[] { line1, line2, line3, line4, link }).Replace("\n\n", "\n");
+        }
+
+        // ------------------------------------------------------------------ reminder
+
+        public static string ReminderLabel => T("HATIRLATICI", "REMINDER");
+        public static string ReminderAt(int minute) => T($"HER GÜN {minute / 60:00}:{minute % 60:00}", $"DAILY AT {minute / 60:00}:{minute % 60:00}");
+        public static string ReminderAfterSolve => T("İLK ÇÖZÜMDEN SONRA", "AFTER YOUR FIRST SOLVE");
+        public static string ReminderAskTitle => T("Hatırlatayım mı?", "Want a reminder?");
+
+        public static string ReminderAskBody(int minute) => T(
+            $"Yarın saat {minute / 60:00}:{minute % 60:00} olunca\nyeni bulmacayı haber vereyim.",
+            $"I'll let you know tomorrow at {minute / 60:00}:{minute % 60:00}\nwhen the new puzzle is ready.");
+
+        public static string RemindMe => T("HATIRLAT", "REMIND ME");
+        public static string NotNow => T("ŞİMDİ DEĞİL", "NOT NOW");
+        public static string ReminderTitle => "PRIZMA";
+        public static string ReminderChannel => T("Günlük bulmaca", "Daily puzzle");
+
+        public static string ReminderBody(int day, bool streak) => streak
+            ? T($"🔥 {day}. gün seni bekliyor — serini sürdür!", $"🔥 Day {day} is waiting — keep your streak alive!")
+            : T("Günün bulmacası hazır. Hadi çöz!", "Today's puzzle is ready. Can you solve it?");
+
+        public static string ReminderFollowUp => T("Yeni bir bulmaca seni bekliyor.", "A new puzzle is waiting for you.");
+
+        // ------------------------------------------------------------------ badges
+
+        public static string BadgeName(string id)
+        {
+            switch (id)
+            {
+                case "first": return T("İlk Işık", "First Light");
+                case "streak3": return T("Kıvılcım", "Spark");
+                case "streak7": return T("Tam Hafta", "Full Week");
+                case "streak14": return T("Alev", "Blaze");
+                case "streak30": return T("Ateş Topu", "Fireball");
+                case "streak100": return T("Efsane", "Legend");
+                case "solves10": return T("Düzenli", "Regular");
+                case "solves50": return T("Müdavim", "Devotee");
+                case "firsttry": return T("Tek Atış", "One Shot");
+                case "firsttry10": return T("Keskin Nişancı", "Sharpshooter");
+                case "stars3": return T("Kusursuz", "Flawless");
+                case "speed": return T("Şimşek", "Lightning");
+                case "sunday": return T("Pazar Ustası", "Sunday Master");
+                case "week": return T("Mükemmel Hafta", "Perfect Week");
+                case "early": return T("Erkenci", "Early Bird");
+                case "night": return T("Gece Kuşu", "Night Owl");
+                default: return id;
+            }
+        }
+
+        public static string BadgeGoal(string id, long target)
+        {
+            switch (id)
+            {
+                case "first": return T("İlk günlük bulmacanı çöz", "Solve your first daily puzzle");
+                case "streak3":
+                case "streak7":
+                case "streak14":
+                case "streak30":
+                case "streak100": return T($"{target} gün üst üste çöz", $"Solve {target} days in a row");
+                case "solves10":
+                case "solves50": return T($"{target} günlük bulmaca çöz", $"Solve {target} daily puzzles");
+                case "firsttry": return T("Bir bulmacayı ilk denemede çöz", "Solve a puzzle on the first try");
+                case "firsttry10": return T($"{target} bulmacayı ilk denemede çöz", $"Solve {target} puzzles on the first try");
+                case "stars3": return T("Bir bulmacayı 3 yıldızla çöz", "Solve a puzzle with 3 stars");
+                case "speed": return T("Bir bulmacayı 1 dakikadan kısa sürede çöz", "Solve a puzzle in under a minute");
+                case "sunday": return T("Pazar bulmacasını çöz", "Solve a Sunday puzzle");
+                case "week": return T("Pazartesiden pazara her günü çöz", "Solve every day, Monday to Sunday");
+                case "early": return T("Sabah 8'den önce çöz", "Solve before 8 a.m.");
+                case "night": return T("Gece 11'den sonra çöz", "Solve after 11 p.m.");
+                default: return "";
+            }
         }
 
         // ------------------------------------------------------------------ achievements

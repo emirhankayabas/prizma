@@ -162,6 +162,16 @@ namespace BlockPuzzle.Game
         float _liftPixels;
         Coroutine _scoreRoutine;
 
+        // Passing your own best is the one milestone a classic run has, and it used to go by in
+        // silence — the readout simply carried on. One rim pulse in gold, once per run, no text
+        // and no repeat: the same grammar the rest of the board speaks.
+        int _recordToBeat;
+        bool _recordBeaten;
+
+        // The run's light (Spectrum): its stage in a classic run, its step towards the goal in a
+        // level or the daily. Only ever climbs within a run.
+        int _stage;
+
         Image _hand;
         Coroutine _tutorial;
         Coroutine _powerHint;
@@ -309,6 +319,25 @@ namespace BlockPuzzle.Game
             if (paused) SaveRun();
         }
 
+        /// <summary>Everything spent on today's puzzle: the attempts that ended, plus this one.</summary>
+        float DailyClock => _session == null ? 0f : Progress.DailyBankedSeconds(App.DailyDate) + _session.PlaySeconds;
+
+        /// <summary>
+        /// The daily's clock. It runs only while the puzzle is actually in front of the player —
+        /// not behind the pause menu or any other modal, not on a result card, not in the
+        /// background (a backgrounded app gets no frames). Kept on the session, so it is saved
+        /// with the run and a resumed attempt carries on from where it stopped.
+        /// </summary>
+        void Update()
+        {
+            if (_session == null || _session.Mode != GameMode.Daily) return;
+            if (_session.IsFinished || _session.State == SessionState.OutOfMoves) return;
+            if (_result.Visible || App.HasModal) return;
+
+            _session.PlaySeconds += Mathf.Min(Time.unscaledDeltaTime, 0.25f);
+            _hud.SetClock(DailyClock);
+        }
+
         void OnApplicationQuit() => SaveRun();
 
         void SaveRun()
@@ -337,12 +366,26 @@ namespace BlockPuzzle.Game
             _tray.Refresh(session);
 
             _displayedScore = session.Score;
-            _hud.Bind(session, App.DailyDate);
+            _hud.Bind(session);
             _hud.Refresh(_displayedScore);
+            if (session.Mode == GameMode.Daily) _hud.SetClock(DailyClock);
+
+            // The record to beat, frozen at the start of the run. A run resumed past it has
+            // already had its moment and must not get a second one.
+            _recordToBeat = session.Config.Mode == GameMode.Classic ? HighScores.Best : int.MaxValue;
+            _recordBeaten = session.Score > _recordToBeat;
+
+            // A run resumed half-way comes back in the light it had reached, without the ceremony.
+            _stage = StageOf(session);
+            Backdrop.Current?.ResetLight(LightOf(session, _stage));
+            if (_stage >= Spectrum.MaxStage) Backdrop.Current?.SetLight(LightOf(session, _stage), turning: true);
+            _board.SetRimTint(_recordBeaten ? Design.Gold : LightOf(session, _stage), _recordBeaten ? 0.55f : 0.4f);
 
             _result.Hide();
             _aiming = null;
             _bombHeld = false;
+            // A hint left over from the run before would point at a power this run may not need.
+            StopPowerHint();
             SyncState();
 
             RunStore.Save(session);
@@ -383,6 +426,22 @@ namespace BlockPuzzle.Game
             // Cleared here rather than only in OnPointerUp so any caller leaves a clean board.
             _board.HideLinePreview();
 
+            var clear = result.Clear;
+
+            // Before the refresh, while the cells still hold the blocks: the clear copies their
+            // colours and plays them out itself. Afterwards there would be nothing left to animate.
+            if (clear.Any)
+            {
+                var placed = Design.Blocks[result.PlacedColorIndex % Design.Blocks.Length];
+                _board.PlayClearOut(clear.ClearedCells, result.PlacedColumn, result.PlacedRow, placed);
+
+                // Debris grows with the move — one piece a cell for a line, more for several — and
+                // is thrown harder the longer the streak has run.
+                int perCell = clear.PerfectClear ? 3 : clear.LinesCleared >= 2 ? 2 : 1;
+                float power = 1f + 0.08f * Mathf.Min(result.ComboStreak - 1, 8);
+                _board.PlayShards(clear.ClearedCells, result.PlacedColumn, result.PlacedRow, perCell, power, placed);
+            }
+
             _board.Refresh();
             _board.PlayPlacePop(result.PlacedShape, result.PlacedColumn, result.PlacedRow);
             Audio.PlayPlace();
@@ -394,7 +453,6 @@ namespace BlockPuzzle.Game
                 Progress.TutorialSeen = true;
             }
 
-            var clear = result.Clear;
             if (clear.Any)
             {
                 var tint = Design.Blocks[result.PlacedColorIndex % Design.Blocks.Length];
@@ -425,9 +483,24 @@ namespace BlockPuzzle.Game
                 {
                     _board.PlayBoardWave();
                     _board.PulseEdge(Design.Gold);
+                    _board.PlayWave(Vector2.zero, Design.Gold, 5f);
+                }
+
+                // Every fifth clear in a row: a ring of light from the drop, the same landmark the
+                // sound marks with its chord. Gold at five, the prism from ten.
+                if (result.ComboStreak >= 5 && result.ComboStreak % 5 == 0)
+                {
+                    var colour = result.ComboStreak >= 10 ? Design.Prism : Design.Gold;
+                    _board.PlayWave(_board.CellAnchoredPosition(result.PlacedColumn, result.PlacedRow), colour, 4f);
+                    _board.PulseEdge(colour);
                 }
 
                 _hud.ShowCombo(this, result.ComboStreak);
+
+                // The room warms with the streak, and a single-colour line or a wiped board lights it.
+                Backdrop.Current?.SetHeat(Mathf.Clamp01((result.ComboStreak - 1) / 7f));
+                if (clear.MonoLines > 0) Backdrop.Current?.Rainbow();
+                if (clear.PerfectClear) Backdrop.Current?.Flash(Design.Gold, 1.2f);
 
                 var popupCells = clear.ClearedCells.Count > 0 ? clear.ClearedCells : clear.CrackedIce;
                 ShowScorePopup(result.ClearScore, popupCells, clear.PerfectClear ? Design.Gold : tint, clear.PerfectClear);
@@ -437,6 +510,7 @@ namespace BlockPuzzle.Game
                     // The board itself takes the hit: a small swell that grows with the clear.
                     float punch = clear.PerfectClear ? 0.045f : 0.012f * Mathf.Min(clear.LinesCleared, 4);
                     StartCoroutine(Tween.Punch(_board.transform, punch, 0.24f));
+                    _board.Shake(clear.PerfectClear ? 16f : 4f + 3f * Mathf.Min(clear.LinesCleared, 4));
 
                     // The same ladder through the skin, so the hand is told what the ear was told.
                     App.VibrateClear(clear.LinesCleared, clear.PerfectClear);
@@ -445,6 +519,7 @@ namespace BlockPuzzle.Game
             else
             {
                 _hud.HideCombo();
+                Backdrop.Current?.SetHeat(0f);
             }
 
             if (result.ChargesGained > 0)
@@ -454,11 +529,88 @@ namespace BlockPuzzle.Game
             }
 
             if (result.TrayRefilled)
+            {
                 _tray.Refresh(_session);
+                // After the clear has had its moment, as the pieces rise into their slots.
+                StartCoroutine(After(0.18f, Audio.PlayDeal));
+            }
 
+            MaybeMarkRecord();
+            MaybeAdvanceLight();
             UpdateScore();
             SyncState();
             SaveRun();
+        }
+
+        /// <summary>
+        /// The move that takes a classic run past its own best. Fires once, on the rim, in gold —
+        /// the board already pulses its rim on every clear, so this says "something happened here"
+        /// in a language the player has been reading all run, with nothing new to learn and
+        /// nothing to dismiss. The best-score chip is already tracking the live score, so the
+        /// number itself explains what the light meant.
+        /// </summary>
+        void MaybeMarkRecord()
+        {
+            if (_recordBeaten || _session == null) return;
+            if (_recordToBeat <= 0 || _session.Score <= _recordToBeat) return;
+
+            _recordBeaten = true;
+            _board.SetRimTint(Design.Gold, 0.55f);
+            _board.PulseEdge(Design.Gold);
+            StartCoroutine(Tween.Punch(_hud.LeftLabel, 0.3f, 0.3f));
+            StartCoroutine(After(0.3f, Audio.PlayRecord));
+        }
+
+        // ------------------------------------------------------------------ light
+
+        static int StageOf(GameSession session)
+        {
+            if (session.Level == null) return Spectrum.StageForScore(session.Score);
+            // A goal run: quarters of the goal done, 0..4.
+            float done = session.Level.Target <= 0 ? 0f : session.GoalProgress / (float)session.Level.Target;
+            return Mathf.Clamp(Mathf.FloorToInt(done * 4f), 0, 4);
+        }
+
+        static Color? LightOf(GameSession session, int stage) => session.Level == null
+            ? Spectrum.ColorFor(stage, Time.unscaledTime)
+            : Spectrum.ColorForGoal(stage / 4f);
+
+        /// <summary>
+        /// The run has earned a new stage of light: the room changes colour around the board, the
+        /// board is washed in it from the bottom row up, and the scale climbs. No words — the
+        /// colour is the news. In a classic run the furthest stage ever reached is remembered;
+        /// the title on the menu lights one letter for each.
+        /// </summary>
+        void MaybeAdvanceLight()
+        {
+            if (_session == null) return;
+            int stage = StageOf(_session);
+            if (stage <= _stage) return;
+
+            _stage = stage;
+            var light = LightOf(_session, stage);
+            bool top = _session.Level == null && stage >= Spectrum.MaxStage;
+
+            Backdrop.Current?.SetLight(light, turning: top);
+            if (!_recordBeaten) _board.SetRimTint(light);
+
+            // The goal's last quarter is the win itself, which has its own moment.
+            if (_session.Level != null && stage >= 4) return;
+
+            var wash = light ?? Design.Prism;
+            StartCoroutine(After(0.25f, () =>
+            {
+                _board.PlayStageWash(wash);
+                Audio.PlayStage();
+            }));
+
+            if (_session.Level == null) Progress.RecordSpectrum(stage);
+        }
+
+        static IEnumerator After(float seconds, Action action)
+        {
+            yield return new WaitForSecondsRealtime(seconds);
+            action?.Invoke();
         }
 
         void UpdateScore()
@@ -469,9 +621,19 @@ namespace BlockPuzzle.Game
 
         IEnumerator ScoreRoutine(int from, int to)
         {
-            StartCoroutine(Tween.Punch(_hud.Readout, 0.12f, 0.24f));
+            int gain = Mathf.Max(0, to - from);
 
-            yield return Tween.CountUp(from, to, 0.32f, v =>
+            // A fixed roll counted 8 points and 800 in the same breath, so the score told the
+            // player nothing about the size of what they had just done. Scaling the roll with the
+            // gain makes a big clear feel big without putting anything new on screen; the ceiling
+            // keeps the number from still climbing after the next piece is already in hand.
+            // A bare placement (a few points) still lands almost instantly.
+            float duration = Mathf.Clamp(0.22f + gain * 0.0016f, 0.22f, 1.05f);
+            float punch = Mathf.Clamp(0.10f + gain * 0.00014f, 0.10f, 0.22f);
+
+            StartCoroutine(Tween.Punch(_hud.Readout, punch, 0.24f));
+
+            yield return Tween.CountUp(from, to, duration, v =>
             {
                 _displayedScore = v;
                 _hud.Refresh(v);
@@ -677,6 +839,7 @@ namespace BlockPuzzle.Game
             }
 
             _hud.Refresh(_displayedScore);
+            MaybeAdvanceLight();
             SyncState();
             SaveRun();
         }
@@ -771,6 +934,7 @@ namespace BlockPuzzle.Game
             StopPowerHint();
 
             var session = _session;
+            Backdrop.Current?.SetHeat(0f);
             RunStore.Clear(session.Mode);
             Progress.RecordRun(session);
             SyncState();
@@ -794,28 +958,18 @@ namespace BlockPuzzle.Game
 
                 case GameMode.Daily:
                 {
-                    var date = App.DailyDate;
-                    bool today = date.Date == DateTime.Now.Date;
-                    bool best = Progress.RecordDaily(date, session.Score);
-                    int streak = Progress.DailyStreak;
-                    int score = session.Score;
+                    // Not solved this time. The attempt's minutes join the day's clock and the card
+                    // offers the next attempt straight away — the puzzle is there to be finished.
+                    Progress.DailyAttemptEnded(App.DailyDate, session.PlaySeconds);
+                    bool outOfMoves = session.MovesLeft <= 0;
+                    int left = Mathf.Max(0, session.Level.Target - session.GoalProgress);
 
-                    _resultPrimary = () => App.PlayDaily(date, fresh: true);
+                    _resultPrimary = () => App.PlayDaily(fresh: true);
                     _resultSecondary = App.ShowMenu;
-
-                    // A catch-up day has no streak to show; its card names the day instead.
-                    string title = today && best ? Str.TodaysBest : Str.DailyPuzzle;
-                    string note = today ? Str.DayStreak(streak) : Str.Upper(Str.LongDate(date));
-                    _result.Show(this, title, score.ToString(), note, Design.Gold, today ? Icons.Flame : Icons.Calendar, -1,
-                        Str.PlayAgain, Str.MainMenu, null,
-                        () =>
-                        {
-                            Audio.PlayClick();
-                            ShareSheet.ShareText(Str.ShareText(date, score, today ? streak : 0, ShareSheet.StoreLink), Str.Share);
-                        });
-
-                    if (best) Audio.PlayFanfare();
-                    else Audio.PlayGameOver();
+                    _result.Show(this, Str.DailyTitle(session.Level.Number), left.ToString(),
+                        outOfMoves ? Str.NoMovesLeft : Str.NoRoom, Design.PreviewTint(3), GoalSprite(session.Level.Goal),
+                        -1, Str.TryAgain, Str.MainMenu);
+                    Audio.PlayGameOver();
                     break;
                 }
 
@@ -833,6 +987,7 @@ namespace BlockPuzzle.Game
                     _resultSecondary = App.ShowMenu;
                     _result.Show(this, Str.GameOver, session.Score.ToString(), note, color, null, -1,
                         Str.PlayAgain, Str.MainMenu);
+                    if (rank == 1) _result.Celebrate(this);
                     break;
                 }
             }
@@ -844,6 +999,12 @@ namespace BlockPuzzle.Game
         {
             CancelDrag();
             CancelAim();
+
+            if (_session.Mode == GameMode.Daily)
+            {
+                OnDailySolved();
+                return;
+            }
 
             var session = _session;
             int n = session.Level.Number;
@@ -877,8 +1038,86 @@ namespace BlockPuzzle.Game
             }
 
             _board.PlayBoardWave();
+            _result.Celebrate(this);
             Audio.PlayFanfare();
             App.Vibrate(strong: true);
+        }
+
+        /// <summary>
+        /// Today's puzzle, solved. The card leads with the time — the number a daily puzzle is
+        /// compared on — then the stars; the note is the streak, or a badge when one was earned
+        /// (the streak is on the daily card a tap away). Sharing is the main action, the way it is
+        /// on every daily puzzle people pass around. A first solve then offers the reminder.
+        /// </summary>
+        void OnDailySolved()
+        {
+            var session = _session;
+            var date = App.DailyDate;
+            int number = session.Level.Number;
+            int stars = session.StarsEarned;
+            float seconds = DailyClock;
+            int attempts = Mathf.Max(1, Progress.DailyAttempts(date));
+
+            int starsBefore = Progress.TotalStars;
+            var badgesBefore = DailyBadges.Snapshot();
+            int streak = Progress.RecordDailySolve(date, seconds, session.MovesUsed, stars, DateTime.Now);
+            var newBadges = DailyBadges.NewSince(badgesBefore);
+            var unlocked = NewlyUnlockedTheme(starsBefore, Progress.TotalStars);
+
+            Progress.RecordRun(session);
+            RunStore.Clear(GameMode.Daily);
+            SyncState();
+            Reminder.Refresh();
+
+            _resultPrimary = () => ShareSheet.ShareText(
+                Str.ShareText(number, seconds, stars, attempts, streak, ShareSheet.StoreLink), Str.Share);
+            _resultSecondary = App.ShowMenu;
+
+            string note;
+            Color noteColor;
+            Sprite noteIcon;
+            if (newBadges.Count > 0)
+            {
+                var badge = newBadges[newBadges.Count - 1];
+                note = Str.NewBadge(badge.Name);
+                noteColor = badge.Tint();
+                noteIcon = badge.Icon();
+            }
+            else if (unlocked != null)
+            {
+                note = Str.NewTheme(unlocked.Name);
+                noteColor = Design.Gold;
+                noteIcon = Icons.Palette;
+            }
+            else
+            {
+                note = Str.DayStreak(streak);
+                noteColor = Design.Gold;
+                noteIcon = Icons.Flame;
+            }
+
+            _result.Show(this, Str.DailyTitle(number), Str.Clock(seconds), note, noteColor, noteIcon, stars,
+                Str.Share, Str.MainMenu, i => Audio.PlayStar(i));
+
+            _board.PlayBoardWave();
+            _result.Celebrate(this, 60);
+            Audio.PlayFanfare();
+            App.Vibrate(strong: true);
+
+            // After the stars: the note line lands with its own sound — the streak ticking over,
+            // or a badge.
+            StartCoroutine(After(1.25f, () =>
+            {
+                if (!_result.Visible) return;
+                StartCoroutine(Tween.Punch(_result.Note, 0.22f, 0.3f));
+                StartCoroutine(Tween.Punch(_result.NoteIcon, 0.4f, 0.34f));
+                if (newBadges.Count > 0) Audio.PlayBadge();
+                else Audio.PlayStreak();
+            }));
+
+            // Asked once, and only now: a player who has just solved one knows what the reminder is for.
+            if (!GameSettings.ReminderAsked)
+                StartCoroutine(After(2.4f, () => { if (_result.Visible && !App.HasModal) App.OpenReminderPrompt(); }));
         }
 
         static Themes.Theme NewlyUnlockedTheme(int before, int after)
@@ -1160,6 +1399,42 @@ namespace BlockPuzzle.Game
 
         /// <summary>Test hook: holds the armed bomb over a cell.</summary>
         public void AutoBombPreview(int col, int row) => _board.ShowBombPreview(col, row);
+
+        /// <summary>
+        /// Test hook: holds a tray piece over a cell without a finger, so a shot can catch the
+        /// ghost and the pre-clear preview — the one part of the board a still picture could never
+        /// reach before, and the part hardest to judge on a desktop.
+        /// </summary>
+        public int AutoHover(int trayIndex, int col, int row)
+        {
+            if (_session == null) return 0;
+
+            var shape = _session.Tray[trayIndex].Shape;
+            if (shape == null) return 0;
+
+            _board.ShowGhost(shape, col, row, _session.CanPlace(trayIndex, col, row));
+            return _board.PreviewLines(shape, col, row);
+        }
+
+        /// <summary>
+        /// Test hook: drops a tray piece on an exact cell. Unlike <see cref="AutoStep"/> the cell
+        /// is chosen by the caller, so a shot can be timed against a clear it knows is coming.
+        /// </summary>
+        public bool AutoPlace(int trayIndex, int col, int row)
+        {
+            if (_session == null) return false;
+
+            _board.HideGhost();
+            if (_session.TryPlace(trayIndex, col, row) == null) return false;
+
+            for (int i = 0; i < _session.Tray.Length; i++)
+            {
+                if (!_session.Tray[i].Used || _tray.Piece(i) == null) continue;
+                Destroy(_tray.TakePiece(i).gameObject);
+            }
+
+            return true;
+        }
 #endif
     }
 }

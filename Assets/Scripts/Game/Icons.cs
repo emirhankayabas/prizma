@@ -439,6 +439,111 @@ namespace BlockPuzzle.Game
             return Finish(r, "IconShare");
         }
 
+        // ------------------------------------------------------------------ the daily's glyphs
+
+        static Sprite _target;
+        static Sprite _bolt;
+        static Sprite _crown;
+        static Sprite _sun;
+        static Sprite _moon;
+        static Sprite _clock;
+        static Sprite _bell;
+
+        /// <summary>Two rings and a centre: solved on the first try.</summary>
+        public static Sprite Target { get { if (_target == null) _target = BuildTarget(); return _target; } }
+
+        /// <summary>A lightning bolt: a fast solve.</summary>
+        public static Sprite Bolt { get { if (_bolt == null) _bolt = BuildBolt(); return _bolt; } }
+
+        /// <summary>A three-point crown: the hardest day, a whole week.</summary>
+        public static Sprite Crown { get { if (_crown == null) _crown = BuildCrown(); return _crown; } }
+
+        public static Sprite Sun { get { if (_sun == null) _sun = BuildSun(); return _sun; } }
+        public static Sprite Moon { get { if (_moon == null) _moon = BuildMoon(); return _moon; } }
+
+        /// <summary>The daily's timer.</summary>
+        public static Sprite Clock { get { if (_clock == null) _clock = BuildClock(); return _clock; } }
+
+        /// <summary>The reminder.</summary>
+        public static Sprite Bell { get { if (_bell == null) _bell = BuildBell(); return _bell; } }
+
+        static Sprite BuildTarget()
+        {
+            var r = New(out float s);
+            r.StrokeCircle(s * 0.5f, s * 0.5f, s * 0.38f, s * Stroke, Color.white);
+            r.StrokeCircle(s * 0.5f, s * 0.5f, s * 0.22f, s * Stroke, Color.white);
+            r.FillCircle(s * 0.5f, s * 0.5f, s * 0.08f, Color.white);
+            return Finish(r, "IconTarget");
+        }
+
+        static Sprite BuildBolt()
+        {
+            var r = New(out float s);
+            r.FillPolygon(new[]
+            {
+                P(s, 0.58f, 0.94f), P(s, 0.22f, 0.44f), P(s, 0.46f, 0.44f),
+                P(s, 0.38f, 0.06f), P(s, 0.80f, 0.58f), P(s, 0.54f, 0.58f)
+            }, Color.white);
+            return Finish(r, "IconBolt");
+        }
+
+        static Sprite BuildCrown()
+        {
+            var r = New(out float s);
+            r.FillPolygon(new[]
+            {
+                P(s, 0.12f, 0.24f), P(s, 0.88f, 0.24f), P(s, 0.90f, 0.74f), P(s, 0.68f, 0.50f),
+                P(s, 0.50f, 0.82f), P(s, 0.32f, 0.50f), P(s, 0.10f, 0.74f)
+            }, Color.white);
+            r.FillCircle(s * 0.10f, s * 0.76f, s * 0.06f, Color.white);
+            r.FillCircle(s * 0.50f, s * 0.84f, s * 0.06f, Color.white);
+            r.FillCircle(s * 0.90f, s * 0.76f, s * 0.06f, Color.white);
+            r.FillRoundRect(s * 0.12f, s * 0.10f, s * 0.76f, s * 0.10f, s * 0.04f, Color.white);
+            return Finish(r, "IconCrown");
+        }
+
+        static Sprite BuildSun()
+        {
+            var r = New(out float s);
+            r.FillCircle(s * 0.5f, s * 0.5f, s * 0.20f, Color.white);
+            for (int i = 0; i < 8; i++)
+            {
+                float a = i * Mathf.PI / 4f;
+                var dir = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
+                var c = new Vector2(s * 0.5f, s * 0.5f);
+                r.Line(c + dir * s * 0.31f, c + dir * s * 0.43f, s * Stroke, Color.white);
+            }
+            return Finish(r, "IconSun");
+        }
+
+        static Sprite BuildMoon()
+        {
+            var r = New(out float s);
+            r.FillCircle(s * 0.46f, s * 0.5f, s * 0.36f, Color.white);
+            r.EraseCircle(s * 0.66f, s * 0.62f, s * 0.30f);
+            return Finish(r, "IconMoon");
+        }
+
+        static Sprite BuildClock()
+        {
+            var r = New(out float s);
+            r.StrokeCircle(s * 0.5f, s * 0.5f, s * 0.38f, s * Stroke, Color.white);
+            r.Line(P(s, 0.5f, 0.5f), P(s, 0.5f, 0.74f), s * Stroke, Color.white);
+            r.Line(P(s, 0.5f, 0.5f), P(s, 0.66f, 0.40f), s * Stroke, Color.white);
+            return Finish(r, "IconClock");
+        }
+
+        static Sprite BuildBell()
+        {
+            var r = New(out float s);
+            r.FillCircle(s * 0.5f, s * 0.56f, s * 0.26f, Color.white);
+            r.FillPolygon(new[] { P(s, 0.24f, 0.56f), P(s, 0.76f, 0.56f), P(s, 0.84f, 0.26f), P(s, 0.16f, 0.26f) }, Color.white);
+            r.FillRoundRect(s * 0.12f, s * 0.20f, s * 0.76f, s * 0.09f, s * 0.04f, Color.white);
+            r.FillCircle(s * 0.5f, s * 0.12f, s * 0.08f, Color.white);
+            r.FillCircle(s * 0.5f, s * 0.85f, s * 0.05f, Color.white);
+            return Finish(r, "IconBell");
+        }
+
         static Sprite BuildFlag()
         {
             var r = New(out float s);

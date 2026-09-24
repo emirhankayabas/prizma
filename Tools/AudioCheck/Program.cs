@@ -150,6 +150,11 @@ static class Program
         WriteWav(Path.Combine(folder, "2_SONRA_oyun_dizisi.wav"), sonra);
         WriteWav(Path.Combine(folder, "3_SONRA_telefon_eki_oyun_dizisi.wav"), telefon);
 
+        // The added layers, A/B: one combo run climbing to ten, once as the game plays it now and
+        // once with only the sounds it had before. Same timings, same music.
+        WriteWav(Path.Combine(folder, "4_KATMANLI_combo_dizisi.wav"), ComboRun(mastered, musicNew, layers: true));
+        WriteWav(Path.Combine(folder, "4b_KATMANSIZ_combo_dizisi.wav"), ComboRun(mastered, musicNew, layers: false));
+
         // The same three through a phone speaker model, for listening on a desktop.
         WriteWav(Path.Combine(folder, "hoparlor_simulasyonu", "1_ONCE.wav"), PhoneSpeaker(once));
         WriteWav(Path.Combine(folder, "hoparlor_simulasyonu", "2_SONRA.wav"), PhoneSpeaker(sonra));
@@ -216,6 +221,60 @@ static class Program
         for (int i = 0; i < mix.Length; i++) mix[i] += music[i % music.Length];
 
         // The bus limiter the game runs on its output, so overlaps sound here as they do there.
+        var limiter = new SoundMaster.BusLimiter();
+        limiter.Reset(rate);
+        for (int i = 0; i < mix.Length; i++) mix[i] = limiter.Process(mix[i]);
+        return mix;
+    }
+
+    /// <summary>
+    /// A streak of ten clearing moves at the game's own pace, with a tray refill every third move
+    /// and the record passed near the end. With <paramref name="layers"/> off it is exactly what
+    /// the same moves sounded like before the layers were added.
+    /// </summary>
+    static float[] ComboRun(Dictionary<string, float[]> s, float[] music, bool layers)
+    {
+        const int rate = SoundSynth.SampleRate;
+        var mix = new float[rate * 13];
+
+        void At(double seconds, string name, float scale = 1f)
+        {
+            var clip = s[name];
+            int start = (int)(seconds * rate);
+            for (int i = 0; i < clip.Length && start + i < mix.Length; i++) mix[start + i] += clip[i] * scale;
+        }
+
+        double t = 0.5;
+        for (int streak = 1; streak <= 10; streak++)
+        {
+            At(t, "pickup");
+            double drop = t + 0.45;
+            At(drop, "place");
+
+            int lines = streak == 4 || streak == 8 ? 2 : streak == 10 ? 3 : 1;
+            At(drop, "clear" + (lines - 1));
+            if (streak > 1) At(drop + 0.07, "combo" + Math.Min(8, streak - 1), 0.8f);
+
+            if (layers)
+            {
+                if (streak >= 3) At(drop + 0.11, "sparkle" + Math.Min(SoundSynth.SparkleSteps - 1, (streak - 3) / 2), 0.85f);
+                if (streak >= 5 && streak % 5 == 0) At(drop + 0.16, "surge", 0.9f);
+                if (streak % 3 == 0) At(drop + 0.3, "deal");
+                if (streak == 9) At(drop + 0.35, "record");
+            }
+
+            t += 1.05;
+        }
+
+        if (layers)
+        {
+            At(t + 0.3, "fanfare");
+            At(t + 0.9, "streak");
+            At(t + 1.4, "badge");
+        }
+
+        for (int i = 0; i < mix.Length; i++) mix[i] += music[i % music.Length];
+
         var limiter = new SoundMaster.BusLimiter();
         limiter.Reset(rate);
         for (int i = 0; i < mix.Length; i++) mix[i] = limiter.Process(mix[i]);

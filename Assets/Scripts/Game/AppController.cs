@@ -116,6 +116,15 @@ namespace BlockPuzzle.Game
             BuildInterface();
             ShowMenu();
 
+            // Today's puzzle is built while the menu is up, so the daily starts on the first tap.
+            var today = DateTime.Now.Date;
+            System.Threading.ThreadPool.QueueUserWorkItem(_ => LevelGenerator.GenerateDaily(today, Design.PaletteSize));
+            Reminder.Refresh();
+
+            // Over the menu rather than before it: the menu is already built and laid out behind
+            // the splash, so when the splash lifts there is nothing left to wait for.
+            BootSplash.Play(_root);
+
 #if PRIZMA_AUTOTEST
             gameObject.AddComponent<AutoTest>();
 #endif
@@ -144,15 +153,24 @@ namespace BlockPuzzle.Game
             _pause = CreateScreen<PauseScreen>("Pause", _modalLayer);
             _stats = CreateScreen<StatsScreen>("Stats", _modalLayer);
             _themes = CreateScreen<ThemesScreen>("Themes", _modalLayer);
-            _daily = CreateScreen<DailyScreen>("DailyCalendar", _modalLayer);
+            _daily = CreateScreen<DailyScreen>("Daily", _modalLayer);
+            _reminder = CreateScreen<ReminderScreen>("Reminder", _modalLayer);
         }
 
         DailyScreen _daily;
+        ReminderScreen _reminder;
 
         public void OpenDaily() => ShowModal(_daily);
 
+        /// <summary>The one-time offer of a reminder, made over the result card of a first solve.</summary>
+        public void OpenReminderPrompt() => ShowModal(_reminder);
+
+        /// <summary>True while any modal is open — the daily's clock does not run behind one.</summary>
+        public bool HasModal => _modals.Count > 0;
+
 #if PRIZMA_AUTOTEST
         public StatsScreen StatsPage => _stats;
+        public DailyScreen DailyPage => _daily;
 #endif
 
         // ------------------------------------------------------------------ theme
@@ -219,7 +237,7 @@ namespace BlockPuzzle.Game
 
         AppScreen ModalOfKind(Type kind)
         {
-            foreach (var modal in new AppScreen[] { _settings, _scores, _pause, _stats, _themes, _daily })
+            foreach (var modal in new AppScreen[] { _settings, _scores, _pause, _stats, _themes, _daily, _reminder })
                 if (modal.GetType() == kind) return modal;
             return null;
         }
@@ -312,26 +330,41 @@ namespace BlockPuzzle.Game
             Begin(session);
         }
 
-        /// <summary>The day whose puzzle the current or last daily run is. Today unless one was picked on the calendar.</summary>
+        /// <summary>
+        /// The day whose puzzle the daily run on the board is. Today when it started; a run carried
+        /// past midnight keeps the day it began on, and is recorded for that day.
+        /// </summary>
         public DateTime DailyDate { get; private set; } = DateTime.Now.Date;
 
-        /// <summary>Today's puzzle.</summary>
-        public void PlayDaily(bool fresh = false) => PlayDaily(DateTime.Now.Date, fresh);
-
         /// <summary>
-        /// The puzzle of any day up to today — the calendar's catch-up days use the same seed
-        /// everyone had on that day. A saved daily run only resumes for the day it belongs to.
+        /// Today's puzzle — the only one there is. Past days cannot be played: a missed day stays
+        /// missed, which is what gives the streak its weight. A solved day is not replayed either;
+        /// the daily card, with the countdown to the next one, opens instead.
         /// </summary>
-        public void PlayDaily(DateTime date, bool fresh = false)
+        public void PlayDaily(bool fresh = false)
         {
-            date = date.Date > DateTime.Now.Date ? DateTime.Now.Date : date.Date;
-            DailyDate = date;
+            var today = DateTime.Now.Date;
+            if (Progress.SolvedDailyToday)
+            {
+                if (_currentPage == _game) ShowMenu();
+                OpenDaily();
+                return;
+            }
+
+            int number = LevelGenerator.DailyNumber(today);
             if (fresh) RunStore.Clear(GameMode.Daily);
 
+            // A saved attempt resumes only on its own day, and only if it is a puzzle — a daily
+            // saved by the old endless daily has no level and is dropped.
             var session = RunStore.Load(GameMode.Daily);
-            if (session == null || session.Seed != GameSession.DailySeed(date))
-                session = GameSession.NewDailyRun(date, _boardSize, Design.PaletteSize);
+            if (session == null || session.Level == null || session.Level.Number != number)
+            {
+                RunStore.Clear(GameMode.Daily);
+                session = GameSession.NewDailyRun(LevelGenerator.GenerateDaily(today, Design.PaletteSize), _boardSize, Design.PaletteSize);
+                Progress.DailyAttemptStarted(today);
+            }
 
+            DailyDate = today;
             Begin(session);
         }
 
@@ -369,7 +402,11 @@ namespace BlockPuzzle.Game
             RunStore.Clear(session.Mode);
             switch (session.Mode)
             {
-                case GameMode.Daily: PlayDaily(DailyDate, fresh: true); break;
+                case GameMode.Daily:
+                    // A thrown-away attempt still took time; it counts towards the day's clock.
+                    if (!session.IsFinished) Progress.DailyAttemptEnded(DailyDate, session.PlaySeconds);
+                    PlayDaily(fresh: true);
+                    break;
                 case GameMode.Level: PlayLevel(session.Level.Number); break;
                 default: PlayClassic(fresh: true); break;
             }
@@ -533,6 +570,12 @@ namespace BlockPuzzle.Game
         public void Tick()
         {
             if (GameSettings.Haptics) Haptics.Pulse(8, 70);
+        }
+
+        void OnApplicationPause(bool paused)
+        {
+            // Back from the background: a day may have turned, or the system may have dropped the alarm.
+            if (!paused) Reminder.Refresh();
         }
 
         void Update()

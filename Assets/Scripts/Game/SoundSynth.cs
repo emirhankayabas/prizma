@@ -47,6 +47,12 @@ namespace BlockPuzzle.Game
         public const int ClearSteps = 4;
         public const int StarCount = 3;
 
+        /// <summary>How many sizes of combo glitter there are; the longest comes from a streak of nine.</summary>
+        public const int SparkleSteps = 4;
+
+        /// <summary>The top of the pentatonic, continued an octave up, for the glitter to run along.</summary>
+        static readonly float[] SparkleScale = { 1046.50f, 1174.66f, 1318.51f, 1567.98f, 1760.00f, 2093.00f, 2349.32f };
+
         /// <summary>
         /// The handful of sounds a player can reach before anything else could finish: a tap on a
         /// menu button, and the pickup and place of the very first piece.
@@ -126,6 +132,47 @@ namespace BlockPuzzle.Game
             for (int i = 0; i < StarCount; i++)
                 Add("star" + i, Chime(new[] { Pentatonic[5 + i * 2 - (i == 2 ? 1 : 0)], Pentatonic[Math.Min(9, 7 + i)] },
                     0.05f, 0.45f, 0.24f, 4200f));
+
+            // ---- Added layers. Everything above is the set the player already knows and is left
+            // exactly as it was; what follows only ever plays *on top* of it. Same primitives, same
+            // scale, same dry short decays — more of the same voice, not a new one.
+
+            // The combo's glitter: a quick run up the top of the scale that joins the clear from the
+            // third consecutive clear on, one note longer every two steps of the streak. The clear
+            // and the combo answer underneath are unchanged — the streak is heard as the phrase
+            // gaining notes, so a long run sounds fuller rather than different.
+            for (int i = 0; i < SparkleSteps; i++)
+            {
+                int notes = 3 + i;
+                var run = new float[notes];
+                for (int n = 0; n < notes; n++) run[n] = SparkleScale[Math.Min(SparkleScale.Length - 1, n + i)];
+                Add("sparkle" + i, Chime(run, 0.028f, 0.2f, 0.2f, 5200f));
+            }
+
+            // Every fifth consecutive clear: the whole chord struck at once, low to high, under the
+            // glitter. A landmark in the streak rather than one more rung.
+            Add("surge", Chime(new[] { Pentatonic[0], Pentatonic[3], Pentatonic[5], Pentatonic[8], 1046.50f, 1318.51f },
+                0.018f, 0.62f, 0.2f, 3800f));
+
+            // A fresh tray arriving: three soft taps a hair apart, one per piece. Quiet — it happens
+            // every third move.
+            Add("deal", Chime(new[] { Pentatonic[7], Pentatonic[8], Pentatonic[9] }, 0.06f, 0.07f, 0.16f, 3400f));
+
+            // The move that passes your own best: the top of the fanfare, carried an octave higher
+            // and left ringing.
+            Add("record", Chime(new[] { Pentatonic[8], 1046.50f, 1318.51f, 1567.98f }, 0.075f, 0.5f, 0.24f, 4600f));
+
+            // A badge landing on the result card: the gem's glass, one octave climbed.
+            Add("badge", Chime(new[] { Pentatonic[5], Pentatonic[7], Pentatonic[9], 1046.50f, 1318.51f }, 0.05f, 0.55f, 0.24f, 5000f));
+
+            // The streak counter ticking over: a short rising blip with a breath of noise, like a
+            // match catching.
+            Add("streak", Tone("sfx_streak", 330f, 990f, 0.16f, 0.24f, attack: 0.01f, lowpass: 3600f, noise: 0.12f));
+
+            // The run's light moving to its next stage: the scale climbed from the middle to the
+            // top in one breath, the same bell as a clear. A threshold crossed, heard as ascent.
+            Add("stage", Chime(new[] { Pentatonic[3], Pentatonic[5], Pentatonic[7], Pentatonic[9], 1046.50f, 1318.51f },
+                0.055f, 0.6f, 0.22f, 4800f));
 
             return built;
         }

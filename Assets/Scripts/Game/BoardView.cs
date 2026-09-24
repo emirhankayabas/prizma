@@ -16,6 +16,7 @@ namespace BlockPuzzle.Game
         RectTransform _cellRoot;
         RectTransform _ghostRoot;
         RectTransform _previewRoot;
+        RectTransform _clearRoot;
         RectTransform _sweepRoot;
         RectTransform _burstRoot;
 
@@ -33,6 +34,40 @@ namespace BlockPuzzle.Game
         readonly List<Image> _ghostPool = new List<Image>();
         readonly List<Image> _burstPool = new List<Image>();
         readonly List<Image> _sweepPool = new List<Image>();
+        readonly List<Image> _clearPool = new List<Image>();
+
+        // The clear currently playing out: the blocks, the colour each started from, and when each
+        // begins. Reused lists, so a clear allocates nothing beyond the pool's first growth.
+        readonly List<Image> _clearShards = new List<Image>();
+        readonly List<Color> _clearFrom = new List<Color>();
+        readonly List<float> _clearDelays = new List<float>();
+        Coroutine _clearRoutine;
+
+        // Debris a clear throws off: small pieces of the blocks it took, flung out from the drop
+        // and falling away. One pool and one routine for all of them.
+        sealed class Shard
+        {
+            public Image Image;
+            public Vector2 Velocity;
+            public float Spin;
+            public float Age;
+            public float Life;
+            public float Size;
+            public Color Color;
+        }
+
+        const int MaxShards = 72;
+        const float ShardGravity = -2600f;
+
+        readonly List<Shard> _shards = new List<Shard>();
+        readonly List<Shard> _shardPool = new List<Shard>();
+        RectTransform _shardRoot;
+        Coroutine _shardRoutine;
+        uint _shardSeed = 2463534242u;
+
+        Image _wave;
+        Coroutine _shake;
+        Vector2 _shakeHome;
 
         BoardModel _board;
         Image _edge;
@@ -85,6 +120,9 @@ namespace BlockPuzzle.Game
                 _content * 0.5f - _cellSize * 0.5f);
 
             _cellRoot = UiBuilder.Child(_rect, "Cells");
+            // The blocks a clear is taking out, drawn over the cells they came from so they can
+            // finish their exit after the model has already emptied them.
+            _clearRoot = UiBuilder.Child(_rect, "ClearOut");
             // Above the cells so it lights them, below the ghost so the held piece stays readable.
             _previewRoot = UiBuilder.Child(_rect, "LinePreview");
             _ghostRoot = UiBuilder.Child(_rect, "Ghosts");
@@ -115,6 +153,15 @@ namespace BlockPuzzle.Game
             _ring.type = Image.Type.Simple;
             _ring.gameObject.SetActive(false);
 
+            _wave = UiBuilder.Image(_burstRoot, "Wave", Art.SoftCircle, Color.white);
+            _wave.type = Image.Type.Simple;
+            _wave.gameObject.SetActive(false);
+
+            // Debris moves every frame for most of a second; on its own canvas that re-batches a
+            // few dozen quads instead of the whole board with them.
+            _shardRoot = UiBuilder.Child(_rect, "Shards");
+            _shardRoot.gameObject.AddComponent<Canvas>();
+
             // The rim is the board's one piece of reactive decoration: each clear pulses it in the
             // colour of the piece that caused it, then it settles back to a plain hairline.
             _edge = UiBuilder.Hairline(_rect, "Edge", size, Design.RadiusLg);
@@ -134,6 +181,8 @@ namespace BlockPuzzle.Game
             _board = board;
             HideGhost();
             HideLinePreview();
+            HideClearOut();
+            HideShards();
             Refresh();
         }
 
@@ -297,6 +346,12 @@ namespace BlockPuzzle.Game
         void AddPreviewBar(Vector2 position, Vector2 size)
         {
             // Low alpha and a tight bleed. Enough to notice, not enough to announce itself.
+            //
+            // Widening the bleed to spill light past the board's rim was tried and measured off a
+            // screenshot: it changes nothing. The board's own padding swallows it, and at 0.13 the
+            // soft square's outer edge is already below one value of 255 by the time it gets
+            // there. The two alphas below are the only real loudness knob; making the preview
+            // easier to catch means moving them, and that is a judgement to make on a phone.
             var glow = RentPreview(soft: true);
             glow.rectTransform.sizeDelta = size + new Vector2(30f, 30f);
             glow.rectTransform.anchoredPosition = position;
@@ -351,6 +406,335 @@ namespace BlockPuzzle.Game
                 StartCoroutine(Tween.Scale(_cells[x, y].transform, Vector3.one * 0.62f, Vector3.one,
                     0.19f, Ease.OutBack, i * 0.016f));
             }
+        }
+
+        /// <summary>
+        /// Plays the blocks a clear is about to remove out on their own: each one flares to light,
+        /// swells a little, then collapses to nothing, radiating from the cell the piece landed on.
+        ///
+        /// Must be called *before* <see cref="Refresh"/>, while the model still holds the blocks —
+        /// the effect copies their colour off the cells. Without it the blocks simply disappeared
+        /// on the refresh and every flourish that followed (the sweep, the bursts) played over
+        /// cells that were already empty, so a clear read as something happening *above* the board
+        /// rather than to it. This is the one animation the player is actually looking at.
+        /// </summary>
+        public void PlayClearOut(IReadOnlyList<CellOffset> cells, int fromCol, int fromRow, Color placed)
+        {
+            if (cells == null || cells.Count == 0) return;
+
+            // One clear supersedes another: a combo can land the next drop before this finishes.
+            HideClearOut();
+
+            for (int i = 0; i < cells.Count; i++)
+            {
+                int x = cells[i].X;
+                int y = cells[i].Y;
+                if (x < 0 || x >= _size || y < 0 || y >= _size) continue;
+
+                var colour = BlockColour(x, y, placed);
+
+                var shard = RentClear();
+                shard.sprite = Art.Block;
+                shard.type = Image.Type.Sliced;
+                shard.color = colour;
+
+                var rect = shard.rectTransform;
+                rect.sizeDelta = new Vector2(_cellSize, _cellSize);
+                rect.anchoredPosition = CellAnchoredPosition(x, y);
+                rect.localScale = Vector3.one;
+                shard.gameObject.SetActive(true);
+
+                _clearShards.Add(shard);
+                _clearFrom.Add(colour);
+
+                // Radiating from the drop rather than firing at once ties the light to the move
+                // the player just made. Capped so a full row never trails behind its own sound.
+                _clearDelays.Add(Mathf.Min((Mathf.Abs(x - fromCol) + Mathf.Abs(y - fromRow)) * 0.017f, 0.15f));
+            }
+
+            if (_clearShards.Count > 0) _clearRoutine = StartCoroutine(ClearOutRoutine());
+        }
+
+        /// <summary>
+        /// One routine for the whole clear rather than one per block: a single handle to stop, and
+        /// a single coroutine's worth of garbage on a move that can light up sixteen cells.
+        /// </summary>
+        IEnumerator ClearOutRoutine()
+        {
+            const float flare = 0.07f;
+            const float collapse = 0.17f;
+
+            float longest = 0f;
+            for (int i = 0; i < _clearDelays.Count; i++) longest = Mathf.Max(longest, _clearDelays[i]);
+            float total = longest + flare + collapse;
+
+            for (float t = 0f; t < total; t += Time.unscaledDeltaTime)
+            {
+                for (int i = 0; i < _clearShards.Count; i++)
+                {
+                    float local = t - _clearDelays[i];
+                    if (local < 0f) continue;
+
+                    var shard = _clearShards[i];
+                    var rect = shard.rectTransform;
+
+                    // Keeps a trace of the block's own colour on the way to white, so a clear
+                    // still reads as this theme's clear rather than a generic flash.
+                    var lit = Color.Lerp(_clearFrom[i], Color.white, 0.82f);
+
+                    if (local < flare)
+                    {
+                        float k = local / flare;
+                        shard.color = Color.Lerp(_clearFrom[i], lit, k);
+                        float s = Mathf.Lerp(1f, 1.1f, Ease.OutQuad(k));
+                        rect.localScale = new Vector3(s, s, 1f);
+                    }
+                    else
+                    {
+                        float k = Mathf.Clamp01((local - flare) / collapse);
+                        float s = Mathf.Lerp(1.1f, 0.12f, Ease.OutCubic(k));
+                        rect.localScale = new Vector3(s, s, 1f);
+                        shard.color = lit.WithAlpha(1f - Ease.InQuad(k));
+                    }
+                }
+
+                yield return null;
+            }
+
+            _clearRoutine = null;
+            HideClearOut();
+        }
+
+        /// <summary>
+        /// Drops any blocks still on their way out. A run can be replaced while a clear is playing
+        /// — "play again" straight off a finished board — and without this the old board's last
+        /// line would go on dissolving over the new one.
+        /// </summary>
+        public void HideClearOut()
+        {
+            if (_clearRoutine != null)
+            {
+                StopCoroutine(_clearRoutine);
+                _clearRoutine = null;
+            }
+
+            for (int i = 0; i < _clearShards.Count; i++)
+            {
+                _clearShards[i].rectTransform.localScale = Vector3.one;
+                _clearShards[i].gameObject.SetActive(false);
+            }
+
+            _clearShards.Clear();
+            _clearFrom.Clear();
+            _clearDelays.Clear();
+        }
+
+        Image RentClear()
+        {
+            for (int i = 0; i < _clearPool.Count; i++)
+                if (!_clearPool[i].gameObject.activeSelf)
+                    return _clearPool[i];
+
+            var image = UiBuilder.Image(_clearRoot, "ClearShard", Art.Block, Color.white);
+            image.gameObject.SetActive(false);
+            _clearPool.Add(image);
+            return image;
+        }
+
+        // ------------------------------------------------------------------ debris
+
+        /// <summary>
+        /// Throws small pieces of the cleared blocks out from the drop, to fall away under gravity.
+        /// Like <see cref="PlayClearOut"/> it must run before <see cref="Refresh"/>: the pieces
+        /// take their colour from the blocks. <paramref name="perCell"/> grows with the size of the
+        /// move, <paramref name="power"/> with the streak — a long combo throws harder.
+        /// </summary>
+        public void PlayShards(IReadOnlyList<CellOffset> cells, int fromCol, int fromRow, int perCell, float power, Color placed)
+        {
+            if (cells == null || cells.Count == 0 || perCell <= 0) return;
+
+            var origin = CellAnchoredPosition(fromCol, fromRow);
+            for (int i = 0; i < cells.Count; i++)
+            {
+                int x = cells[i].X, y = cells[i].Y;
+                if (x < 0 || x >= _size || y < 0 || y >= _size) continue;
+
+                var at = CellAnchoredPosition(x, y);
+                var colour = BlockColour(x, y, placed);
+                var away = at - origin;
+                away = away.sqrMagnitude < 1f ? new Vector2(Random01() - 0.5f, 1f) : away.normalized;
+
+                for (int k = 0; k < perCell && _shards.Count < MaxShards; k++)
+                {
+                    var shard = RentShard();
+                    float speed = (380f + Random01() * 520f) * power;
+                    var spread = new Vector2(Random01() - 0.5f, Random01() - 0.5f) * 0.9f;
+                    shard.Velocity = (away + spread).normalized * speed + new Vector2(0f, 420f + Random01() * 380f) * power;
+                    shard.Spin = (Random01() - 0.5f) * 900f;
+                    shard.Age = -k * 0.02f;
+                    shard.Life = 0.55f + Random01() * 0.3f;
+                    shard.Size = _cellSize * (0.22f + Random01() * 0.16f);
+                    shard.Color = Color.Lerp(colour, Color.white, 0.15f);
+
+                    var rect = shard.Image.rectTransform;
+                    rect.anchoredPosition = at + new Vector2(Random01() - 0.5f, Random01() - 0.5f) * _cellSize * 0.5f;
+                    rect.sizeDelta = new Vector2(shard.Size, shard.Size);
+                    rect.localEulerAngles = new Vector3(0f, 0f, Random01() * 90f);
+                    rect.localScale = Vector3.one;
+                    shard.Image.color = shard.Color.WithAlpha(0f);
+                    shard.Image.gameObject.SetActive(true);
+                    _shards.Add(shard);
+                }
+            }
+
+            if (_shardRoutine == null && _shards.Count > 0) _shardRoutine = StartCoroutine(ShardRoutine());
+        }
+
+        IEnumerator ShardRoutine()
+        {
+            while (_shards.Count > 0)
+            {
+                float dt = Mathf.Min(Time.unscaledDeltaTime, 0.05f);
+
+                for (int i = _shards.Count - 1; i >= 0; i--)
+                {
+                    var shard = _shards[i];
+                    shard.Age += dt;
+                    if (shard.Age < 0f) continue;
+
+                    float k = shard.Age / shard.Life;
+                    if (k >= 1f)
+                    {
+                        shard.Image.gameObject.SetActive(false);
+                        _shards.RemoveAt(i);
+                        _shardPool.Add(shard);
+                        continue;
+                    }
+
+                    shard.Velocity += new Vector2(0f, ShardGravity * dt);
+                    shard.Velocity *= 1f - 1.2f * dt;
+
+                    var rect = shard.Image.rectTransform;
+                    rect.anchoredPosition += shard.Velocity * dt;
+                    rect.localEulerAngles += new Vector3(0f, 0f, shard.Spin * dt);
+                    rect.localScale = Vector3.one * Mathf.Lerp(1f, 0.35f, k);
+                    shard.Image.color = shard.Color.WithAlpha(k < 0.08f ? k / 0.08f : 1f - Ease.InQuad(Mathf.InverseLerp(0.45f, 1f, k)));
+                }
+
+                yield return null;
+            }
+
+            _shardRoutine = null;
+        }
+
+        /// <summary>Drops every piece of debris at once — a new run must not inherit the last one's.</summary>
+        public void HideShards()
+        {
+            if (_shardRoutine != null)
+            {
+                StopCoroutine(_shardRoutine);
+                _shardRoutine = null;
+            }
+
+            foreach (var shard in _shards)
+            {
+                shard.Image.gameObject.SetActive(false);
+                _shardPool.Add(shard);
+            }
+            _shards.Clear();
+        }
+
+        Shard RentShard()
+        {
+            if (_shardPool.Count > 0)
+            {
+                var reused = _shardPool[_shardPool.Count - 1];
+                _shardPool.RemoveAt(_shardPool.Count - 1);
+                return reused;
+            }
+
+            var image = UiBuilder.Image(_shardRoot, "Shard", Art.Block, Color.white);
+            image.type = Image.Type.Simple;
+            image.gameObject.SetActive(false);
+            return new Shard { Image = image };
+        }
+
+        /// <summary>
+        /// The colour of the block a clear is taking from a cell. The view still shows the board as
+        /// it was before the move, so the cells the piece itself just filled read as empty there —
+        /// those take the piece's colour instead of the empty cell's.
+        /// </summary>
+        Color BlockColour(int x, int y, Color placed)
+        {
+            var cell = _cells[x, y];
+            return cell.sprite == Art.Cell ? placed : cell.color;
+        }
+
+        /// <summary>A cheap xorshift so debris costs no allocation and never touches UnityEngine.Random's state.</summary>
+        float Random01()
+        {
+            _shardSeed ^= _shardSeed << 13;
+            _shardSeed ^= _shardSeed >> 17;
+            _shardSeed ^= _shardSeed << 5;
+            return (_shardSeed & 0xFFFFFF) / (float)0x1000000;
+        }
+
+        // ------------------------------------------------------------------ impact
+
+        /// <summary>
+        /// A short, decaying shake of the whole board — the weight of a big clear. Small on
+        /// purpose: a few units, over in a quarter of a second, so it is felt rather than watched.
+        /// </summary>
+        public void Shake(float amplitude, float duration = 0.26f)
+        {
+            if (_shake != null) StopCoroutine(_shake);
+            else _shakeHome = _rect.anchoredPosition;
+            _shake = StartCoroutine(ShakeRoutine(amplitude, duration));
+        }
+
+        IEnumerator ShakeRoutine(float amplitude, float duration)
+        {
+            for (float t = 0f; t < duration; t += Time.unscaledDeltaTime)
+            {
+                float fade = 1f - t / duration;
+                fade *= fade;
+                float a = amplitude * fade;
+                _rect.anchoredPosition = _shakeHome + new Vector2((Random01() * 2f - 1f) * a, (Random01() * 2f - 1f) * a);
+                yield return null;
+            }
+
+            _rect.anchoredPosition = _shakeHome;
+            _shake = null;
+        }
+
+        /// <summary>
+        /// A soft ring of light spreading from a cell — the landmark of a long streak, or the
+        /// middle of the board when it is wiped clean.
+        /// </summary>
+        public void PlayWave(Vector2 at, Color color, float reach)
+        {
+            StartCoroutine(WaveRoutine(at, color, reach));
+        }
+
+        IEnumerator WaveRoutine(Vector2 at, Color color, float reach)
+        {
+            var rect = _wave.rectTransform;
+            rect.anchoredPosition = at;
+            rect.sizeDelta = new Vector2(_cellSize * 2f, _cellSize * 2f);
+            _wave.gameObject.SetActive(true);
+            _wave.transform.SetAsLastSibling();
+
+            const float duration = 0.55f;
+            for (float t = 0f; t < duration; t += Time.unscaledDeltaTime)
+            {
+                float k = t / duration;
+                float s = Mathf.Lerp(0.5f, reach, Ease.OutCubic(k));
+                rect.localScale = new Vector3(s, s, 1f);
+                _wave.color = color.WithAlpha(Mathf.Lerp(0.6f, 0f, Ease.InQuad(k)));
+                yield return null;
+            }
+
+            _wave.gameObject.SetActive(false);
         }
 
         /// <summary>Sweeps a soft bar along every cleared row and column.</summary>
@@ -417,11 +801,15 @@ namespace BlockPuzzle.Game
             sweep.gameObject.SetActive(false);
         }
 
-        /// <summary>Pops a short flash on every cell a clear wiped.</summary>
+        /// <summary>
+        /// Pops a short flash on every cell a clear wiped. Backing light for
+        /// <see cref="PlayClearOut"/>, which now carries the moment — at the old 0.8 the two
+        /// flashes summed into a white patch where the line used to be.
+        /// </summary>
         public void PlayClearBurst(IReadOnlyList<CellOffset> cells, Color tint)
         {
             for (int i = 0; i < cells.Count; i++)
-                Burst(cells[i].X, cells[i].Y, tint, 0.8f, 1.85f, i * 0.011f);
+                Burst(cells[i].X, cells[i].Y, tint, 0.5f, 1.6f, i * 0.011f);
         }
 
         /// <summary>A small cold flash on each iced cell that took a hit.</summary>
@@ -502,6 +890,31 @@ namespace BlockPuzzle.Game
             burst.gameObject.SetActive(false);
         }
 
+        // What the rim settles back to after a pulse: the plain hairline, or the run's light.
+        Color _rimRest = Design.Hairline;
+
+        /// <summary>
+        /// The rim's resting colour for the rest of the run: the stage's light, or gold once the
+        /// record has fallen. Null is the plain hairline. Steady — it is a state, not an event.
+        /// </summary>
+        public void SetRimTint(Color? tint, float alpha = 0.4f)
+        {
+            _rimRest = tint == null ? Design.Hairline : tint.Value.WithAlpha(alpha);
+            if (_pulse == null && _edge != null) _edge.color = _rimRest;
+        }
+
+        /// <summary>
+        /// A new stage of light arriving: the board is washed from the bottom row to the top in
+        /// the new colour, then the rim takes it on. The room's light changes around it at the
+        /// same time (Backdrop.SetLight).
+        /// </summary>
+        public void PlayStageWash(Color color)
+        {
+            for (int row = _size - 1; row >= 0; row--)
+                Sweep(row, horizontal: true, color, 0.5f, (_size - 1 - row) * 0.045f);
+            PulseEdge(color);
+        }
+
         /// <summary>Flashes the board rim, then settles back to its resting hairline.</summary>
         public void PulseEdge(Color color)
         {
@@ -517,18 +930,18 @@ namespace BlockPuzzle.Game
             const float up = 0.08f;
             for (float t = 0f; t < up; t += Time.unscaledDeltaTime)
             {
-                _edge.color = Color.Lerp(Design.Hairline, hot, t / up);
+                _edge.color = Color.Lerp(_rimRest, hot, t / up);
                 yield return null;
             }
 
             const float down = 0.6f;
             for (float t = 0f; t < down; t += Time.unscaledDeltaTime)
             {
-                _edge.color = Color.Lerp(hot, Design.Hairline, Ease.OutCubic(t / down));
+                _edge.color = Color.Lerp(hot, _rimRest, Ease.OutCubic(t / down));
                 yield return null;
             }
 
-            _edge.color = Design.Hairline;
+            _edge.color = _rimRest;
             _pulse = null;
         }
 

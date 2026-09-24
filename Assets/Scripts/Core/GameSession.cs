@@ -51,6 +51,12 @@ namespace BlockPuzzle.Core
         public bool IsGameOver => State == SessionState.Lost;
         public bool IsFinished => State == SessionState.Won || State == SessionState.Lost;
 
+        /// <summary>
+        /// Seconds of play on this run, kept by the view (Core has no clock) and saved with it.
+        /// The daily puzzle is timed; the other modes simply carry the number along.
+        /// </summary>
+        public float PlaySeconds { get; set; }
+
         /// <summary>Moves bought when a level's budget ran out. Zero until then; at most one purchase.</summary>
         public int BonusMoves { get; private set; }
 
@@ -131,17 +137,20 @@ namespace BlockPuzzle.Core
                 PaletteSize = paletteSize
             });
 
-        /// <summary>The seed shared by everyone on a given calendar day.</summary>
-        public static int DailySeed(DateTime date) => date.Year * 10000 + date.Month * 100 + date.Day;
-
-        /// <summary>Same seed for everyone on a given calendar day — the daily puzzle.</summary>
-        public static GameSession NewDailyRun(DateTime date, int boardSize = 8, int paletteSize = 6)
+        /// <summary>
+        /// The day's puzzle: a generated board with a goal and a move budget, the same for
+        /// everyone on that calendar day (<see cref="LevelGenerator.GenerateDaily"/>). It plays
+        /// by the level rules; only the mode differs, so the game records it as the daily.
+        /// </summary>
+        public static GameSession NewDailyRun(LevelDefinition puzzle, int boardSize = 8, int paletteSize = 6)
             => new GameSession(new SessionConfig
             {
                 Mode = GameMode.Daily,
-                Seed = DailySeed(date),
+                Seed = puzzle.Seed,
                 BoardSize = boardSize,
-                PaletteSize = paletteSize
+                PaletteSize = paletteSize,
+                StartCharges = puzzle.StartCharges,
+                Level = puzzle
             });
 
         public static GameSession NewLevelRun(LevelDefinition level, int boardSize = 8, int paletteSize = 6)
@@ -484,7 +493,8 @@ namespace BlockPuzzle.Core
                 PlacedPieces = PlacedPieces,
                 PerfectClears = PerfectClears,
                 MonoLines = MonoLines,
-                PowersUsed = PowersUsed
+                PowersUsed = PowersUsed,
+                PlaySeconds = PlaySeconds
             };
 
             if (Level != null)
@@ -535,7 +545,9 @@ namespace BlockPuzzle.Core
 
             var mode = (GameMode)s.Mode;
             LevelDefinition level = null;
-            if (mode == GameMode.Level)
+            // A level always has a budget; so does the daily puzzle. A daily saved before the
+            // daily became a puzzle has none, and comes back without a level for the caller to drop.
+            if (mode == GameMode.Level || (mode == GameMode.Daily && s.LevelMoveLimit > 0))
             {
                 level = new LevelDefinition
                 {
@@ -593,6 +605,7 @@ namespace BlockPuzzle.Core
             session.PerfectClears = s.PerfectClears;
             session.MonoLines = s.MonoLines;
             session.PowersUsed = s.PowersUsed;
+            session.PlaySeconds = Math.Max(0f, s.PlaySeconds);
 
             return session;
         }

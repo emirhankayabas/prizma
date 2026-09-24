@@ -38,6 +38,14 @@ namespace BlockPuzzle.Game
         AudioClip _stuck;
         AudioClip[] _stars;
 
+        AudioClip[] _sparkle;
+        AudioClip _surge;
+        AudioClip _deal;
+        AudioClip _record;
+        AudioClip _badge;
+        AudioClip _streak;
+        AudioClip _stage;
+
         void Awake()
         {
             _source = gameObject.AddComponent<AudioSource>();
@@ -47,6 +55,7 @@ namespace BlockPuzzle.Game
             _clear = new AudioClip[SoundSynth.ClearSteps];
             _combo = new AudioClip[SoundSynth.ComboLadder.Length];
             _stars = new AudioClip[SoundSynth.StarCount];
+            _sparkle = new AudioClip[SoundSynth.SparkleSteps];
 
             AudioBusLimiter.Install();
 
@@ -116,6 +125,18 @@ namespace BlockPuzzle.Game
                 case "charge": _charge = clip; return;
                 case "prism": _prism = clip; return;
                 case "stuck": _stuck = clip; return;
+                case "surge": _surge = clip; return;
+                case "deal": _deal = clip; return;
+                case "record": _record = clip; return;
+                case "badge": _badge = clip; return;
+                case "streak": _streak = clip; return;
+                case "stage": _stage = clip; return;
+            }
+
+            if (name.StartsWith("sparkle", StringComparison.Ordinal))
+            {
+                _sparkle[int.Parse(name.Substring(7))] = clip;
+                return;
             }
 
             if (name.StartsWith("clear", StringComparison.Ordinal)) _clear[int.Parse(name.Substring(5))] = clip;
@@ -139,6 +160,21 @@ namespace BlockPuzzle.Game
         public void PlayClick() => Play(_click);
         public void PlayFanfare() => Play(_fanfare);
 
+        /// <summary>A new tray, as its pieces land in the slots.</summary>
+        public void PlayDeal() => Play(_deal);
+
+        /// <summary>The run just passed the player's own best.</summary>
+        public void PlayRecord() => Play(_record);
+
+        /// <summary>A badge earned, as it appears on the result card.</summary>
+        public void PlayBadge() => Play(_badge);
+
+        /// <summary>The streak counter moving on by one.</summary>
+        public void PlayStreak() => Play(_streak);
+
+        /// <summary>The run's light reaching its next stage.</summary>
+        public void PlayStage() => Play(_stage);
+
         /// <summary>
         /// The whole of a clear in one call. It used to take four: the clear, the combo, the
         /// single-colour line and the fanfare each fired on their own, in the same frame, and a
@@ -160,6 +196,14 @@ namespace BlockPuzzle.Game
                 PlayAfter(_combo[Mathf.Clamp(comboStreak - 1, 0, _combo.Length - 1)], 0.07f, 0.8f);
 
             if (monoLines > 0) PlayAfter(_prism, 0.13f, 0.9f);
+            // Layers the streak adds on top, never instead: from the third clear in a row a run of
+            // glitter joins in, gaining a note every two clears; every fifth clear the full chord
+            // lands under it. A long streak is heard as the same phrase growing fuller.
+            if (comboStreak >= 3)
+                PlayAfter(_sparkle[Mathf.Clamp((comboStreak - 3) / 2, 0, _sparkle.Length - 1)], 0.11f, 0.85f);
+            if (comboStreak >= 5 && comboStreak % 5 == 0)
+                PlayAfter(_surge, 0.16f, 0.9f);
+
             if (perfectClear) PlayAfter(_fanfare, 0.22f, 1f);
         }
 

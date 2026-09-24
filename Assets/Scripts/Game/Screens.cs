@@ -28,6 +28,7 @@ namespace BlockPuzzle.Game
         const float BadgeHeight = 136f;
 
         TextMeshProUGUI _best;
+        TextMeshProUGUI _title;
         RectTransform _titleGroup;
         UiButton _play;
         TextMeshProUGUI _levelNote;
@@ -63,9 +64,13 @@ namespace BlockPuzzle.Game
             float cardY = cursor + ModeCardHeight * 0.5f;
             _levelNote = BuildModeCard("Adventure", Icons.Flag, Design.TextPrimary, Str.Adventure, -cardX, cardY, cardWidth, out _,
                 () => { Audio.PlayClick(); App.ShowLevelSelect(); });
-            // The daily card opens its calendar: today is one tap from there, and so are the days missed.
+            // The daily card opens the daily's own card: the streak, today's puzzle, the badges.
             _dailyNote = BuildModeCard("Daily", Icons.Calendar, Design.Mint, Str.Daily, cardX, cardY, cardWidth, out _dailyIcon,
                 () => { Audio.PlayClick(); App.OpenDaily(); });
+            _badgeDot = UiBuilder.Image(_dailyIcon.rectTransform.parent as RectTransform, "NewDot", Art.Disc, Design.Mint);
+            _badgeDot.type = Image.Type.Simple;
+            _badgeDot.rectTransform.sizeDelta = new Vector2(Design.Space4 * 0.8f, Design.Space4 * 0.8f);
+            _badgeDot.rectTransform.anchoredPosition = new Vector2(cardWidth * 0.5f - Design.Space4, ModeCardHeight * 0.5f - Design.Space4);
             cursor += ModeCardHeight + Design.Space4;
 
             // The main action spans the page, low on the screen, inside comfortable thumb reach.
@@ -97,6 +102,7 @@ namespace BlockPuzzle.Game
 
             var title = UiBuilder.Label(_titleGroup, "Title", GameName, Design.Display, Design.TextPrimary,
                 Design.FontDisplay, tracking: Design.TrackingDisplay);
+            _title = title;
             title.rectTransform.sizeDelta = new Vector2(1000f, titleBox);
             title.rectTransform.anchoredPosition = new Vector2(0f, _titleGroup.sizeDelta.y * 0.5f - titleBox * 0.5f);
             UiBuilder.TextShadow(title, 0.4f, -0.3f, 0.45f);
@@ -176,6 +182,7 @@ namespace BlockPuzzle.Game
         }
 
         Image _achievementDot;
+        Image _badgeDot;
 
         UiButton BuildShortcut(string name, Sprite icon, string caption, float x, float y, float width, System.Action onClick)
         {
@@ -207,8 +214,18 @@ namespace BlockPuzzle.Game
 
             _levelNote.text = Str.LevelN(Progress.UnlockedLevel);
 
+            // The furthest light ever reached: the title lights a letter per stage, and the room
+            // is lit in that stage's colour. Coming home after a good run, the menu remembers it.
+            int best = Progress.BestSpectrum;
+            _title.text = Spectrum.TitleMarkup(GameName, best);
+            Backdrop.Current?.SetLight(Spectrum.ColorFor(best, Time.unscaledTime), turning: best >= Spectrum.MaxStage);
+            Backdrop.Current?.SetHeat(0f);
+
+            // A live streak shows as the flame; the note says whether today still needs doing.
             int streak = Progress.DailyStreak;
-            if (Progress.PlayedDailyToday)
+            _dailyIcon.sprite = streak > 0 ? Icons.Flame : Icons.Calendar;
+            _dailyIcon.color = streak > 0 ? Design.Gold : Design.Mint;
+            if (Progress.SolvedDailyToday)
             {
                 _dailyNote.text = Str.DayStreak(streak);
                 _dailyNote.color = Design.Gold;
@@ -218,6 +235,8 @@ namespace BlockPuzzle.Game
                 _dailyNote.text = streak > 0 ? Str.StreakToday(streak) : Str.NewPuzzle;
                 _dailyNote.color = Design.TextSecondary;
             }
+
+            _badgeDot.gameObject.SetActive(Progress.HasUnseenBadges);
 
             StartCoroutine(BreatheTitle());
         }

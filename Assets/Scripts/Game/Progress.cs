@@ -19,12 +19,37 @@ namespace BlockPuzzle.Game
         {
             public List<int> Stars = new List<int>();
 
+            // The last day whose puzzle was solved, and the run of consecutive days up to it.
             public string DailyLastDate = "";
             public int DailyStreak;
             public int DailyBestStreak;
-            public string DailyBestDate = "";
-            public int DailyBestScore;
             public int DailyGames;
+
+            // The puzzle being attempted: which day, how many tries, the time spent on the ones
+            // that ended.
+            public string DailyAttemptDate = "";
+            public int DailyAttemptCount;
+            public float DailyAttemptSeconds;
+
+            // The most recent solve, as the daily card shows it.
+            public string DailySolveDate = "";
+            public float DailySolveSeconds;
+            public int DailySolveMoves;
+            public int DailySolveStars;
+            public int DailySolveAttempts;
+            public int DailySolveMinute = -1;
+
+            // What the badges are counted from.
+            public int DailySolves;
+            public int DailyFirstTry;
+            public int DailyThreeStars;
+            public float DailyFastest;
+            public int DailyPerfectWeeks;
+            public int DailySundays;
+            public int DailyEarly;
+            public int DailyLate;
+            public int DailyBadgesSeen;
+            public int DailyStreakShown;
 
             public int Games;
             public long TotalScore;
@@ -42,6 +67,9 @@ namespace BlockPuzzle.Game
             public List<int> DailyDays = new List<int>();
 
             public int AchievementStarsSeen;
+
+            // The highest stage of light a classic run has reached. Lights the title's letters.
+            public int BestSpectrum;
 
             public int Theme;
             public bool ColorBlind;
@@ -111,7 +139,7 @@ namespace BlockPuzzle.Game
         /// Every star the player holds — levels plus achievement tiers. This is what themes are
         /// unlocked with, so a player who never touches the adventure can still earn them.
         /// </summary>
-        public static int TotalStars => LevelStars + Achievements.EarnedStars;
+        public static int TotalStars => LevelStars + Achievements.EarnedStars + DailyBadges.EarnedStars;
 
         /// <summary>Achievement stars the player has not looked at yet: the stats shortcut shows a dot.</summary>
         public static bool HasUnseenAchievements => Achievements.EarnedStars > D.AchievementStarsSeen;
@@ -154,11 +182,15 @@ namespace BlockPuzzle.Game
 
         // ------------------------------------------------------------------ daily
 
+        // The daily puzzle is solved once a day, like a newspaper puzzle: the streak counts days
+        // solved in a row, and there is no going back — a missed day stays missed. Attempts and
+        // time are tracked per puzzle so a solve reports how long it really took, retries included.
+
         public static string DateKey(DateTime date) => date.ToString("yyyy-MM-dd");
         public static string TodayKey => DateKey(DateTime.Now);
         static string YesterdayKey => DateKey(DateTime.Now.AddDays(-1));
 
-        /// <summary>The streak as it stands today: still alive if the last daily was today or yesterday.</summary>
+        /// <summary>The streak as it stands today: alive while the last solve was today or yesterday.</summary>
         public static int DailyStreak
         {
             get
@@ -169,43 +201,127 @@ namespace BlockPuzzle.Game
         }
 
         public static int DailyBestStreak => D.DailyBestStreak;
-        public static bool PlayedDailyToday => D.DailyLastDate == TodayKey;
-        public static int DailyBestToday => D.DailyBestDate == TodayKey ? D.DailyBestScore : 0;
+        public static bool SolvedDailyToday => D.DailyLastDate == TodayKey;
+
+        public static int DailySolves => D.DailySolves;
+        public static int DailyFirstTry => D.DailyFirstTry;
+        public static int DailyThreeStars => D.DailyThreeStars;
+        public static int DailyPerfectWeeks => D.DailyPerfectWeeks;
+        public static int DailySundays => D.DailySundays;
+        public static int DailyEarly => D.DailyEarly;
+        public static int DailyLate => D.DailyLate;
+
+        /// <summary>Fastest solve in seconds, 0 before the first.</summary>
+        public static float DailyFastest => D.DailyFastest;
+
+        /// <summary>The streak the daily card last showed, so it can count up to a new one exactly once.</summary>
+        public static int DailyStreakShown
+        {
+            get => D.DailyStreakShown;
+            set
+            {
+                if (D.DailyStreakShown == value) return;
+                D.DailyStreakShown = value;
+                Save();
+            }
+        }
+
+        /// <summary>Minutes past midnight of the last solve, or -1. The reminder comes back at this time.</summary>
+        public static int DailySolveMinute => D.DailySolveMinute;
+
+        /// <summary>Attempts started on a day's puzzle.</summary>
+        public static int DailyAttempts(DateTime date) => D.DailyAttemptDate == DateKey(date) ? D.DailyAttemptCount : 0;
+
+        /// <summary>Seconds spent on a day's puzzle in attempts that already ended.</summary>
+        public static float DailyBankedSeconds(DateTime date) => D.DailyAttemptDate == DateKey(date) ? D.DailyAttemptSeconds : 0f;
+
+        /// <summary>A fresh attempt at a day's puzzle begins.</summary>
+        public static void DailyAttemptStarted(DateTime date)
+        {
+            string key = DateKey(date);
+            if (D.DailyAttemptDate != key)
+            {
+                D.DailyAttemptDate = key;
+                D.DailyAttemptCount = 0;
+                D.DailyAttemptSeconds = 0f;
+            }
+
+            D.DailyAttemptCount++;
+            D.DailyGames++;
+            Save();
+        }
+
+        /// <summary>An attempt ended without the solve — lost, or thrown away with a restart. Its time still counts.</summary>
+        public static void DailyAttemptEnded(DateTime date, float seconds)
+        {
+            if (D.DailyAttemptDate != DateKey(date)) return;
+            D.DailyAttemptSeconds += Mathf.Max(0f, seconds);
+            Save();
+        }
+
+        /// <summary>What today's solve looked like, for the daily card. Null until today is solved.</summary>
+        public static DailySolve TodaySolve => SolvedDailyToday && D.DailySolveDate == TodayKey
+            ? new DailySolve(D.DailySolveSeconds, D.DailySolveMoves, D.DailySolveStars, D.DailySolveAttempts)
+            : null;
+
+        public sealed class DailySolve
+        {
+            public readonly float Seconds;
+            public readonly int Moves;
+            public readonly int Stars;
+            public readonly int Attempts;
+
+            public DailySolve(float seconds, int moves, int stars, int attempts)
+            {
+                Seconds = seconds;
+                Moves = moves;
+                Stars = stars;
+                Attempts = attempts;
+            }
+        }
 
         /// <summary>
-        /// Records a finished daily run for the puzzle of <paramref name="date"/>. Any day marks the
-        /// calendar; only today's puzzle keeps the streak alive and counts for today's best — a
-        /// missed day can be caught up on, but not back-dated into a streak. Returns true when it
-        /// is today's best.
+        /// Records the solve of <paramref name="date"/>'s puzzle. The streak grows when the last
+        /// solve was the day before; anything older starts it again at one. A puzzle solved after
+        /// midnight still counts for its own day — it was that day's board — and today stays open.
+        /// Returns the streak after the solve.
         /// </summary>
-        public static bool RecordDaily(DateTime date, int score)
+        public static int RecordDailySolve(DateTime date, float seconds, int moves, int stars, DateTime solvedAt)
         {
+            string key = DateKey(date);
+            if (PlayedDaily(date)) return DailyStreak;
+
+            string dayBefore = DateKey(date.AddDays(-1));
+            D.DailyStreak = D.DailyLastDate == dayBefore ? D.DailyStreak + 1 : 1;
+            D.DailyLastDate = key;
+            if (D.DailyStreak > D.DailyBestStreak) D.DailyBestStreak = D.DailyStreak;
+
+            int attempts = Math.Max(1, DailyAttempts(date));
+            D.DailySolveDate = key;
+            D.DailySolveSeconds = seconds;
+            D.DailySolveMoves = moves;
+            D.DailySolveStars = stars;
+            D.DailySolveAttempts = attempts;
+            D.DailySolveMinute = solvedAt.Hour * 60 + solvedAt.Minute;
+
+            D.DailySolves++;
+            if (attempts == 1) D.DailyFirstTry++;
+            if (stars >= 3) D.DailyThreeStars++;
+            if (D.DailyFastest <= 0f || seconds < D.DailyFastest) D.DailyFastest = seconds;
+            if (date.DayOfWeek == DayOfWeek.Sunday) D.DailySundays++;
+            if (solvedAt.Hour < 8) D.DailyEarly++;
+            if (solvedAt.Hour >= 23 || solvedAt.Hour < 4) D.DailyLate++;
+
             MarkPlayed(date);
-            D.DailyGames++;
 
-            string today = TodayKey;
-            if (DateKey(date) != today)
-            {
-                Save();
-                return false;
-            }
-
-            if (D.DailyLastDate != today)
-            {
-                D.DailyStreak = D.DailyLastDate == YesterdayKey ? D.DailyStreak + 1 : 1;
-                D.DailyLastDate = today;
-                if (D.DailyStreak > D.DailyBestStreak) D.DailyBestStreak = D.DailyStreak;
-            }
-
-            bool best = D.DailyBestDate != today || score > D.DailyBestScore;
-            if (best)
-            {
-                D.DailyBestDate = today;
-                D.DailyBestScore = score;
-            }
+            // A week counts once, on the solve that completes it — each day can only be solved once.
+            var monday = date.Date.AddDays(-(((int)date.DayOfWeek + 6) % 7));
+            bool fullWeek = true;
+            for (int i = 0; i < 7 && fullWeek; i++) fullWeek = PlayedDaily(monday.AddDays(i));
+            if (fullWeek) D.DailyPerfectWeeks++;
 
             Save();
-            return best;
+            return D.DailyStreak;
         }
 
         static int MonthKey(int year, int month) => year * 100 + month;
@@ -224,13 +340,14 @@ namespace BlockPuzzle.Game
             D.DailyDays[i] |= 1 << (date.Day - 1);
         }
 
+        /// <summary>The day's puzzle was solved (or, in saves from before the puzzle, played).</summary>
         public static bool PlayedDaily(DateTime date)
         {
             int i = D.DailyMonths.IndexOf(MonthKey(date.Year, date.Month));
             return i >= 0 && (D.DailyDays[i] & (1 << (date.Day - 1))) != 0;
         }
 
-        /// <summary>Months in which every day's puzzle was played.</summary>
+        /// <summary>Months in which every day's puzzle was solved.</summary>
         public static int CompletedMonths
         {
             get
@@ -245,6 +362,17 @@ namespace BlockPuzzle.Game
                 }
                 return count;
             }
+        }
+
+        /// <summary>Badges the player has not looked at yet: the daily card shows a dot.</summary>
+        public static bool HasUnseenBadges => DailyBadges.EarnedCount > D.DailyBadgesSeen;
+
+        public static void MarkBadgesSeen()
+        {
+            int earned = DailyBadges.EarnedCount;
+            if (D.DailyBadgesSeen == earned) return;
+            D.DailyBadgesSeen = earned;
+            Save();
         }
 
         // ------------------------------------------------------------------ lifetime
@@ -274,6 +402,18 @@ namespace BlockPuzzle.Game
             D.PowersUsed += session.PowersUsed;
             D.GemsCollected += session.GemsCollected;
             Save();
+        }
+
+        /// <summary>The furthest stage of light any classic run has reached (Spectrum).</summary>
+        public static int BestSpectrum => D.BestSpectrum;
+
+        /// <summary>Records a stage reached. Returns true when it is further than ever before.</summary>
+        public static bool RecordSpectrum(int stage)
+        {
+            if (stage <= D.BestSpectrum) return false;
+            D.BestSpectrum = stage;
+            Save();
+            return true;
         }
 
         // ------------------------------------------------------------------ preferences

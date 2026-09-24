@@ -95,12 +95,24 @@ namespace BlockPuzzle.EditorTools
 #endif
 
             // The splash sits in the game's own blue rather than Unity's charcoal, so launching
-            // does not flash a colour that belongs to nothing.
+            // does not flash a colour that belongs to nothing. It still matters with the engine
+            // splash off: it is the colour of the window before the first frame is drawn.
             var splash = Themes.Default.BgBottom;
             if (PlayerSettings.SplashScreen.backgroundColor != splash)
             {
                 PlayerSettings.SplashScreen.backgroundColor = splash;
                 PlayerSettings.SplashScreen.unityLogoStyle = PlayerSettings.SplashScreen.UnityLogoStyle.LightOnDark;
+                dirty = true;
+            }
+
+            // The engine splash is off: the game opens on its own mark (BootSplash) instead, and
+            // two splash screens back to back is a wait, not a brand. Unity 6 is the first version
+            // that lets a Personal licence turn it off — on older versions this silently reverts,
+            // which is why it is asserted here on every editor load rather than set once by hand.
+            if (PlayerSettings.SplashScreen.show || PlayerSettings.SplashScreen.showUnityLogo)
+            {
+                PlayerSettings.SplashScreen.show = false;
+                PlayerSettings.SplashScreen.showUnityLogo = false;
                 dirty = true;
             }
 

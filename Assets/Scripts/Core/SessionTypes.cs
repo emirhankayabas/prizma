@@ -8,7 +8,10 @@ namespace BlockPuzzle.Core
         /// <summary>Endless, random seed.</summary>
         Classic = 0,
 
-        /// <summary>Endless, one seed per calendar day.</summary>
+        /// <summary>
+        /// The day's puzzle: one generated board, goal and move budget per calendar day, the same
+        /// for everyone. Solved once a day; retried as often as it takes.
+        /// </summary>
         Daily = 1,
 
         /// <summary>A generated level with a goal and a move limit.</summary>
@@ -208,5 +211,8 @@ namespace BlockPuzzle.Core
         public int PerfectClears;
         public int MonoLines;
         public int PowersUsed;
+
+        /// <summary>Seconds of play. Missing from older saves, which read as zero.</summary>
+        public float PlaySeconds;
     }
 }

@@ -116,6 +116,36 @@ namespace BlockPuzzle.Game
             }
         }
 
+        const string ReminderKey = "blockpuzzle.reminder";
+        const string ReminderAskedKey = "blockpuzzle.reminder.asked";
+
+        /// <summary>
+        /// The daily reminder. Off until the player says yes — asked once, after their first solve,
+        /// when the offer means something — and switchable on the daily card afterwards.
+        /// </summary>
+        public static bool Reminder
+        {
+            get => PlayerPrefs.GetInt(ReminderKey, 0) != 0;
+            set
+            {
+                if (Reminder == value) return;
+                PlayerPrefs.SetInt(ReminderKey, value ? 1 : 0);
+                PlayerPrefs.Save();
+                Changed?.Invoke();
+            }
+        }
+
+        /// <summary>The one-time offer has been made, whatever the answer was.</summary>
+        public static bool ReminderAsked
+        {
+            get => PlayerPrefs.GetInt(ReminderAskedKey, 0) != 0;
+            set
+            {
+                PlayerPrefs.SetInt(ReminderAskedKey, value ? 1 : 0);
+                PlayerPrefs.Save();
+            }
+        }
+
         public static bool Haptics
         {
             get

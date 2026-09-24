@@ -75,3 +75,6 @@ sysinfo.txt
 
 # ---------------------------------------------------------------- Python araçları
 __pycache__/
+
+# Referans oyun kayitlari (docs/REFERANS-ANALIZ.md): yerelde kalir, depoya girmez
+*.mp4

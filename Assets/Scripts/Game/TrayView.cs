@@ -95,8 +95,34 @@ namespace BlockPuzzle.Game
                 _pieces[i] = CreatePiece(trayPiece, i);
 
                 // Staggered so a refill reads as three pieces arriving, not one popping in triplicate.
-                StartCoroutine(Tween.Scale(_pieces[i].Rect, Vector3.zero, Vector3.one * _scales[i], 0.28f, Ease.OutBack, i * 0.06f));
+                // Each rises into its slot as it grows: dealt from below, the way a hand of cards is.
+                StartCoroutine(DealIn(_pieces[i].Rect, _scales[i], i * 0.06f));
             }
+        }
+
+        IEnumerator DealIn(RectTransform rect, float scale, float delay)
+        {
+            const float rise = 90f;
+            const float duration = 0.3f;
+
+            // A piece picked up mid-deal belongs to the drag from then on: stop touching it.
+            var slot = rect.parent;
+            rect.localScale = Vector3.zero;
+            rect.anchoredPosition = new Vector2(0f, -rise);
+            if (delay > 0f) yield return new WaitForSecondsRealtime(delay);
+
+            for (float t = 0f; t < duration; t += Time.unscaledDeltaTime)
+            {
+                if (rect == null || rect.parent != slot) yield break;
+                float k = t / duration;
+                rect.localScale = Vector3.one * scale * Mathf.LerpUnclamped(0f, 1f, Ease.OutBack(k));
+                rect.anchoredPosition = new Vector2(0f, Mathf.Lerp(-rise, 0f, Ease.OutCubic(k)));
+                yield return null;
+            }
+
+            if (rect == null || rect.parent != slot) yield break;
+            rect.localScale = Vector3.one * scale;
+            rect.anchoredPosition = Vector2.zero;
         }
 
         PieceView CreatePiece(TrayPiece trayPiece, int slotIndex)

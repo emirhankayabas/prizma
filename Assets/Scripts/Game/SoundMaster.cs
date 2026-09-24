@@ -39,6 +39,8 @@ namespace BlockPuzzle.Game
             if (clip.StartsWith("clear", StringComparison.Ordinal)) return -9f;
             if (clip.StartsWith("combo", StringComparison.Ordinal)) return -10.5f;
             if (clip.StartsWith("star", StringComparison.Ordinal)) return -10f;
+            // The glitter rides under the clear and its answer: heard as sparkle, not as a third voice.
+            if (clip.StartsWith("sparkle", StringComparison.Ordinal)) return -16.5f;
 
             switch (clip)
             {
@@ -57,6 +59,12 @@ namespace BlockPuzzle.Game
                 case "pickup": return -15f;
                 case "click": return -15f;
                 case "music": return -15f;
+                case "surge": return -12f;
+                case "deal": return -19f;
+                case "record": return -10f;
+                case "badge": return -9.5f;
+                case "streak": return -12f;
+                case "stage": return -10.5f;
                 default: return -12f;
             }
         }

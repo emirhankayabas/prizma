@@ -568,6 +568,42 @@ namespace BlockPuzzle.Game
             return raster.Downsample(Super).ToSprite("Sparkle");
         }
 
+        static Sprite _medal;
+
+        /// <summary>
+        /// A badge medallion: a hexagon with a solid rim and a half-strength face, so one tint
+        /// shades it in two tones and a white glyph on the face stays readable. The shape is the
+        /// daily's own — nothing else in the game is six-sided.
+        /// </summary>
+        public static Sprite Medal
+        {
+            get { if (_medal == null) _medal = BuildMedal(); return _medal; }
+        }
+
+        static Sprite BuildMedal()
+        {
+            const int Base = 160;
+            int s = Base * Super;
+            var raster = new Raster(s, s);
+            float c = s * 0.5f;
+
+            Vector2[] Hex(float radius)
+            {
+                var points = new Vector2[6];
+                for (int i = 0; i < 6; i++)
+                {
+                    float angle = Mathf.PI * 0.5f + i * Mathf.PI / 3f;
+                    points[i] = new Vector2(c + Mathf.Cos(angle) * radius, c + Mathf.Sin(angle) * radius);
+                }
+                return points;
+            }
+
+            raster.FillPolygon(Hex(s * 0.49f), Color.white);
+            raster.ErasePolygon(Hex(s * 0.41f));
+            raster.FillPolygon(Hex(s * 0.41f), new Color(1f, 1f, 1f, 0.5f));
+            return raster.Downsample(Super).ToSprite("Medal");
+        }
+
         static Sprite BuildDisc()
         {
             const int Base = 96;

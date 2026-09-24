@@ -21,6 +21,7 @@ static class Program
             case "balance": Balance(args.Length > 1 ? int.Parse(args[1]) : 40); break;
             case "levels": Levels(args.Length > 1 ? int.Parse(args[1]) : 1, args.Length > 2 ? int.Parse(args[2]) : 60); break;
             case "perf": Perf(); break;
+            case "daily": Daily(args.Length > 1 ? int.Parse(args[1]) : 14); break;
             default: Console.WriteLine("usage: tests | balance [runs] | levels [from] [to] | perf"); return 2;
         }
 
@@ -396,12 +397,56 @@ static class Program
         }
     }
 
-    static float WinRate(LevelDefinition level, float skill, int runs)
+    /// <summary>
+    /// The daily puzzle across <paramref name="days"/> days from today: how hard each weekday
+    /// really plays, for a struggling, a casual and a good player. A puzzle is retried until it is
+    /// solved, so what matters is less the win rate than how many tries it takes on average.
+    /// </summary>
+    static void Daily(int days)
+    {
+        Console.WriteLine(" #    date       day tier goal   tgt  lim  pre ice |  weak casual  good | gen ms");
+        var sw = new Stopwatch();
+        var start = DateTime.Now.Date;
+        var byGrade = new float[4, 3];
+        var gradeCount = new int[4];
+
+        for (int d = 0; d < days; d++)
+        {
+            var date = start.AddDays(d);
+            sw.Restart();
+            var puzzle = LevelGenerator.GenerateDaily(date, 7);
+            sw.Stop();
+
+            int ice = puzzle.Prefill.Count(c => c.Ice > 0);
+            float weak = WinRate(puzzle, 0.40f, 12, daily: true);
+            float casual = WinRate(puzzle, 0.55f, 12, daily: true);
+            float good = WinRate(puzzle, 0.85f, 12, daily: true);
+
+            int grade = LevelGenerator.DailyGrade(date.DayOfWeek);
+            byGrade[grade, 0] += weak; byGrade[grade, 1] += casual; byGrade[grade, 2] += good;
+            gradeCount[grade]++;
+
+            Console.WriteLine($"{puzzle.Number,4} {date:yyyy-MM-dd} {date.DayOfWeek.ToString().Substring(0, 3)} {LevelGenerator.DailyTier(date.DayOfWeek),4} " +
+                              $"{puzzle.Goal,-6} {puzzle.Target,4} {puzzle.MoveLimit,4} {puzzle.Prefill.Count,4} {ice,3} |  {weak,4:P0} {casual,5:P0} {good,5:P0} | {sw.ElapsedMilliseconds}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("grade      weak casual  good   (win rate per attempt)");
+        string[] names = { "easy", "medium", "hard", "hardest" };
+        for (int g = 0; g < 4; g++)
+        {
+            if (gradeCount[g] == 0) continue;
+            float n = gradeCount[g];
+            Console.WriteLine($"{names[g],-8} {byGrade[g, 0] / n,6:P0} {byGrade[g, 1] / n,6:P0} {byGrade[g, 2] / n,5:P0}");
+        }
+    }
+
+    static float WinRate(LevelDefinition level, float skill, int runs, bool daily = false)
     {
         int wins = 0;
         for (int r = 0; r < runs; r++)
         {
-            var s = GameSession.NewLevelRun(level, 8, 7);
+            var s = daily ? GameSession.NewDailyRun(level, 8, 7) : GameSession.NewLevelRun(level, 8, 7);
             var bot = new Autoplayer(900 + r * 13, skill);
             int guard = 0;
             while (!s.IsFinished && guard++ < 600)

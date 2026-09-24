@@ -61,6 +61,10 @@ namespace BlockPuzzle.Game
             _scrim.type = Image.Type.Simple;
             UiBuilder.StretchFullScreen(_scrim.rectTransform);
 
+            // Between the scrim and the card: the paper falls behind the result, never over its words.
+            _confettiRoot = UiBuilder.Child(_panel, "Confetti");
+            _confettiRoot.gameObject.AddComponent<Canvas>();
+
             _card = UiBuilder.Node(_panel, "Card");
             _card.sizeDelta = CardSize;
 
@@ -120,6 +124,130 @@ namespace BlockPuzzle.Game
 
         UiButton _share;
         Action _shareAction;
+
+        // ------------------------------------------------------------------ confetti
+
+        sealed class Paper
+        {
+            public Image Image;
+            public Vector2 Velocity;
+            public float Spin;
+            public float Flutter;
+            public float Phase;
+            public float Age;
+            public float Life;
+        }
+
+        RectTransform _confettiRoot;
+        readonly System.Collections.Generic.List<Paper> _papers = new System.Collections.Generic.List<Paper>();
+        Coroutine _confetti;
+        uint _seed = 88172645u;
+
+        public Transform Note => _note.transform;
+        public Transform NoteIcon => _noteIcon.transform;
+
+        /// <summary>
+        /// Paper falling behind the card — a solved puzzle, a level won, a new record. Once, for
+        /// about two seconds, and then the card is left alone: a moment, not a loop.
+        /// </summary>
+        public void Celebrate(MonoBehaviour host, int amount = 46)
+        {
+            if (_confettiRoot == null) return;
+
+            var colours = Design.Blocks;
+            float halfWidth = 1080f * 0.5f;
+            float top = _panel.rect.height * 0.5f;
+
+            for (int i = 0; i < amount; i++)
+            {
+                var paper = i < _papers.Count ? _papers[i] : NewPaper();
+                var rect = paper.Image.rectTransform;
+
+                // Two bursts from the upper corners, thrown inwards and up, then drifting down.
+                bool left = i % 2 == 0;
+                rect.anchoredPosition = new Vector2(left ? -halfWidth : halfWidth, top * (0.35f + Random01() * 0.3f));
+                rect.sizeDelta = new Vector2(20f + Random01() * 16f, 11f + Random01() * 9f);
+                rect.localEulerAngles = new Vector3(0f, 0f, Random01() * 360f);
+
+                paper.Velocity = new Vector2((left ? 1f : -1f) * (380f + Random01() * 620f), 500f + Random01() * 700f);
+                paper.Spin = (Random01() - 0.5f) * 720f;
+                paper.Flutter = 6f + Random01() * 8f;
+                paper.Phase = Random01() * 6.28f;
+                paper.Age = -Random01() * 0.25f;
+                paper.Life = 1.8f + Random01() * 0.8f;
+                paper.Image.color = (i % 5 == 0 ? Design.Gold : colours[i % colours.Length]).WithAlpha(0f);
+                paper.Image.gameObject.SetActive(true);
+            }
+
+            for (int i = amount; i < _papers.Count; i++) _papers[i].Image.gameObject.SetActive(false);
+
+            if (_confetti != null) host.StopCoroutine(_confetti);
+            _confetti = host.StartCoroutine(ConfettiRoutine(amount));
+        }
+
+        Paper NewPaper()
+        {
+            var image = UiBuilder.Image(_confettiRoot, "Paper", Art.Panel(4f), Color.white);
+            image.gameObject.SetActive(false);
+            var paper = new Paper { Image = image };
+            _papers.Add(paper);
+            return paper;
+        }
+
+        IEnumerator ConfettiRoutine(int count)
+        {
+            bool alive = true;
+            while (alive)
+            {
+                alive = false;
+                float dt = Mathf.Min(Time.unscaledDeltaTime, 0.05f);
+
+                for (int i = 0; i < count && i < _papers.Count; i++)
+                {
+                    var paper = _papers[i];
+                    if (!paper.Image.gameObject.activeSelf) continue;
+
+                    paper.Age += dt;
+                    if (paper.Age < 0f) { alive = true; continue; }
+
+                    float k = paper.Age / paper.Life;
+                    if (k >= 1f)
+                    {
+                        paper.Image.gameObject.SetActive(false);
+                        continue;
+                    }
+
+                    alive = true;
+
+                    // Paper, not stone: strong drag and a low terminal speed, so it floats down.
+                    paper.Velocity += new Vector2(0f, -1500f * dt);
+                    paper.Velocity *= 1f - 2.6f * dt;
+
+                    var rect = paper.Image.rectTransform;
+                    rect.anchoredPosition += paper.Velocity * dt;
+                    rect.localEulerAngles += new Vector3(0f, 0f, paper.Spin * dt);
+
+                    // The flip of a falling scrap: its width swings through zero and back.
+                    float flip = Mathf.Cos(paper.Phase + paper.Age * paper.Flutter);
+                    rect.localScale = new Vector3(flip, 1f, 1f);
+
+                    var c = paper.Image.color;
+                    paper.Image.color = c.WithAlpha(k < 0.05f ? k / 0.05f : 1f - Ease.InQuad(Mathf.InverseLerp(0.7f, 1f, k)));
+                }
+
+                yield return null;
+            }
+
+            _confetti = null;
+        }
+
+        float Random01()
+        {
+            _seed ^= _seed << 13;
+            _seed ^= _seed >> 17;
+            _seed ^= _seed << 5;
+            return (_seed & 0xFFFFFF) / (float)0x1000000;
+        }
 
         /// <summary>
         /// Shows the card. <paramref name="stars"/> is -1 to leave the star row out, otherwise
@@ -213,6 +341,7 @@ namespace BlockPuzzle.Game
         public void Hide()
         {
             if (_panel == null) return;
+            foreach (var paper in _papers) paper.Image.gameObject.SetActive(false);
             _panel.gameObject.SetActive(false);
             PointerRouter.PopBlocker(_panel);
         }

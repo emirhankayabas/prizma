@@ -8,8 +8,9 @@ namespace BlockPuzzle.Game
 {
     /// <summary>
     /// The strip above the board. One layout, filled differently per mode:
-    /// classic shows the score against the all-time best; the daily shows it against today's best
-    /// and the date; a level shows what is left of its goal, and the moves left to do it in.
+    /// classic shows the score against the all-time best; a level shows what is left of its goal
+    /// and the moves left to do it in; the daily puzzle shows the same as a level, with the clock
+    /// running where the level number would be.
     /// </summary>
     public sealed class GameHud
     {
@@ -45,6 +46,9 @@ namespace BlockPuzzle.Game
 
         public RectTransform Root => _root;
         public Transform Readout => _readout.transform;
+
+        /// <summary>The number beside the corner icon: the best score in classic, the clock in the daily.</summary>
+        public Transform LeftLabel => _leftLabel.transform;
 
         /// <summary>Where freed crystals fly to.</summary>
         public Vector3 GoalAnchor => _goalIcon.gameObject.activeSelf ? _goalIcon.rectTransform.position : _readout.rectTransform.position;
@@ -137,19 +141,19 @@ namespace BlockPuzzle.Game
 
         // ------------------------------------------------------------------ binding
 
-        /// <param name="dailyDate">The day whose puzzle a daily run is — today, or a day caught up on from the calendar.</param>
-        public void Bind(GameSession session, DateTime dailyDate)
+        public void Bind(GameSession session)
         {
             _session = session;
+            _clockShown = -1;
             HideCombo();
 
             switch (session.Mode)
             {
                 case GameMode.Daily:
-                    // Beside the date chip: a five-digit best at full size would run into it.
-                    SetLeft(Icons.Calendar, Design.Mint, Design.FontDisplay, Design.Body);
-                    ShowChip(Str.ShortDate(dailyDate), Design.TextPrimary);
-                    _goalIcon.gameObject.SetActive(false);
+                    // The puzzle is timed: the clock takes the corner, the goal and the moves are a level's.
+                    SetLeft(Icons.Clock, Design.Mint, Design.FontDisplay, Design.Headline);
+                    _goalIcon.gameObject.SetActive(true);
+                    ConfigureGoalIcon(session.Level.Goal);
                     break;
 
                 case GameMode.Level:
@@ -214,16 +218,13 @@ namespace BlockPuzzle.Game
             switch (_session.Mode)
             {
                 case GameMode.Daily:
-                    _leftLabel.text = Mathf.Max(Progress.DailyBestToday, _session.Score).ToString();
-                    SetReadout(displayedScore.ToString());
-                    break;
-
                 case GameMode.Level:
                 {
                     var level = _session.Level;
                     // The flag already says "level". The word beside it was the one thing that
-                    // did not fit next to the moves chip once the type grew.
-                    _leftLabel.text = level.Number.ToString();
+                    // did not fit next to the moves chip once the type grew. The daily's corner
+                    // is the clock, which ticks on its own (SetClock).
+                    if (_session.Mode == GameMode.Level) _leftLabel.text = level.Number.ToString();
 
                     int moves = _session.MovesLeft;
                     // Low on moves: the chip turns rose. A steady colour, not a pulse.
@@ -240,6 +241,17 @@ namespace BlockPuzzle.Game
                     break;
             }
         }
+
+        /// <summary>The daily's clock, total seconds on today's puzzle. Only repaints when the second changes.</summary>
+        public void SetClock(float seconds)
+        {
+            int whole = Mathf.FloorToInt(seconds);
+            if (whole == _clockShown) return;
+            _clockShown = whole;
+            _leftLabel.text = Str.Clock(whole);
+        }
+
+        int _clockShown = -1;
 
         void SetReadout(string text)
         {
@@ -272,7 +284,8 @@ namespace BlockPuzzle.Game
             }
 
             float multiplier = ScoreRules.ComboMultiplier(streak);
-            var tint = streak >= 4 ? Design.Gold : Design.Mint;
+            // The chip climbs the same ladder as the light: mint, gold, rose, then the prism itself.
+            var tint = streak >= 8 ? Design.Prism : streak >= 6 ? Design.PreviewTint(3) : streak >= 4 ? Design.Gold : Design.Mint;
 
             _comboLabel.text = Str.Combo(multiplier);
             _comboLabel.color = tint;

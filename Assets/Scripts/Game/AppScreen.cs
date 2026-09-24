@@ -46,9 +46,12 @@ namespace BlockPuzzle.Game
         {
             Root.SetAsLastSibling();
             Root.gameObject.SetActive(true);
+
+            // Before OnShow, not after: anything a screen starts while showing — the title's drift,
+            // the daily streak counting up — used to be stopped the moment it began.
+            StopAllCoroutines();
             OnShow();
 
-            StopAllCoroutines();
             if (animate) StartCoroutine(EnterRoutine());
             else Group.alpha = 1f;
         }

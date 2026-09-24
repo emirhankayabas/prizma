@@ -139,6 +139,10 @@ namespace BlockPuzzle.Game
 
         protected override void OnShow()
         {
+            // The map is lit plainly; a level brings its own light as its goal comes closer.
+            Backdrop.Current?.SetLight(null);
+            Backdrop.Current?.SetHeat(0f);
+
             _page = (Progress.UnlockedLevel - 1) / PerPage;
             Populate();
 

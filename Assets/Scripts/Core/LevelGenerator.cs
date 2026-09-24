@@ -34,6 +34,7 @@ namespace BlockPuzzle.Core
         public static float Difficulty(int number) => 1f - (float)Math.Exp(-(Math.Max(1, number) - 1) / 45.0);
 
         static readonly Dictionary<int, LevelDefinition> Cache = new Dictionary<int, LevelDefinition>();
+        static readonly Dictionary<int, LevelDefinition> DailyCache = new Dictionary<int, LevelDefinition>();
 
         public static LevelDefinition Generate(int number, int paletteSize = 6)
         {
@@ -43,13 +44,101 @@ namespace BlockPuzzle.Core
                 if (Cache.TryGetValue(number, out var cached)) return cached;
             }
 
-            var rng = new Rng(unchecked(number * 7919 + 104729));
+            var built = Build(number, number, new Rng(unchecked(number * 7919 + 104729)),
+                unchecked(number * 7919 + 17), PickGoal(number), paletteSize);
+
+            lock (Cache) Cache[number] = built;
+            return built;
+        }
+
+        // ------------------------------------------------------------------ daily
+
+        /// <summary>The first daily puzzle. Its number is 1; every day after counts up from it.</summary>
+        public static readonly DateTime DailyEpoch = new DateTime(2026, 1, 1);
+
+        /// <summary>"Puzzle #N": the same number for everyone on the same day.</summary>
+        public static int DailyNumber(DateTime date) => Math.Max(1, (int)(date.Date - DailyEpoch).TotalDays + 1);
+
+        /// <summary>
+        /// How hard a day's puzzle is, as the adventure level it plays like. The week climbs the
+        /// way a newspaper puzzle does — an open Monday, a hard Sunday — so a player learns the
+        /// rhythm and a Sunday solve means something. Monday sits inside the warm-up levels and
+        /// gets their extra moves; stone arrives from Thursday, double ice from Friday.
+        /// </summary>
+        public static int DailyTier(DayOfWeek day)
+        {
+            switch (day)
+            {
+                case DayOfWeek.Monday: return 8;
+                case DayOfWeek.Tuesday: return 12;
+                case DayOfWeek.Wednesday: return 17;
+                case DayOfWeek.Thursday: return 23;
+                case DayOfWeek.Friday: return 30;
+                case DayOfWeek.Saturday: return 37;
+                default: return 45;
+            }
+        }
+
+        /// <summary>0 easy, 1 medium, 2 hard, 3 hardest — the label the daily card shows.</summary>
+        public static int DailyGrade(DayOfWeek day)
+        {
+            switch (day)
+            {
+                case DayOfWeek.Monday:
+                case DayOfWeek.Tuesday: return 0;
+                case DayOfWeek.Wednesday:
+                case DayOfWeek.Thursday: return 1;
+                case DayOfWeek.Friday:
+                case DayOfWeek.Saturday: return 2;
+                default: return 3;
+            }
+        }
+
+        /// <summary>
+        /// The puzzle of a calendar day: one board, goal and move budget shared by everyone that
+        /// day. Built from the date alone, like the levels are built from their number, so it is
+        /// never stored and costs nothing to ship. <see cref="LevelDefinition.Number"/> is the
+        /// puzzle number (<see cref="DailyNumber"/>), which is also how a saved attempt is matched
+        /// to its day.
+        /// </summary>
+        public static LevelDefinition GenerateDaily(DateTime date, int paletteSize = 6)
+        {
+            int number = DailyNumber(date);
+            lock (DailyCache)
+            {
+                if (DailyCache.TryGetValue(number, out var cached)) return cached;
+            }
+
+            int seedBase = unchecked(number * 48271 + 911);
+            var rng = new Rng(unchecked(seedBase * 16807 + 12345));
+
+            // Mostly crystals — the goal with a picture — and a lines day now and then for variety.
+            // Lines only early in the week: measured over four weeks, a lines goal played a grade
+            // easier than crystals at the same tier, and it was flattening the weekend back down
+            // to a Wednesday. The score goal is left to the adventure: it has no single "solved"
+            // moment to aim at.
+            bool early = DailyGrade(date.DayOfWeek) <= 1;
+            var goal = rng.Chance(early ? 0.4 : 0.0) ? GoalKind.Lines : GoalKind.Gems;
+
+            var built = Build(number, DailyTier(date.DayOfWeek), rng, seedBase, goal, paletteSize);
+            lock (DailyCache) DailyCache[number] = built;
+            return built;
+        }
+
+        /// <summary>
+        /// Drafts until the computer player can finish one, then sets its budget from those runs.
+        /// <paramref name="tier"/> is the level number whose rules and difficulty apply; for a
+        /// level it is the level itself, for a daily puzzle it comes from the day of the week.
+        /// </summary>
+        static LevelDefinition Build(int number, int tier, Rng rng, int seedBase, GoalKind goal, int paletteSize)
+        {
             LevelDefinition best = null;
 
             for (int attempt = 0; attempt < MaxAttempts; attempt++)
             {
-                var draft = Draft(number, rng, attempt, paletteSize);
-                int limit = EstimateMoveLimit(draft, paletteSize);
+                var draft = Draft(tier, rng, attempt, paletteSize, seedBase, goal);
+                draft.Number = number;
+                int limit = EstimateMoveLimit(draft, tier, paletteSize);
                 if (limit > 0)
                 {
                     draft.MoveLimit = limit;
@@ -72,7 +161,6 @@ namespace BlockPuzzle.Core
                 };
             }
 
-            lock (Cache) Cache[number] = best;
             return best;
         }
 
@@ -113,7 +201,7 @@ namespace BlockPuzzle.Core
             return def;
         }
 
-        static LevelDefinition Draft(int number, Rng rng, int attempt, int paletteSize)
+        static LevelDefinition Draft(int number, Rng rng, int attempt, int paletteSize, int seedBase, GoalKind goal)
         {
             if (number <= 3) return Authored(number, paletteSize);
 
@@ -123,9 +211,9 @@ namespace BlockPuzzle.Core
             var def = new LevelDefinition
             {
                 Number = number,
-                Seed = unchecked(number * 7919 + attempt * 104729 + 17),
+                Seed = unchecked(seedBase + attempt * 104729),
                 StartCharges = 1,
-                Goal = PickGoal(number)
+                Goal = goal
             };
 
             var filled = new bool[BoardSize, BoardSize];
@@ -334,7 +422,7 @@ namespace BlockPuzzle.Core
         /// Plays the draft several times and returns a move budget, or 0 when the computer could
         /// not finish it often enough for the level to be fair.
         /// </summary>
-        static int EstimateMoveLimit(LevelDefinition draft, int paletteSize)
+        static int EstimateMoveLimit(LevelDefinition draft, int tier, int paletteSize)
         {
             draft.MoveLimit = MoveCap;
             var needed = new List<int>(SimulationRuns);
@@ -376,9 +464,9 @@ namespace BlockPuzzle.Core
             int typical = needed[(int)(SimulationRuns * BudgetPercentile)];
             if (typical > MoveCap) return 0;
 
-            float t = Difficulty(draft.Number);
+            float t = Difficulty(tier);
             float slack = 1.40f - 0.25f * t;
-            int bonus = draft.Number <= WarmupLevels ? WarmupBonusMoves : 0;
+            int bonus = tier <= WarmupLevels ? WarmupBonusMoves : 0;
 
             return Math.Max(10, (int)Math.Ceiling(typical * slack) + bonus);
         }

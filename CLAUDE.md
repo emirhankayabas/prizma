@@ -2,7 +2,7 @@
 
 Unity 6 (6000.6.0f1) · URP · portre mobil, hedef Android.
 Block Blast türünde 8x8 blok bulmaca. Arayüz metinleri **Türkçe**.
-Üç mod: **Klasik** (sonsuz), **Günlük** (herkese aynı tohum, seri sayacı), **Macera** (sonsuz,
+Üç mod: **Klasik** (sonsuz), **Günlük** (günde bir hedefli bulmaca, süre + seri + rozet + bildirim), **Macera** (sonsuz,
 prosedürel bölümler: kristal / buz / hamle bütçesi / yıldız). Hepsinde **Prizma güçleri**.
 
 Sahne: `Assets/Scenes/SampleScene.unity` — içinde tek bir GameObject var: **`GameRoot`** + `AppController`.
@@ -51,7 +51,8 @@ Unity'ye hiç bağımlı değil (`UnityEngine` import etmiyor). Bu yüzden test 
 `AppController` kök. Canvas + backdrop + ses + ekranları kurar, gezinmeyi yönetir.
 
 Ekranlar `AppScreen`'den türer. Sayfalar: `MainMenuScreen`, `GameScreen`, `LevelSelectScreen`.
-Modallar (`IsModal`): `SettingsScreen`, `ScoresScreen`, `PauseScreen`, `StatsScreen`, `ThemesScreen`.
+Modallar (`IsModal`): `SettingsScreen`, `ScoresScreen`, `PauseScreen`, `StatsScreen`, `ThemesScreen`,
+`DailyScreen`, `ReminderScreen`.
 `GameScreen` üç parçadan oluşur: `GameHud` (moda göre dolan üst şerit), `PowerBar` (prizma + güçler),
 `ResultCard` (her bitişin tek kartı). Tura giriş hep `AppController.PlayClassic/PlayDaily/PlayLevel`
 üzerinden — kayıttan devam ile yeni başlangıç tek yerde karar verilir.
@@ -294,6 +295,30 @@ Unity'ye dokunmadığı için güvenli.
 
 ---
 
+## Spektrum — oyun ilerledikçe renk (`Spectrum`, `Backdrop`)
+
+Kullanıcı: "oyun ilerledikçe, belirli şeyler yapıldıkça oyunun renkleri değişsin". Referans **Lumines**'in skin geçişleri:
+oyuncu ne kadar ilerlediğini odanın renginden okur, ekranda yazı yok.
+
+**Yalnız ışık değişir:** zemin ışığı (`Glow`), üstte `Aura` ve tepsi arkasında `Floor` havuzları, `Deep` alt katmanın
+tonu, ızgara ve tahta kenarının dinlenme rengi. **Bloklar, yüzeyler ve anlam taşıyan renkler değişmez** — tek renk
+satır ve `theme-check.py` kontrastları olduğu gibi kalır.
+
+- **Klasik tur kademeleri** (`Spectrum.Thresholds`): 1500 gül · 4000 kehribar · 8000 lime · 13000 turkuaz ·
+  20000 mavi · 30000 mor · 45000 **dönen prizma**. Ölçülen turlara göre dizildi (zorlanan 1–2, casual ~3, iyi ~6 kademe).
+  Geçişte: oda ~1.5 sn'de yeni renge kayar, tahta alttan üste o renkle taranır (`BoardView.PlayStageWash`), `stage`
+  sesi (yükselen arpej, −10.5).
+- **Hedefli turlar** (macera, günlük): hedefin çeyrekleri mavi → turkuaz → lime → kehribar; soğuktan sıcağa.
+- **Olaylar:** combo sürdükçe oda ısınır (`SetHeat`, altına kayar ve büyür), tek renk satırda ışık bir kez gökkuşağından
+  geçer (`Rainbow`), tahta sıfırlanınca altın parlar (`Flash`), rekor geçilince tahta kenarı tur boyunca altın kalır.
+  Combo çipi aynı merdiveni izler: nane → altın (4) → gül (6) → prizma (8).
+- **Kalıcı:** `Progress.BestSpectrum` = klasikte ulaşılan en yüksek kademe. Menüdeki **P-R-I-Z-M-A** harfleri kademe
+  başına bir tane renklenir (`Spectrum.TitleMarkup`), menünün ışığı o kademenin renginde.
+- Alfalar ekran görüntüsüyle ayarlandı: ilk hâlinde (aura 0.2, zemin tonsuz) parlak varsayılan zeminde kademe
+  değişimi **görünmüyordu**. Linear uzayda alfa beklenenden açık çıkar ama beyazımsı pus olarak — renk olarak değil.
+  Işığın zemine (`Deep`) işlemesi gerekti. `Floor` bilerek aura'dan düşük: tepsi parçaları o zeminde durur.
+- Boş havuzlar `cullTransparentMesh` ile çizilmez; ışık değişmiyorken `UpdateLight` hiçbir şeyi boyamaz.
+
 ## Dil — `Str`
 
 Arayüz **Türkçe + İngilizce**. Oyuncunun okuduğu her kelime `Str.cs`'te (`T(tr, en)`); çağrı yerinde metin
@@ -304,12 +329,36 @@ Büyük harf `Str.Upper` ile — Türkçe i/İ kuralı. Yeni dil: `Language` enu
 İngilizce metinler Türkçeden uzun: sabit genişlikli etiketleri **iki dilde** görüntüyle doğrula
 (AutoTest `20_en_*` görüntüleri bunun için).
 
-## Günlük takvim, paylaşım, başarımlar
+## Günlük bulmaca, rozetler, hatırlatıcı, paylaşım
 
-- **Takvim** (`DailyScreen`, günlük kartı açar): oynanan günler nane tik, geçmiş günler oynanabilir (o günün
-  tohumu). Kayıt `Progress.DailyMonths/DailyDays` (ay başına bit maskesi). **Seriyi ve günün rekorunu yalnız
-  bugünün bulmacası** değiştirir — telafi edilen gün seriye geriye yazılmaz. `AppController.DailyDate` hangi günün
-  oynandığını tutar.
+**LinkedIn Zip / Wordle modeli.** Kullanıcı eski takvimi ("geçmiş günü oynayabiliyorum, bu hoş değil") reddetti.
+Artık günde **bir** bulmaca var, herkese aynı, yalnız bugün oynanır. Kaçan gün kaçmıştır — serinin ağırlığı bu.
+
+- **Bulmaca** `LevelGenerator.GenerateDaily(date)`: bölüm üreticisiyle aynı yol (taslak → bot ile bütçe),
+  tohum tarihten. `LevelDefinition.Number` = bulmaca numarası (`DailyNumber`, 1 Ocak 2026 = #1); kayıt bu
+  numarayla eşleşir. Zorluk **haftanın gününden** (`DailyTier`): Pazartesi 8. bölüm gibi → Pazar 45. bölüm gibi.
+  Satır hedefi yalnız Pzt–Per (ölçüldü: satır hedefi aynı kademede bir derece kolay oynuyor, hafta sonunu düzleştiriyordu).
+  Ölçülen (`CoreHarness daily 28`, deneme başına kazanma): casual kolay %96 → zor %76 → en zor %77; iyi oyuncu %92–100.
+- **Oturum**: `GameMode.Daily` + `Level` dolu → bölüm kurallarıyla oynar (hedef, hamle, +5 hamle). `GameSession.PlaySeconds`
+  süreyi tutar (Core'da saat yok; `GameScreen.Update` sayar, modal/sonuç kartı/arka planda durur, kayda girer).
+- **Deneme**: çözülene kadar tekrar denenir. Her yeni deneme `Progress.DailyAttemptStarted`, biten/atılan denemenin
+  süresi `DailyAttemptEnded` ile bankaya. Gösterilen süre = banka + mevcut deneme.
+- **Çözüm** `Progress.RecordDailySolve`: seri (dün çözüldüyse +1, değilse 1), en iyi seri, süre/hamle/yıldız/deneme,
+  rozet istatistikleri, kusursuz hafta. Çözülen gün tekrar oynanmaz; `PlayDaily` kartı açar. Sonuç kartı: büyük sayı
+  **süre**, ana eylem **PAYLAŞ**, not satırı yeni rozet > yeni tema > seri.
+- **Kart** (`DailyScreen`): Bugün sekmesi (seri + hafta şeridi + günün zorluğu/hedefi + sonuç ya da deneme durumu +
+  bir sonraki bulmacaya geri sayım + hatırlatıcı anahtarı) ve Rozetler sekmesi (4×4 madalyon + seçilen rozetin satırı).
+  Seri kart son gösterdiğinden büyükse bir kez sayarak yükselir (`Progress.DailyStreakShown`).
+- **Rozetler** (`DailyBadges`): 16 tane, `Achievements` gibi **durumsuz** — sayılardan hesaplanır. Her biri 1 yıldız →
+  `Progress.TotalStars`. Görülmemiş rozet: menü kartında ve sekmede sabit nane nokta.
+- **Hatırlatıcı** (`Reminder` + `Assets/Plugins/Android/PrizmaReminder*.java` + `Editor/ReminderManifest`): son çözümün
+  **saatinde**, ertesi gün tek bildirim ("12:00'de çözdüyse yarın 12:00"). Eklenti yok: AlarmManager →
+  `PrizmaReminderReceiver` bildirimi atar ve ertesi günü kurar; 3 cevapsız bildirimden sonra susar; `PrizmaReminderBoot`
+  yeniden başlatma/güncellemede geri kurar. Tam zamanlı alarm izni bilerek yok (birkaç dakika sapabilir).
+  İzin **bir kez**, ilk çözümün sonuç kartı üstünde sorulur (`ReminderScreen`), sonra kartın anahtarıyla.
+  `Reminder.Refresh` açılışta, uygulama öne gelince, çözümde ve anahtarda çağrılır. Bildirim ikonu vektör XML —
+  build sırasında `res/drawable`'a yazılıyor, kod gibi. **Cihazda doğrulanmadı** (Editor açıkken APK alınmadı);
+  Java, Unity'nin JDK'sıyla `android-36` jar'ına karşı derlendi.
 - **Paylaş** (`ShareSheet`): günlük sonuç kartında; Android'in kendi paylaş penceresi (intent), eklenti yok.
   Editör/masaüstünde panoya kopyalar. Metin `Str.ShareText` + mağaza linki (`Application.identifier`).
 - **Başarımlar** (`Achievements`): mevcut istatistikler üzerinde 11 × 3 kademe; **hiçbir şey saklanmaz**, kademe
@@ -497,6 +546,15 @@ müzik bir temizlemenin ~9 dB altında. Varsayılanlar efekt %100 / müzik %70 (
   değiştirdiği için oyunda değil**; `AudioCheck wav` onu üçüncü varyant olarak çıkarıyor. Kullanıcı dinleyip
   karar verecek.
 
+### Eklenen katmanlar — eskiyi değiştirmeden
+Kullanıcı: "combo yaptıkça değiştir değil, mevcuttakine eklemeler yap". Eski kliplerin tarifi **aynı**; yenileri
+aynı ilkellerle (Chime/Tone), aynı pentatonikte, üstüne biner:
+- `sparkle0..3` (−16.5): 3. combo'dan itibaren temizlemeye eklenen hızlı tiz koşu, her iki combo'da bir nota uzar.
+  −14.5'te telefon hoparlöründe temizlemeye 2 dB'ye yaklaşıyordu; geri çekildi.
+- `surge` (−12): her 5. combo'da tam akor. `deal` (−19): tepsi yenilenince üç hafif tık.
+- `record` (rekor geçildi), `badge` (rozet), `streak` (seri sayacı).
+Dinlemek için: `AudioCheck wav <klasör>` → `4_KATMANLI_combo_dizisi.wav` / `4b_KATMANSIZ_...` (A/B).
+
 ### Temizleme tek çağrı
 `PlayClear(lines, comboStreak, monoLines, perfectClear)`. Öncesinde iyi bir hamle
 `PlayClear + PlayCombo + PlayPrism + PlayFanfare`'ı **aynı karede** tetikliyor, tepeler
@@ -579,6 +637,11 @@ Denge değişikliklerinden sonra simülasyonla ölç (casual/iyi oyuncu, rastgel
 ---
 
 ## Durum
+
+**Animasyon eklemeleri (bu tur):** temizlemede bloklardan savrulan kırıklar (`BoardView.PlayShards`, kendi
+canvas'ı, havuzlu, tek coroutine, en çok 72), çok satırda küçük sarsıntı (`Shake`), her 5. combo'da damla noktasından
+şok halkası (`PlayWave`, 10'dan sonra prizma rengi), tahta sıfırlanınca merkezden halka, tepsi parçaları aşağıdan kayarak
+gelir (`TrayView.DealIn` — sürüklenmeye başlanan parçayı bırakır), kazanınca/yeni rekorda konfeti (`ResultCard.Celebrate`).
 
 **Bitti:** çekirdek oynanış · akıllı dağıtıcı · ana menü · duraklatma menüsü (yeniden başlat dahil) ·
 ayarlar (müzik/efekt + sessize alma + titreşim + renk körü modu) · yerel ilk 10 skor ·

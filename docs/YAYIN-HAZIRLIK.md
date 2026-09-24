@@ -33,6 +33,10 @@ günde kapanır. Asıl uzun süren kısım Google'ın zorunlu kapalı test süre
    - AI Assistant'ın `Unity.AI.MCP.Runtime`, Visual Scripting, AI Navigation, Collections test DLL'leri.
    - Sonuç: hiç ağ kullanmayan oyun **`android.permission.INTERNET`** istiyor; APK 32 MB,
      `libil2cpp.so` açılmış hâlde 50 MB.
+   - **Bilinçli eklenen izinler (günlük hatırlatıcı):** `POST_NOTIFICATIONS` (Android 13+, oyun içinde ilk
+     çözümden sonra soruluyor) ve `RECEIVE_BOOT_COMPLETED` (telefon yeniden başlayınca alarmı geri kurmak için).
+     `Editor/ReminderManifest` build sırasında ekliyor. İkisi de veri toplamaz; Veri güvenliği formunu değiştirmez.
+     Tam zamanlı alarm izni (`SCHEDULE_EXACT_ALARM`) **bilerek yok** — hatırlatıcı birkaç dakika geç gelebilir.
 6. **Unity donanım istatistikleri açık** (`ProjectSettings.asset` → `submitAnalytics: 1`). Böyle kalırsa
    "Veri güvenliği" formunda "veri toplanmıyor" demek dürüst olmaz. Kapatılmalı.
 7. **Gizlilik politikası yok.** Hiç veri toplanmasa bile Play her uygulama için politika bağlantısı istiyor.
