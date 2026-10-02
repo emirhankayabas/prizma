@@ -119,6 +119,6 @@ namespace BlockPuzzle.Core
         public const int ExtraMoves = 5;
         public const int ExtraMovesCost = 2;
 
-        public static int Cost(PowerKind kind) => kind == PowerKind.Bomb ? 2 : 1;
+        public static int Cost(PowerKind kind) => kind == PowerKind.Bomb ? 2 : kind == PowerKind.Hammer ? 0 : 1;
     }
 }

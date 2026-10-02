@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using UnityEngine;
 
@@ -42,7 +43,12 @@ namespace BlockPuzzle.Game
         /// False when the screen is replacing an identical one — a rebuild for a new theme — where a
         /// fade from nothing would flash the ground through the page.
         /// </param>
-        public void Show(bool animate = true)
+        /// <param name="overModal">
+        /// True when another modal was on screen a moment ago (settings opened from the pause
+        /// sheet, or the pause sheet coming back): the page is already dimmed, so the dim must not
+        /// fade out and in again between the two.
+        /// </param>
+        public void Show(bool animate = true, bool overModal = false)
         {
             Root.SetAsLastSibling();
             Root.gameObject.SetActive(true);
@@ -52,9 +58,16 @@ namespace BlockPuzzle.Game
             StopAllCoroutines();
             OnShow();
 
-            if (animate) StartCoroutine(EnterRoutine());
-            else Group.alpha = 1f;
+            if (animate) StartCoroutine(Enter(overModal));
+            else Settle();
         }
+
+        /// <summary>
+        /// Plays the screen's way out, then calls <paramref name="done"/>; the caller hides it.
+        /// Pages leave at once. <paramref name="revealsModal"/> is true when a modal beneath will
+        /// show again, so the dim stays.
+        /// </summary>
+        public virtual void Dismiss(bool revealsModal, Action done) => done();
 
         public void Hide()
         {
@@ -66,8 +79,11 @@ namespace BlockPuzzle.Game
         protected virtual void OnShow() { }
         protected virtual void OnHide() { }
 
-        /// <summary>A short fade and rise. Enough to make navigation feel deliberate, not instant.</summary>
-        IEnumerator EnterRoutine()
+        /// <summary>The finished look of a screen that appears without its entrance.</summary>
+        protected virtual void Settle() => Group.alpha = 1f;
+
+        /// <summary>A short fade. Enough to make navigation feel deliberate, not instant.</summary>
+        protected virtual IEnumerator Enter(bool overModal)
         {
             Group.alpha = 0f;
             const float duration = 0.22f;

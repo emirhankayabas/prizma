@@ -54,6 +54,8 @@ namespace BlockPuzzle.Game
         PauseScreen _pause;
         StatsScreen _stats;
         ThemesScreen _themes;
+        LevelStartScreen _levelStart;
+        ChestScreen _chest;
 
         AppScreen _currentPage;
 
@@ -124,6 +126,7 @@ namespace BlockPuzzle.Game
             // Over the menu rather than before it: the menu is already built and laid out behind
             // the splash, so when the splash lifts there is nothing left to wait for.
             BootSplash.Play(_root);
+            StartCoroutine(AskNotificationsOnFirstLaunch());
 
 #if PRIZMA_AUTOTEST
             gameObject.AddComponent<AutoTest>();
@@ -154,16 +157,30 @@ namespace BlockPuzzle.Game
             _stats = CreateScreen<StatsScreen>("Stats", _modalLayer);
             _themes = CreateScreen<ThemesScreen>("Themes", _modalLayer);
             _daily = CreateScreen<DailyScreen>("Daily", _modalLayer);
-            _reminder = CreateScreen<ReminderScreen>("Reminder", _modalLayer);
+            _levelStart = CreateScreen<LevelStartScreen>("LevelStart", _modalLayer);
+            _chest = CreateScreen<ChestScreen>("Chest", _modalLayer);
         }
 
         DailyScreen _daily;
-        ReminderScreen _reminder;
 
         public void OpenDaily() => ShowModal(_daily);
 
-        /// <summary>The one-time offer of a reminder, made over the result card of a first solve.</summary>
-        public void OpenReminderPrompt() => ShowModal(_reminder);
+        /// <summary>
+        /// The notification permission, asked once, on the very first launch, while the splash is
+        /// up: the system's own dialog and nothing of ours around it. The game used to offer the
+        /// reminder on a card of its own over the first solve, and keep a switch for it on the
+        /// daily card; both are gone. The answer can be changed in settings.
+        ///
+        /// Two frames in rather than from Awake: the permission request needs the activity to be
+        /// in front, which it is not yet while the first scene is still loading.
+        /// </summary>
+        System.Collections.IEnumerator AskNotificationsOnFirstLaunch()
+        {
+            if (GameSettings.ReminderAsked) yield break;
+            yield return null;
+            yield return null;
+            Reminder.Enable(null);
+        }
 
         /// <summary>True while any modal is open — the daily's clock does not run behind one.</summary>
         public bool HasModal => _modals.Count > 0;
@@ -171,6 +188,8 @@ namespace BlockPuzzle.Game
 #if PRIZMA_AUTOTEST
         public StatsScreen StatsPage => _stats;
         public DailyScreen DailyPage => _daily;
+        public LevelSelectScreen LevelsPage => _levels;
+        public LevelStartScreen LevelStartPage => _levelStart;
 #endif
 
         // ------------------------------------------------------------------ theme
@@ -237,7 +256,7 @@ namespace BlockPuzzle.Game
 
         AppScreen ModalOfKind(Type kind)
         {
-            foreach (var modal in new AppScreen[] { _settings, _scores, _pause, _stats, _themes, _daily, _reminder })
+            foreach (var modal in new AppScreen[] { _settings, _scores, _pause, _stats, _themes, _daily, _levelStart, _chest })
                 if (modal.GetType() == kind) return modal;
             return null;
         }
@@ -376,17 +395,47 @@ namespace BlockPuzzle.Game
             RebuildInterface();
         }
 
-        /// <summary>A level. Resumes a saved attempt at the same level; anything else starts clean.</summary>
-        public void PlayLevel(int number)
+        /// <summary>
+        /// A level. Resumes a saved attempt at the same level; anything else starts clean, with the
+        /// win streak's gift and whichever boosters the start sheet took — spent here, only when a
+        /// fresh attempt really begins.
+        /// </summary>
+        public void PlayLevel(int number, bool boostMoves = false, bool boostCharge = false)
         {
             number = Mathf.Clamp(number, 1, Progress.UnlockedLevel);
 
             var saved = RunStore.Load(GameMode.Level);
-            GameSession session = saved != null && saved.Level != null && saved.Level.Number == number
-                ? saved
-                : GameSession.NewLevelRun(LevelGenerator.Generate(number, Design.PaletteSize), _boardSize, Design.PaletteSize);
+            GameSession session;
+            if (saved != null && saved.Level != null && saved.Level.Number == number)
+            {
+                session = saved;
+            }
+            else
+            {
+                var (moves, charges) = Progress.StreakBonus(Progress.WinStreak);
+                if (boostMoves && Progress.SpendBooster(Booster.Moves)) moves += 3;
+                if (boostCharge && Progress.SpendBooster(Booster.Charge)) charges += 1;
+
+                session = GameSession.NewLevelRun(LevelGenerator.Generate(number, Design.PaletteSize), _boardSize,
+                    Design.PaletteSize, charges, moves);
+            }
 
             Begin(session);
+        }
+
+        /// <summary>A level's sheet: its goal, the streak and the boosters, and the button that starts it.</summary>
+        public void OpenLevelStart(int number)
+        {
+            _levelStart.Prepare(number);
+            if (_modals.Contains(_levelStart)) CloseAllModals();
+            ShowModal(_levelStart);
+        }
+
+        /// <summary>A world's chest, ready to be opened.</summary>
+        public void OpenChest(int world)
+        {
+            _chest.Prepare(world);
+            ShowModal(_chest);
         }
 
         /// <summary>Throws the current run away and starts the same kind of run again.</summary>
@@ -407,7 +456,11 @@ namespace BlockPuzzle.Game
                     if (!session.IsFinished) Progress.DailyAttemptEnded(DailyDate, session.PlaySeconds);
                     PlayDaily(fresh: true);
                     break;
-                case GameMode.Level: PlayLevel(session.Level.Number); break;
+                case GameMode.Level:
+                    // Starting over part-way through is a loss as far as the win streak is concerned.
+                    if (!session.IsFinished && session.MovesUsed > 0) Progress.RecordLevelResult(won: false);
+                    PlayLevel(session.Level.Number);
+                    break;
                 default: PlayClassic(fresh: true); break;
             }
         }
@@ -432,6 +485,13 @@ namespace BlockPuzzle.Game
 
         public void ShowLevelSelect() => ShowPage(_levels);
 
+        /// <summary>The map straight after a win: it walks the road on to the next level and opens its sheet.</summary>
+        public void ShowLevelSelect(int afterWin)
+        {
+            _levels.Prepare(afterWin);
+            ShowPage(_levels);
+        }
+
         public void OpenSettings() => ShowModal(_settings);
 
         public void OpenScores() => ShowModal(_scores);
@@ -442,19 +502,42 @@ namespace BlockPuzzle.Game
 
         public void OpenThemes() => ShowModal(_themes);
 
-        /// <summary>Dismisses the top modal, falling back to the one beneath it if there is one.</summary>
+        /// <summary>The modal on its way out, if one is: it stays on the stack until its sheet is down.</summary>
+        AppScreen _dismissing;
+
+        /// <summary>
+        /// Dismisses the top modal, falling back to the one beneath it if there is one. The sheet
+        /// slides down first; while it does, it still owns the pointer, so nothing behind it can be
+        /// pressed through it on the way out.
+        /// </summary>
         public void CloseModal()
         {
+            // A second close while the first is still sliding (a double tap on back): land the
+            // first at once and carry on with the next.
+            if (_dismissing != null) FinishDismiss();
             if (_modals.Count == 0) return;
 
-            int top = _modals.Count - 1;
-            _modals[top].Hide();
-            PointerRouter.PopBlocker(_modals[top].RootRect);
-            _modals.RemoveAt(top);
+            var top = _modals[_modals.Count - 1];
+            _dismissing = top;
+            top.Dismiss(revealsModal: _modals.Count > 1, () =>
+            {
+                if (_dismissing == top) FinishDismiss();
+            });
+        }
+
+        void FinishDismiss()
+        {
+            var top = _dismissing;
+            _dismissing = null;
+            if (top == null || !_modals.Contains(top)) return;
+
+            top.Hide();
+            PointerRouter.PopBlocker(top.RootRect);
+            _modals.Remove(top);
 
             if (_modals.Count > 0)
             {
-                _modals[_modals.Count - 1].Show();
+                _modals[_modals.Count - 1].Show(overModal: true);
                 return;
             }
 
@@ -465,6 +548,7 @@ namespace BlockPuzzle.Game
 
         void CloseAllModals()
         {
+            _dismissing = null;
             for (int i = _modals.Count - 1; i >= 0; i--)
             {
                 _modals[i].Hide();
@@ -487,15 +571,17 @@ namespace BlockPuzzle.Game
 
         void ShowModal(AppScreen modal, bool animate = true)
         {
+            if (_dismissing != null) FinishDismiss();
             if (_modals.Contains(modal)) return;
 
-            if (_modals.Count > 0) _modals[_modals.Count - 1].Hide();
+            bool over = _modals.Count > 0;
+            if (over) _modals[_modals.Count - 1].Hide();
 
             // A modal owns the pointer outright: neither the board nor any button behind it reacts.
             PointerRouter.Fallback = null;
 
             _modals.Add(modal);
-            modal.Show(animate);
+            modal.Show(animate, overModal: over);
             PointerRouter.PushBlocker(modal.RootRect);
         }
 

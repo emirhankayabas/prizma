@@ -71,6 +71,16 @@ namespace BlockPuzzle.Game
             // The highest stage of light a classic run has reached. Lights the title's letters.
             public int BestSpectrum;
 
+            // The adventure: boosters in stock, the win streak, world chests opened (a bit each), and
+            // the furthest level the map has already shown unlocked — past it, the road is drawn on.
+            public bool BoostersGranted;
+            public int BoosterMoves;
+            public int BoosterCharge;
+            public int BoosterHammer;
+            public int WinStreak;
+            public int ChestsOpened;
+            public int MapRevealed;
+
             public int Theme;
             public bool ColorBlind;
             public bool TutorialSeen;
@@ -154,15 +164,18 @@ namespace BlockPuzzle.Game
 
         public static int LevelsCompleted => D.Stars.Count;
 
-        /// <summary>The furthest level the player may start. Levels unlock one at a time.</summary>
-        public static int UnlockedLevel => D.Stars.Count + 1;
+        /// <summary>The furthest level the player may start. Levels unlock one at a time, up to the last.</summary>
+        public static int UnlockedLevel => Math.Min(LevelGenerator.LevelCount, D.Stars.Count + 1);
+
+        /// <summary>Every level of the adventure is done.</summary>
+        public static bool AdventureComplete => D.Stars.Count >= LevelGenerator.LevelCount;
 
         /// <summary>Records a finished level. Returns true when it beat the previous stars.</summary>
         public static bool RecordLevel(int level, int stars)
         {
             stars = Mathf.Clamp(stars, 1, 3);
             int i = level - 1;
-            if (i < 0 || i > D.Stars.Count) return false;
+            if (i < 0 || i > D.Stars.Count || i >= LevelGenerator.LevelCount) return false;
 
             bool improved;
             if (i == D.Stars.Count)
@@ -178,6 +191,119 @@ namespace BlockPuzzle.Game
 
             Save();
             return improved;
+        }
+
+        // ------------------------------------------------------------------ adventure extras
+
+        /// <summary>Stars of every level in a world, and how many it could hold.</summary>
+        public static int WorldStars(int world)
+        {
+            int total = 0;
+            for (int n = world * LevelGenerator.WorldSize + 1; n <= (world + 1) * LevelGenerator.WorldSize; n++)
+                total += StarsFor(n);
+            return total;
+        }
+
+        /// <summary>A world's chest can be opened once its last level is done.</summary>
+        public static bool ChestReady(int world) =>
+            !ChestOpened(world) && LevelsCompleted >= (world + 1) * LevelGenerator.WorldSize;
+
+        public static bool ChestOpened(int world) => (D.ChestsOpened & (1 << world)) != 0;
+
+        /// <summary>
+        /// What a world's chest holds: a booster of each kind, and a second hammer from the fourth
+        /// world on, where stone and shade make it worth more. The last world's chest is the big one.
+        /// </summary>
+        public static (int moves, int charge, int hammer) ChestContents(int world)
+        {
+            if (world >= LevelGenerator.WorldCount - 1) return (3, 3, 3);
+            return (1, 1, world >= 3 ? 2 : 1);
+        }
+
+        public static void OpenChest(int world)
+        {
+            if (!ChestReady(world)) return;
+            var (moves, charge, hammer) = ChestContents(world);
+            D.ChestsOpened |= 1 << world;
+            D.BoosterMoves += moves;
+            D.BoosterCharge += charge;
+            D.BoosterHammer += hammer;
+            Save();
+        }
+
+        /// <summary>A small starting stock, handed over the first time the adventure is opened.</summary>
+        public static void GrantStarterBoosters()
+        {
+            if (D.BoostersGranted) return;
+            D.BoostersGranted = true;
+            D.BoosterMoves += 2;
+            D.BoosterCharge += 2;
+            D.BoosterHammer += 3;
+            Save();
+        }
+
+        public static int BoosterCount(Booster booster)
+        {
+            switch (booster)
+            {
+                case Booster.Moves: return D.BoosterMoves;
+                case Booster.Charge: return D.BoosterCharge;
+                default: return D.BoosterHammer;
+            }
+        }
+
+        /// <summary>Takes one booster from the stock. False when there is none.</summary>
+        public static bool SpendBooster(Booster booster)
+        {
+            switch (booster)
+            {
+                case Booster.Moves: if (D.BoosterMoves <= 0) return false; D.BoosterMoves--; break;
+                case Booster.Charge: if (D.BoosterCharge <= 0) return false; D.BoosterCharge--; break;
+                default: if (D.BoosterHammer <= 0) return false; D.BoosterHammer--; break;
+            }
+
+            Save();
+            return true;
+        }
+
+        /// <summary>
+        /// Levels won in a row, capped at three steps. Each step starts the next level with a
+        /// little more (<see cref="StreakBonus"/>); any loss sets it back to nothing.
+        /// </summary>
+        public static int WinStreak => D.WinStreak;
+
+        public const int MaxWinStreak = 3;
+
+        public static void RecordLevelResult(bool won)
+        {
+            int streak = won ? Math.Min(MaxWinStreak, D.WinStreak + 1) : 0;
+            if (streak == D.WinStreak) return;
+            D.WinStreak = streak;
+            Save();
+        }
+
+        /// <summary>What a streak step adds to the start of a level: moves, then a charge, then both.</summary>
+        public static (int moves, int charges) StreakBonus(int streak)
+        {
+            switch (Math.Min(streak, MaxWinStreak))
+            {
+                case 1: return (2, 0);
+                case 2: return (2, 1);
+                case 3: return (4, 1);
+                default: return (0, 0);
+            }
+        }
+
+        /// <summary>The furthest unlocked level the map has already shown. The map draws the road on to anything past it.</summary>
+        public static int MapRevealed
+        {
+            get => D.MapRevealed;
+            set
+            {
+                if (D.MapRevealed == value) return;
+                D.MapRevealed = value;
+                Save();
+            }
         }
 
         // ------------------------------------------------------------------ daily
@@ -469,6 +595,19 @@ namespace BlockPuzzle.Game
             _data = new Data();
             Save();
         }
+    }
+
+    /// <summary>The adventure's boosters: bought with nothing, earned from world chests.</summary>
+    public enum Booster
+    {
+        /// <summary>Three more moves on a level's budget, picked before it starts.</summary>
+        Moves = 0,
+
+        /// <summary>A prism charge to start with, picked before it starts.</summary>
+        Charge = 1,
+
+        /// <summary>Smash one block during play — ice, stone, shade, a timer, anything.</summary>
+        Hammer = 2
     }
 
     /// <summary>

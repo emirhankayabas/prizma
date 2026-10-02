@@ -44,6 +44,15 @@ namespace BlockPuzzle.Game
         GameSession _session;
         float _readoutTop;
 
+        // The hammer booster, right of the goal: a level-only control with its stock in a badge.
+        UiButton _hammer;
+        TextMeshProUGUI _hammerCount;
+        RectTransform _hammerBadge;
+
+        public event Action HammerClicked;
+
+        public Vector3 HammerPosition => _hammer.Rect.position;
+
         public RectTransform Root => _root;
         public Transform Readout => _readout.transform;
 
@@ -137,6 +146,38 @@ namespace BlockPuzzle.Game
             _comboLabel.rectTransform.sizeDelta = _comboChip.sizeDelta;
 
             _comboChip.gameObject.SetActive(false);
+
+            const float hammerSize = Design.TouchTarget + 8f;
+            _hammer = UiBuilder.Button(_root, "Hammer", new Vector2(hammerSize, hammerSize), UiButton.Style.Icon, null, Design.Body, Icons.Hammer);
+            _hammer.Rect.anchorMin = _hammer.Rect.anchorMax = new Vector2(1f, 1f);
+            _hammer.Rect.pivot = new Vector2(1f, 0.5f);
+            _hammer.Rect.anchoredPosition = new Vector2(-Design.Gutter, _readoutTop - ReadoutBox * 0.5f);
+            _hammer.Clicked += () => HammerClicked?.Invoke();
+
+            _hammerBadge = UiBuilder.Node(_hammer.Content, "Badge");
+            _hammerBadge.sizeDelta = new Vector2(64f, 64f);
+            _hammerBadge.anchoredPosition = new Vector2(hammerSize * 0.5f - 12f, hammerSize * 0.5f - 12f);
+            UiBuilder.Image(_hammerBadge, "Disc", Art.Disc, Design.Gold).type = Image.Type.Simple;
+            _hammerBadge.GetChild(0).GetComponent<Image>().rectTransform.sizeDelta = _hammerBadge.sizeDelta;
+            _hammerCount = UiBuilder.Label(_hammerBadge, "Count", "0", Design.Caption, new Color(0.16f, 0.1f, 0.02f), Design.FontDisplay);
+            _hammerCount.rectTransform.sizeDelta = _hammerBadge.sizeDelta;
+            _hammerCount.rectTransform.anchoredPosition = new Vector2(0f, 2f);
+            _hammer.gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// The hammer: shown in a level while the player holds any, lit while it waits for a target.
+        /// Hidden in classic and the daily — boosters belong to the adventure.
+        /// </summary>
+        public void SetHammer(int count, bool armed, bool usable)
+        {
+            bool show = _session != null && _session.Mode == GameMode.Level && count > 0;
+            _hammer.gameObject.SetActive(show);
+            if (!show) return;
+
+            _hammerCount.text = count.ToString();
+            _hammer.SetHighlighted(armed, Design.AccentA);
+            _hammer.SetEnabled(usable || armed);
         }
 
         // ------------------------------------------------------------------ binding
@@ -153,13 +194,13 @@ namespace BlockPuzzle.Game
                     // The puzzle is timed: the clock takes the corner, the goal and the moves are a level's.
                     SetLeft(Icons.Clock, Design.Mint, Design.FontDisplay, Design.Headline);
                     _goalIcon.gameObject.SetActive(true);
-                    ConfigureGoalIcon(session.Level.Goal);
+                    ConfigureGoalIcon(session.Level);
                     break;
 
                 case GameMode.Level:
                     SetLeft(Icons.Flag, Design.TextPrimary, Design.FontDisplay, Design.Headline);
                     _goalIcon.gameObject.SetActive(true);
-                    ConfigureGoalIcon(session.Level.Goal);
+                    ConfigureGoalIcon(session.Level);
                     break;
 
                 default:
@@ -181,22 +222,37 @@ namespace BlockPuzzle.Game
             _leftLabel.fontSize = size;
         }
 
-        void ConfigureGoalIcon(GoalKind goal)
+        void ConfigureGoalIcon(LevelDefinition level)
         {
-            switch (goal)
+            _goalIcon.sprite = GoalSprite(level);
+            _goalIcon.color = GoalColor(level);
+            _goalIcon.type = Image.Type.Simple;
+        }
+
+        /// <summary>What a goal looks like wherever it is shown — the HUD, the start sheet, the result card.</summary>
+        public static Sprite GoalSprite(LevelDefinition level)
+        {
+            switch (level.Goal)
             {
-                case GoalKind.Lines:
-                    _goalIcon.sprite = Icons.Rows;
-                    _goalIcon.color = Design.Mint;
-                    break;
-                case GoalKind.Score:
-                    _goalIcon.sprite = Icons.Star;
-                    _goalIcon.color = Design.Gold;
-                    break;
-                default:
-                    _goalIcon.sprite = Art.Crystal;
-                    _goalIcon.color = Design.Crystal;
-                    break;
+                case GoalKind.Lines: return Icons.Rows;
+                case GoalKind.Score: return Icons.Star;
+                case GoalKind.Tiles: return Art.Tile;
+                case GoalKind.Colors: return Art.Block;
+                case GoalKind.Shade: return Art.ShadeBlock;
+                default: return Art.Crystal;
+            }
+        }
+
+        public static Color GoalColor(LevelDefinition level)
+        {
+            switch (level.Goal)
+            {
+                case GoalKind.Lines: return Design.Mint;
+                case GoalKind.Score: return Design.Gold;
+                case GoalKind.Tiles: return Design.TileGlow;
+                case GoalKind.Colors: return Design.Blocks[Mathf.Max(0, level.OrderColor) % Design.Blocks.Length];
+                case GoalKind.Shade: return Design.Shade;
+                default: return Design.Crystal;
             }
         }
 
@@ -230,8 +286,10 @@ namespace BlockPuzzle.Game
                     // Low on moves: the chip turns rose. A steady colour, not a pulse.
                     ShowChip(Str.Moves(moves),moves <= 5 ? Design.PreviewTint(3) : Design.TextPrimary);
 
-                    int progress = level.Goal == GoalKind.Score ? displayedScore : _session.GoalProgress;
-                    SetReadout(Mathf.Max(0, level.Target - progress).ToString());
+                    int left = level.Goal == GoalKind.Score
+                        ? Mathf.Max(0, level.Target - displayedScore)
+                        : _session.GoalRemaining;
+                    SetReadout(left.ToString());
                     break;
                 }
 

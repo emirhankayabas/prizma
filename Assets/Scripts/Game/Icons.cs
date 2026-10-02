@@ -544,6 +544,112 @@ namespace BlockPuzzle.Game
             return Finish(r, "IconBell");
         }
 
+        static Sprite _note;
+        static Sprite _globe;
+
+        /// <summary>An eighth note: the music row, told apart from the effects row's speaker.</summary>
+        public static Sprite Note { get { if (_note == null) _note = BuildNote(); return _note; } }
+
+        /// <summary>The language row.</summary>
+        public static Sprite Globe { get { if (_globe == null) _globe = BuildGlobe(); return _globe; } }
+
+        static Sprite BuildNote()
+        {
+            var r = New(out float s);
+            r.FillCircle(s * 0.36f, s * 0.26f, s * 0.15f, Color.white);
+            r.FillRoundRect(s * 0.44f, s * 0.26f, s * 0.08f, s * 0.62f, s * 0.04f, Color.white);
+            r.FillPolygon(new[] { P(s, 0.44f, 0.88f), P(s, 0.76f, 0.70f), P(s, 0.76f, 0.56f), P(s, 0.52f, 0.68f) }, Color.white);
+            return Finish(r, "IconNote");
+        }
+
+        static Sprite BuildGlobe()
+        {
+            var r = New(out float s);
+            float t = s * Stroke;
+            r.StrokeCircle(s * 0.5f, s * 0.5f, s * 0.38f, t, Color.white);
+            r.Line(P(s, 0.14f, 0.5f), P(s, 0.86f, 0.5f), t, Color.white);
+
+            // The meridian: an ellipse, drawn as a ring of short strokes.
+            var previous = Vector2.zero;
+            for (int i = 0; i <= 32; i++)
+            {
+                float a = i / 32f * Mathf.PI * 2f;
+                var point = new Vector2(s * (0.5f + Mathf.Cos(a) * 0.16f), s * (0.5f + Mathf.Sin(a) * 0.38f));
+                if (i > 0) r.Line(previous, point, t, Color.white);
+                previous = point;
+            }
+
+            return Finish(r, "IconGlobe");
+        }
+
+        // ------------------------------------------------------------------ the adventure's glyphs
+
+        static Sprite _hammer;
+        static Sprite _plusMoves;
+        static Sprite _chest;
+        static Sprite _map;
+
+        /// <summary>A mallet: the booster that smashes one block.</summary>
+        public static Sprite Hammer { get { if (_hammer == null) _hammer = BuildHammer(); return _hammer; } }
+
+        /// <summary>A plus in a ring: more moves.</summary>
+        public static Sprite PlusMoves { get { if (_plusMoves == null) _plusMoves = BuildPlusMoves(); return _plusMoves; } }
+
+        /// <summary>A chest with its lid on: a world's reward.</summary>
+        public static Sprite Chest { get { if (_chest == null) _chest = BuildChest(); return _chest; } }
+
+        /// <summary>A winding road between two points: the adventure map.</summary>
+        public static Sprite Map { get { if (_map == null) _map = BuildMap(); return _map; } }
+
+        static Sprite BuildHammer()
+        {
+            var r = New(out float s);
+            // The handle runs corner to corner; the head sits across its top end.
+            r.Line(P(s, 0.20f, 0.12f), P(s, 0.58f, 0.54f), s * 0.11f, Color.white);
+            r.FillPolygon(new[] { P(s, 0.38f, 0.70f), P(s, 0.64f, 0.96f), P(s, 0.94f, 0.66f), P(s, 0.68f, 0.40f) }, Color.white);
+            r.EraseCircle(s * 0.66f, s * 0.68f, s * 0.05f);
+            return Finish(r, "IconHammer");
+        }
+
+        static Sprite BuildPlusMoves()
+        {
+            var r = New(out float s);
+            float t = s * Stroke;
+            r.StrokeCircle(s * 0.5f, s * 0.5f, s * 0.42f, t, Color.white);
+            r.FillRoundRect(s * 0.44f, s * 0.24f, s * 0.12f, s * 0.52f, s * 0.05f, Color.white);
+            r.FillRoundRect(s * 0.24f, s * 0.44f, s * 0.52f, s * 0.12f, s * 0.05f, Color.white);
+            return Finish(r, "IconPlusMoves");
+        }
+
+        static Sprite BuildChest()
+        {
+            var r = New(out float s);
+            // Body, a domed lid, the band between them and a lock plate cut out of it.
+            r.FillRoundRect(s * 0.10f, s * 0.12f, s * 0.80f, s * 0.42f, s * 0.07f, Color.white);
+            r.FillRoundRect(s * 0.10f, s * 0.58f, s * 0.80f, s * 0.26f, s * 0.13f, Color.white);
+            r.EraseRect(s * 0.44f, s * 0.36f, s * 0.12f, s * 0.26f);
+            r.FillRoundRect(s * 0.46f, s * 0.40f, s * 0.08f, s * 0.14f, s * 0.03f, Color.white);
+            return Finish(r, "IconChest");
+        }
+
+        static Sprite BuildMap()
+        {
+            var r = New(out float s);
+            float t = s * Stroke;
+            var previous = Vector2.zero;
+            for (int i = 0; i <= 24; i++)
+            {
+                float k = i / 24f;
+                var point = new Vector2(s * (0.5f + Mathf.Sin(k * Mathf.PI * 2f) * 0.22f), s * (0.18f + k * 0.64f));
+                if (i > 0) r.Line(previous, point, t, Color.white);
+                previous = point;
+            }
+
+            r.FillCircle(s * 0.5f, s * 0.14f, s * 0.10f, Color.white);
+            r.FillCircle(s * 0.5f, s * 0.86f, s * 0.10f, Color.white);
+            return Finish(r, "IconMap");
+        }
+
         static Sprite BuildFlag()
         {
             var r = New(out float s);

@@ -49,12 +49,12 @@ namespace BlockPuzzle.Core
 
             _moves.Clear();
             var board = session.Board;
-            bool wantsGems = session.Level != null && session.Level.Goal == GoalKind.Gems;
 
-            // A player chasing crystals builds towards the lines that hold them, not only takes
-            // them when a clear happens to pass through. Without this the computer freed crystals
-            // by accident, and budgets sized from it were both loose and erratic.
-            if (wantsGems) MarkGemLines(board);
+            // A player chasing a goal builds towards the lines that hold it, not only takes it when
+            // a clear happens to pass through. Without this the computer freed crystals by accident,
+            // and budgets sized from it were both loose and erratic. Every goal and every obstacle
+            // is one weight per cell: what clearing that cell is worth.
+            bool targeted = BuildWeights(session);
 
             for (int slot = 0; slot < session.Tray.Length; slot++)
             {
@@ -71,10 +71,11 @@ namespace BlockPuzzle.Core
                     int lines = _rows.Count + _cols.Count;
 
                     float value = lines * 100f + board.ContactScore(shape, col, row) * 4f + shape.CellCount * 2f;
-                    if (wantsGems)
+                    if (targeted)
                     {
-                        if (lines > 0) value += board.CountGemsInLines(_rows, _cols) * 160f;
-                        value += CellsOnGemLines(shape, col, row) * 10f;
+                        if (lines > 0) value += WeightInLines(board.Size);
+                        value += CellsOnTargetLines(shape, col, row) * 10f;
+                        if (_orderColor >= 0 && piece.ColorIndex == _orderColor) value += CellsOnTargetLines(shape, col, row) * 4f;
                     }
 
                     // Tiny noise so equal moves are not always resolved the same way.
@@ -101,36 +102,85 @@ namespace BlockPuzzle.Core
             return session.TryPlace(chosen.Slot, chosen.Col, chosen.Row) != null;
         }
 
-        bool[] _gemRows = new bool[0];
-        bool[] _gemCols = new bool[0];
+        float[,] _weight = new float[0, 0];
+        bool[] _targetRows = new bool[0];
+        bool[] _targetCols = new bool[0];
+        int _orderColor = -1;
 
-        void MarkGemLines(BoardModel board)
+        /// <summary>
+        /// What clearing each cell is worth to this level: its crystal, its glow tile, a block of the
+        /// order colour, shade, and — most of all — a timer about to run out. False when nothing on
+        /// the board is worth more than any other cell, which is the whole of a classic run.
+        /// </summary>
+        bool BuildWeights(GameSession session)
         {
-            if (_gemRows.Length != board.Size)
+            var board = session.Board;
+            var level = session.Level;
+            int n = board.Size;
+            if (level == null && board.TimerCount == 0) return false;
+
+            if (_targetRows.Length != n)
             {
-                _gemRows = new bool[board.Size];
-                _gemCols = new bool[board.Size];
+                _weight = new float[n, n];
+                _targetRows = new bool[n];
+                _targetCols = new bool[n];
             }
 
-            System.Array.Clear(_gemRows, 0, _gemRows.Length);
-            System.Array.Clear(_gemCols, 0, _gemCols.Length);
+            System.Array.Clear(_targetRows, 0, n);
+            System.Array.Clear(_targetCols, 0, n);
 
-            for (int y = 0; y < board.Size; y++)
-            for (int x = 0; x < board.Size; x++)
-                if (board.HasGem(x, y))
+            var goal = level != null ? level.Goal : GoalKind.Score;
+            _orderColor = goal == GoalKind.Colors && level != null ? level.OrderColor : -1;
+            bool any = false;
+
+            for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                float w = 0f;
+                int cell = board.GetCell(x, y);
+
+                if (board.HasGem(x, y)) w += goal == GoalKind.Gems ? 160f : 30f;
+                if (goal == GoalKind.Tiles && board.HasTile(x, y)) w += 150f;
+                if (_orderColor >= 0 && cell == _orderColor) w += 60f;
+                if (cell == BoardModel.Shade) w += goal == GoalKind.Shade ? 150f : 40f;
+
+                int timer = board.TimerAt(x, y);
+                if (timer > 0) w += 120f + 900f / timer;
+
+                _weight[x, y] = w;
+                if (w > 0f)
                 {
-                    _gemRows[y] = true;
-                    _gemCols[x] = true;
+                    _targetRows[y] = true;
+                    _targetCols[x] = true;
+                    any = true;
                 }
+            }
+
+            return any;
         }
 
-        int CellsOnGemLines(PieceShape shape, int col, int row)
+        /// <summary>The worth of every cell in the lines just found, each cell counted once.</summary>
+        float WeightInLines(int n)
+        {
+            float total = 0f;
+            foreach (int y in _rows)
+                for (int x = 0; x < n; x++)
+                    total += _weight[x, y];
+
+            foreach (int x in _cols)
+                for (int y = 0; y < n; y++)
+                    if (!_rows.Contains(y)) total += _weight[x, y];
+
+            return total;
+        }
+
+        int CellsOnTargetLines(PieceShape shape, int col, int row)
         {
             int count = 0;
             foreach (var cell in shape.Cells)
             {
-                if (_gemRows[row + cell.Y]) count++;
-                if (_gemCols[col + cell.X]) count++;
+                if (_targetRows[row + cell.Y]) count++;
+                if (_targetCols[col + cell.X]) count++;
             }
 
             return count;
@@ -170,7 +220,7 @@ namespace BlockPuzzle.Core
                 for (int x = col - 1; x <= col + 1; x++)
                 {
                     if (!board.InBounds(x, y) || !board.IsOccupied(x, y)) continue;
-                    value += board.HasGem(x, y) ? 4 : 1;
+                    value += board.HasGem(x, y) || board.TimerAt(x, y) > 0 ? 4 : board.IsStone(x, y) ? 3 : 1;
                 }
 
                 if (value > best)

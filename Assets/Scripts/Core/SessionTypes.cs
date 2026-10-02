@@ -44,7 +44,28 @@ namespace BlockPuzzle.Core
         Reroll = 1,
 
         /// <summary>Blast a 3x3 area of the board clear.</summary>
-        Bomb = 2
+        Bomb = 2,
+
+        /// <summary>
+        /// Smash a single block — ice, stone, shade and all. Not a prism power: a booster the
+        /// adventure hands out, spent from the player's own stock, so it costs no charges.
+        /// </summary>
+        Hammer = 3
+    }
+
+    /// <summary>Why a run was lost — the result card says which, in its own words.</summary>
+    public enum LossReason
+    {
+        None = 0,
+
+        /// <summary>No piece in the tray fits anywhere.</summary>
+        NoRoom = 1,
+
+        /// <summary>A level's moves ran out.</summary>
+        NoMoves = 2,
+
+        /// <summary>A timer block counted down to zero before a line took it.</summary>
+        Timer = 3
     }
 
     public enum GoalKind
@@ -56,7 +77,19 @@ namespace BlockPuzzle.Core
         Lines = 1,
 
         /// <summary>Reach a score.</summary>
-        Score = 2
+        Score = 2,
+
+        /// <summary>
+        /// Light up every glow tile: a tile sits under a cell and goes out when a block on it is
+        /// cleared away. Candy Crush's jelly, in a block puzzle's grammar — the floor, not a piece.
+        /// </summary>
+        Tiles = 3,
+
+        /// <summary>Clear a number of blocks of one colour (<see cref="LevelDefinition.OrderColor"/>).</summary>
+        Colors = 4,
+
+        /// <summary>Clear every shade block off the board. Shade creeps into a free cell when left alone.</summary>
+        Shade = 5
     }
 
     /// <summary>One piece sitting in the tray, waiting to be dragged out.</summary>
@@ -77,6 +110,13 @@ namespace BlockPuzzle.Core
         public bool PowersEnabled = true;
         public int StartCharges = PowerRules.StartCharges;
 
+        /// <summary>
+        /// Moves added to a level's budget before it starts — the "+3 moves" booster and the win
+        /// streak. They do not count towards stars: a booster helps a player through a level, it
+        /// does not buy a better result on it.
+        /// </summary>
+        public int ExtraMoves;
+
         /// <summary>Only in <see cref="GameMode.Level"/>.</summary>
         public LevelDefinition Level;
     }
@@ -96,6 +136,12 @@ namespace BlockPuzzle.Core
 
         /// <summary>Session state once the move settled.</summary>
         public SessionState State;
+
+        /// <summary>Where shade crept to after this move, or (-1, -1) when it did not.</summary>
+        public CellOffset ShadeSpread = new CellOffset(-1, -1);
+
+        /// <summary>Blocks of the level's order colour this move cleared.</summary>
+        public int OrderCleared;
 
         /// <summary>What was placed and where, so the view can animate exactly those cells.</summary>
         public PieceShape PlacedShape;
@@ -130,14 +176,24 @@ namespace BlockPuzzle.Core
         public readonly bool Gem;
         public readonly int Ice;
 
-        public PrefillCell(int x, int y, int color, bool gem, int ice)
+        /// <summary>A glow tile under the cell. The only layer that may sit on an empty cell (<see cref="Color"/> <see cref="BoardModel.Empty"/>).</summary>
+        public readonly bool Tile;
+
+        /// <summary>Moves on a timer block's clock; 0 for an ordinary block.</summary>
+        public readonly int Timer;
+
+        public PrefillCell(int x, int y, int color, bool gem, int ice, bool tile = false, int timer = 0)
         {
             X = x;
             Y = y;
             Color = color;
             Gem = gem;
             Ice = ice;
+            Tile = tile;
+            Timer = timer;
         }
+
+        public PrefillCell WithTile(bool tile) => new PrefillCell(X, Y, Color, Gem, Ice, tile, Timer);
     }
 
     /// <summary>A generated level: its opening board, goal and move budget.</summary>
@@ -150,6 +206,18 @@ namespace BlockPuzzle.Core
         public int MoveLimit;
         public int StartCharges = 1;
         public readonly List<PrefillCell> Prefill = new List<PrefillCell>();
+
+        /// <summary>The colour a <see cref="GoalKind.Colors"/> level asks for; -1 otherwise.</summary>
+        public int OrderColor = -1;
+
+        /// <summary>
+        /// Quiet moves after which shade creeps into a neighbouring free cell. 0: it never spreads.
+        /// A move that clears any shade resets the count.
+        /// </summary>
+        public int ShadeSpread;
+
+        /// <summary>0 an ordinary level, 1 hard, 2 very hard — the map marks them; the generator builds them tighter.</summary>
+        public int Hardness;
 
         /// <summary>Stars for finishing with this many moves left over.</summary>
         public int StarsFor(int movesLeft)
@@ -184,6 +252,10 @@ namespace BlockPuzzle.Core
         public int LevelGoal;
         public int LevelTarget;
         public int LevelMoveLimit;
+        public int LevelOrderColor = -1;
+        public int LevelShadeSpread;
+        public int LevelHardness;
+        public int ExtraMoves;
 
         public string RngState;
         public float Drift;
@@ -191,6 +263,10 @@ namespace BlockPuzzle.Core
         public int[] Cells;
         public bool[] Gems;
         public int[] Ice;
+
+        /// <summary>Glow tiles and timer clocks. Missing from older saves, which had neither.</summary>
+        public bool[] Tiles;
+        public int[] Timers;
 
         public string[] TrayShapes;
         public int[] TrayColors;
@@ -214,5 +290,11 @@ namespace BlockPuzzle.Core
 
         /// <summary>Seconds of play. Missing from older saves, which read as zero.</summary>
         public float PlaySeconds;
+
+        public int TilesCollected;
+        public int ColorCollected;
+        public int ShadeCleared;
+        public int ShadeQuiet;
+        public int LossReason;
     }
 }

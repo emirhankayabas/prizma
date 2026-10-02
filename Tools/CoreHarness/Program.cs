@@ -158,6 +158,98 @@ static class Program
             Check(poor.State == SessionState.Lost, "without charges it is simply over");
         }
 
+        Console.WriteLine("== glow tiles");
+        {
+            var b = new BoardModel(8);
+            for (int x = 0; x < 6; x++) b.SetPrefill(x, 0, 1);
+            b.SetTile(6, 0, true);
+            b.SetTile(2, 0, true);
+            b.SetTile(3, 5, true);
+            Check(b.TileCount == 3, "tiles laid on free and filled cells");
+            var r = b.Place(PieceLibrary.ById("bar2_h"), 6, 0, 1);
+            Check(r.CollectedTiles.Count == 2 && b.TileCount == 1, "a clear puts out the tiles in its line, placed-on ones too");
+            Check(r.ClearedColors.Count == r.ClearedCells.Count, "every cleared cell reports its colour");
+        }
+
+        Console.WriteLine("== shade");
+        {
+            var b = new BoardModel(8);
+            b.SetPrefill(0, 0, BoardModel.Shade);
+            Check(b.ShadeCount == 1 && b.IsOccupied(0, 0), "shade is a block");
+            var spread = b.SpreadShade(new Rng(3));
+            Check(b.ShadeCount == 2 && (spread.X == 1 && spread.Y == 0 || spread.X == 0 && spread.Y == 1), "shade creeps into a neighbour");
+            for (int x = 0; x < 8; x++) if (!b.IsOccupied(x, 0)) b.SetPrefill(x, 0, BoardModel.Shade);
+            var full = new BoardModel(8);
+            for (int x = 0; x < 7; x++) full.SetPrefill(x, 0, BoardModel.Shade);
+            var r = full.Place(PieceLibrary.ById("dot"), 7, 0, 3);
+            Check(r.ClearedShade == 7 && r.MonoLines == 0 && full.ShadeCount == 0, "a line of shade clears, and is never single-colour");
+
+            var def = new LevelDefinition { Number = 1, Seed = 5, Goal = GoalKind.Shade, Target = 1, MoveLimit = 40, ShadeSpread = 1 };
+            def.Prefill.Add(new PrefillCell(7, 7, BoardModel.Shade, false, 0));
+            var s = GameSession.NewLevelRun(def, 8, 7);
+            var bot = new Autoplayer(2, 0f);
+            int before = s.Board.ShadeCount;
+            bot.Step(s);
+            Check(s.Board.ShadeCount >= before || s.State == SessionState.Won, "left alone, shade grows every quiet move");
+            var restored = GameSession.Restore(s.CreateSnapshot());
+            Check(restored.Board.ShadeCount == s.Board.ShadeCount && restored.Level.ShadeSpread == 1 && restored.ShadeQuiet == s.ShadeQuiet, "shade survives a save");
+        }
+
+        Console.WriteLine("== timers");
+        {
+            var def = new LevelDefinition { Number = 1, Seed = 9, Goal = GoalKind.Lines, Target = 99, MoveLimit = 40, StartCharges = 3 };
+            def.Prefill.Add(new PrefillCell(0, 7, 1, false, 0, timer: 2));
+            var s = GameSession.NewLevelRun(def, 8, 7);
+            Check(s.Board.TimerCount == 1 && s.Board.TimerAt(0, 7) == 2, "timer set from the prefill");
+            var saved = GameSession.Restore(s.CreateSnapshot());
+            Check(saved.Board.TimerAt(0, 7) == 2, "a timer survives a save");
+            // Two moves nowhere near its row.
+            for (int i = 0; i < 2 && s.State == SessionState.Playing; i++)
+            {
+                bool done = false;
+                for (int slot = 0; slot < 3 && !done; slot++)
+                for (int row = 0; row < 4 && !done; row++)
+                for (int col = 0; col < 8 && !done; col++)
+                    if (s.CanPlace(slot, col, row)) done = s.TryPlace(slot, col, row) != null;
+            }
+            Check(s.State == SessionState.Lost && s.LossReason == LossReason.Timer, $"a timer at zero ends the run, charges or not ({s.State}, {s.LossReason})");
+
+            var b = new BoardModel(8);
+            for (int x = 0; x < 7; x++) b.SetPrefill(x, 0, 2, false, 0, x == 3 ? 5 : 0);
+            var r = b.Place(PieceLibrary.ById("dot"), 7, 0, 2);
+            Check(r.DefusedTimers.Count == 1 && b.TimerCount == 0, "a clear takes the timer with it");
+        }
+
+        Console.WriteLine("== hammer and colours");
+        {
+            var def = new LevelDefinition { Number = 1, Seed = 9, Goal = GoalKind.Colors, OrderColor = 3, Target = 7, MoveLimit = 40 };
+            def.Prefill.Add(new PrefillCell(2, 2, 1, false, BoardModel.Stone));
+            for (int x = 0; x < 7; x++) def.Prefill.Add(new PrefillCell(x, 7, 3, false, 0));
+            var s = GameSession.NewLevelRun(def, 8, 7, extraCharges: 1, extraMoves: 3);
+            Check(s.Charges == 2 && s.MovesLeft == 43, "boosters add a charge and moves");
+            var hit = s.TryHammer(2, 2);
+            Check(hit != null && !s.Board.IsOccupied(2, 2) && s.Charges == 2, "the hammer breaks stone and costs no charge");
+            int slot = -1;
+            for (int i = 0; i < 3; i++) if (s.Tray[i].Shape.Id == "dot") slot = i;
+            if (slot < 0)
+            {
+                var hit2 = s.TryHammer(0, 7);
+                Check(hit2 != null && s.ColorCollected == 1, "a hammered block of the order colour counts");
+            }
+            var restored = GameSession.Restore(s.CreateSnapshot());
+            Check(restored.MovesLeft == s.MovesLeft && restored.Level.OrderColor == 3 && restored.ColorCollected == s.ColorCollected, "order and extra moves survive a save");
+        }
+
+        Console.WriteLine("== adventure");
+        {
+            Check(LevelGenerator.WorldOf(1) == 0 && LevelGenerator.WorldOf(10) == 0 && LevelGenerator.WorldOf(11) == 1 && LevelGenerator.WorldOf(100) == 9, "ten levels a world");
+            Check(LevelGenerator.HardnessOf(10) == 2 && LevelGenerator.HardnessOf(16) == 1 && LevelGenerator.HardnessOf(6) == 0, "hard levels where the map says");
+            Check(LevelGenerator.Generate(LevelGenerator.TilesFrom, 7).Goal == GoalKind.Tiles, "the tiles world opens on a tiles board");
+            Check(LevelGenerator.Generate(LevelGenerator.ShadeFrom, 7).Goal == GoalKind.Shade, "the shade world opens on shade");
+            Check(LevelGenerator.Generate(LevelGenerator.TimersFrom, 7).Prefill.Exists(c => c.Timer > 0), "the timer world opens on a timer");
+            Check(!LevelGenerator.Generate(20, 7).Prefill.Exists(c => c.Color == BoardModel.Shade || c.Timer > 0), "no shade or timers before their worlds");
+        }
+
         Console.WriteLine("== level");
         {
             var sw = Stopwatch.StartNew();
@@ -379,21 +471,39 @@ static class Program
 
     static void Levels(int from, int to)
     {
-        Console.WriteLine(" lvl goal   tgt  lim  pre ice gem |  casual  good | gen ms");
+        Console.WriteLine(" lvl h goal    tgt  lim  pre ice sto shd tim til |  weak casual  good | gen ms");
         var sw = new Stopwatch();
+        var byWorld = new Dictionary<int, (float weak, float casual, float good, int count)>();
         for (int n = from; n <= to; n++)
         {
             sw.Restart();
             var level = LevelGenerator.Generate(n, 7);
             sw.Stop();
 
-            int ice = level.Prefill.Count(c => c.Ice > 0);
-            int gem = level.Prefill.Count(c => c.Gem);
+            int ice = level.Prefill.Count(c => c.Ice > 0 && c.Ice < BoardModel.Stone);
+            int stone = level.Prefill.Count(c => c.Ice == BoardModel.Stone);
+            int shade = level.Prefill.Count(c => c.Color == BoardModel.Shade);
+            int timers = level.Prefill.Count(c => c.Timer > 0);
+            int tiles = level.Prefill.Count(c => c.Tile);
 
+            float weak = WinRate(level, 0.40f, 12);
             float casual = WinRate(level, 0.50f, 12);
             float good = WinRate(level, 0.85f, 12);
 
-            Console.WriteLine($"{n,4} {level.Goal,-6} {level.Target,4} {level.MoveLimit,4} {level.Prefill.Count,4} {ice,3} {gem,3} |  {casual,5:P0} {good,5:P0} | {sw.ElapsedMilliseconds}");
+            int world = LevelGenerator.WorldOf(n);
+            byWorld.TryGetValue(world, out var w);
+            byWorld[world] = (w.weak + weak, w.casual + casual, w.good + good, w.count + 1);
+
+            string mark = level.Hardness == 2 ? "!!" : level.Hardness == 1 ? "! " : "  ";
+            Console.WriteLine($"{n,4} {mark}{level.Goal,-6} {level.Target,4} {level.MoveLimit,4} {level.Prefill.Count,4} {ice,3} {stone,3} {shade,3} {timers,3} {tiles,3} |  {weak,4:P0} {casual,5:P0} {good,5:P0} | {sw.ElapsedMilliseconds}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("world   weak casual  good");
+        foreach (var pair in byWorld.OrderBy(p => p.Key))
+        {
+            var w = pair.Value;
+            Console.WriteLine($"{pair.Key + 1,5} {w.weak / w.count,6:P0} {w.casual / w.count,6:P0} {w.good / w.count,5:P0}");
         }
     }
 

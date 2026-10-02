@@ -11,7 +11,8 @@ namespace BlockPuzzle.Game
     /// Scheduling lives in Java (Assets/Plugins/Android/PrizmaReminder*.java, wired into the
     /// manifest by Editor/ReminderManifest): an alarm wakes a receiver that posts the notification
     /// and arms the next day, and gives up after three unanswered ones. This side works out when,
-    /// writes the words in the player's language, and asks Android 13+ for the permission.
+    /// writes the words in the player's language, and asks Android 13+ for the permission — once,
+    /// on the first launch, and again only from the settings switch.
     /// Everywhere but on an Android device it does nothing.
     /// </summary>
     public static class Reminder

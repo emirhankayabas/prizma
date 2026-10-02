@@ -94,14 +94,66 @@ namespace BlockPuzzle.Game
         /// </summary>
         public const float GlyphFill = 0.54f;
 
-        /// <summary>Padding between a modal card's edge and the content inside it.</summary>
+        /// <summary>Padding between a card's edge and the content inside it.</summary>
         public const float CardPadding = 64f;
 
-        /// <summary>From a modal card's top edge to the centre of its heading.</summary>
-        public const float CardHeading = 116f;
+        // ------------------------------------------------------------------ sheets
 
-        /// <summary>From a modal card's top edge to where its content starts, under the heading.</summary>
-        public const float CardHeader = 222f;
+        // Every modal is a sheet that rises from the bottom edge, where the thumb already is.
+        // The first modals were cards centred on the page with a heading printed inside and a
+        // full-width "close" button under their content: two rows of every card spent on chrome,
+        // and the rows between them squeezed until a timer sat on the line above it. A sheet
+        // closes by its corner button, a tap on the dimmed page, a swipe down or the back button,
+        // so its whole height goes to what it holds.
+
+        /// <summary>Top corners of a sheet. Its bottom corners sit below the screen edge.</summary>
+        public const float SheetRadius = 72f;
+
+        /// <summary>Space a sheet always leaves above itself, so the page behind still reads as there.</summary>
+        public const float SheetTopGap = 64f;
+
+        /// <summary>From a sheet's top edge to its content: the grabber and the title row.</summary>
+        public const float SheetHeader = 232f;
+
+        /// <summary>The title row's centre, from the sheet's top edge.</summary>
+        public const float SheetTitleLine = 124f;
+
+        /// <summary>The medallion a sheet wears over its top edge, half in, half out.</summary>
+        public const float SheetHero = 176f;
+
+        /// <summary>From a sheet's top edge to its content when it wears a medallion: the lower half of it and the title.</summary>
+        public const float SheetHeroHeader = 262f;
+
+        /// <summary>The title row's centre under a medallion.</summary>
+        public const float SheetHeroTitleLine = 170f;
+
+        /// <summary>The close button's centre, from the sheet's top edge — beside the medallion, not under it.</summary>
+        public const float SheetCloseLine = 104f;
+
+        /// <summary>Close button: the hit area is a full touch target, the disc inside it smaller.</summary>
+        public const float CloseDisc = 104f;
+
+        /// <summary>One row of a grouped list — a switch, a slider, a link.</summary>
+        public const float RowHeight = 152f;
+
+        /// <summary>Icon tile at the start of a row: a small coloured squircle with a white glyph.</summary>
+        public const float RowIcon = 88f;
+
+        /// <summary>Inner side padding of a grouped list.</summary>
+        public const float GroupPadding = 36f;
+
+        /// <summary>Between two groups.</summary>
+        public const float GroupGap = 32f;
+
+        /// <summary>A segmented control — the two halves of a sheet such as today / badges.</summary>
+        public const float SegmentHeight = 124f;
+
+        /// <summary>Switches: a phone's own proportion, a step larger.</summary>
+        public const float SwitchWidth = 184f;
+        public const float SwitchHeight = 108f;
+
+        /// <summary>A progress track inside a row.</summary>
+        public const float BarHeight = 16f;
 
         // ------------------------------------------------------------------ shape
 
@@ -162,6 +214,32 @@ namespace BlockPuzzle.Game
 
         /// <summary>The leader row in the scores table, the chosen theme's row.</summary>
         public static Color SurfaceLeader => Mood.SurfaceLeader;
+
+        /// <summary>A sheet's own fill — the darkest of the raised surfaces, so what sits on it lifts.</summary>
+        public static Color SurfaceSheet => Mood.Surface;
+
+        /// <summary>A grouped list or a card on a sheet.</summary>
+        public static Color SurfaceGroup => Mood.SurfaceHigh;
+
+        /// <summary>
+        /// Controls that sit on a group — a switch's off track, a slider's track, a segment's thumb.
+        /// The track colour alone was one step off the group's and the off switch disappeared.
+        /// </summary>
+        public static Color SurfaceControl => Mood.SurfaceButton;
+
+        /// <summary>
+        /// Row icon tiles. Not themed: like gold and mint they name a thing, and a row is found by
+        /// its colour before its word is read.
+        /// </summary>
+        public static readonly Color TintRose = Hex("#FF5A7E");
+        public static readonly Color TintViolet = Hex("#9B6BFF");
+        public static readonly Color TintBlue = Hex("#3AA9FF");
+        public static readonly Color TintOrange = Hex("#FF7C4D");
+        public static readonly Color TintTeal = Hex("#26C9C3");
+
+        /// <summary>Second and third place, and an achievement's first two tiers. First is <see cref="Gold"/>.</summary>
+        public static readonly Color Silver = Hex("#C3CEE6");
+        public static readonly Color Bronze = Hex("#E39A62");
 
         public static readonly Color Hairline = new Color(1f, 1f, 1f, 0.10f);
 
@@ -225,6 +303,39 @@ namespace BlockPuzzle.Game
 
         /// <summary>The prism charge meter and everything that belongs to the powers.</summary>
         public static readonly Color Prism = Hex("#7FE7FF");
+
+        /// <summary>
+        /// A glow tile on the floor of the board. Orchid: warmer than ice and crystal, cooler than
+        /// gold, and drawn as a rim and a diamond rather than a fill, so no block colour hides it.
+        /// </summary>
+        public static readonly Color TileGlow = Hex("#F59BFF");
+
+        /// <summary>Shade: a dusk violet, darker than any block and lit from inside by its own swirl.</summary>
+        public static readonly Color Shade = Hex("#B08CFF");
+
+        /// <summary>A timer block's clock face: the rose of a three-line clear, the colour of "soon".</summary>
+        public static readonly Color Timer = Hex("#FF4D7E");
+
+        /// <summary>
+        /// The adventure's ten worlds, one colour each: the road through a world, its finished
+        /// levels, its banner and the light of the room while it is on screen. Not themed: like the
+        /// crystal and the ice they name a place, and a player finds their way back by colour.
+        /// </summary>
+        public static readonly Color[] WorldColors =
+        {
+            Hex("#27A9F0"), // crystal shore
+            Hex("#D65BC9"), // glow fields
+            Hex("#7F86D8"), // stone pass
+            Hex("#8456D8"), // shade woods
+            Hex("#F2803A"), // colour bazaar
+            Hex("#D69A22"), // clock tower
+            Hex("#3E9BE0"), // ice palace
+            Hex("#5163E6"), // storm peak
+            Hex("#1FAE93"), // star sea
+            Hex("#F0457C"), // prism crown
+        };
+
+        public static Color WorldColor(int world) => WorldColors[Mathf.Clamp(world, 0, WorldColors.Length - 1)];
 
         // ------------------------------------------------------------------ elevation
 

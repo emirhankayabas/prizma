@@ -69,7 +69,7 @@ namespace BlockPuzzle.Game
             new Entry("perfect", () => Icons.Star, () => Progress.PerfectClears, 1, 10, 50),
             new Entry("gems", () => Art.Crystal, () => Progress.GemsCollected, 25, 250, 1000),
             new Entry("powers", () => Icons.Bomb, () => Progress.PowersUsed, 10, 50, 200),
-            new Entry("levels", () => Icons.Flag, () => Progress.LevelsCompleted, 10, 30, 60),
+            new Entry("levels", () => Icons.Flag, () => Progress.LevelsCompleted, 10, 50, 100),
             new Entry("streak", () => Icons.Calendar, () => Progress.DailyBestStreak, 3, 7, 30),
             new Entry("months", () => Icons.Check, () => Progress.CompletedMonths, 1, 3, 12),
         };

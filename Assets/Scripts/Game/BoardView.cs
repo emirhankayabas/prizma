@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using BlockPuzzle.Core;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -24,6 +25,14 @@ namespace BlockPuzzle.Game
         Image[,] _glyphs;
         Image[,] _gems;
         Image[,] _ice;
+
+        // The adventure's layers: glow tiles on the floor under the cells (with a diamond on a free
+        // one), and a timer's clock face and number over its block — built on first use.
+        RectTransform _floorRoot;
+        Image[,] _tiles;
+        Image[,] _tileMarks;
+        Image[,] _timerRings;
+        TextMeshProUGUI[,] _timerLabels;
 
         readonly List<int> _previewRows = new List<int>();
         readonly List<int> _previewColumns = new List<int>();
@@ -119,6 +128,7 @@ namespace BlockPuzzle.Game
                 -_content * 0.5f + _cellSize * 0.5f,
                 _content * 0.5f - _cellSize * 0.5f);
 
+            _floorRoot = UiBuilder.Child(_rect, "Floor");
             _cellRoot = UiBuilder.Child(_rect, "Cells");
             // The blocks a clear is taking out, drawn over the cells they came from so they can
             // finish their exit after the model has already emptied them.
@@ -133,10 +143,21 @@ namespace BlockPuzzle.Game
             _glyphs = new Image[_size, _size];
             _gems = new Image[_size, _size];
             _ice = new Image[_size, _size];
+            _tiles = new Image[_size, _size];
+            _tileMarks = new Image[_size, _size];
+            _timerRings = new Image[_size, _size];
+            _timerLabels = new TextMeshProUGUI[_size, _size];
 
             for (int row = 0; row < _size; row++)
             for (int col = 0; col < _size; col++)
             {
+                // The tile is a size larger than its cell, so its rim shows in the gap around a block.
+                var tile = UiBuilder.Image(_floorRoot, $"Tile_{col}_{row}", Art.Tile, Design.TileGlow);
+                tile.rectTransform.sizeDelta = new Vector2(_cellSize + _gap * 1.1f, _cellSize + _gap * 1.1f);
+                tile.rectTransform.anchoredPosition = CellAnchoredPosition(col, row);
+                tile.gameObject.SetActive(false);
+                _tiles[col, row] = tile;
+
                 var image = UiBuilder.Image(_cellRoot, $"Cell_{col}_{row}", Art.Cell, EmptyCellColor);
                 image.rectTransform.sizeDelta = new Vector2(_cellSize, _cellSize);
                 image.rectTransform.anchoredPosition = CellAnchoredPosition(col, row);
@@ -147,6 +168,7 @@ namespace BlockPuzzle.Game
                 _glyphs[col, row] = Overlay(image, "Glyph", Art.Glyph(0), GlyphColor, 0.34f, sliced: false);
                 _gems[col, row] = Overlay(image, "Crystal", Art.Crystal, Design.Crystal, 0.66f, sliced: false);
                 _ice[col, row] = Overlay(image, "Ice", Art.Ice(1), Design.Ice, 1f, sliced: true);
+                _tileMarks[col, row] = Overlay(image, "TileMark", Art.Glyph(3), Design.TileGlow, 0.3f, sliced: false);
             }
 
             _ring = UiBuilder.Image(_burstRoot, "Ring", Art.SoftCircle, Color.white);
@@ -179,6 +201,9 @@ namespace BlockPuzzle.Game
         public void Bind(BoardModel board)
         {
             _board = board;
+            // A clock left over from the last run must not read as one that ran out on this board.
+            foreach (var ring in _timerRings)
+                if (ring != null) ring.gameObject.SetActive(false);
             HideGhost();
             HideLinePreview();
             HideClearOut();
@@ -213,10 +238,20 @@ namespace BlockPuzzle.Game
                 // Clears any scale left behind by an interrupted pop animation.
                 image.rectTransform.localScale = Vector3.one;
 
+                bool tile = _board.HasTile(col, row);
+                _tiles[col, row].gameObject.SetActive(tile);
+                _tileMarks[col, row].gameObject.SetActive(tile && value == BoardModel.Empty);
+
                 if (value == BoardModel.Empty)
                 {
                     image.sprite = Art.Cell;
-                    image.color = EmptyCellColor;
+                    // A free cell over a glow tile takes a little of its light, mixed opaque.
+                    image.color = tile ? SheetKit.Tinted(EmptyCellColor, Design.TileGlow, 0.22f) : EmptyCellColor;
+                }
+                else if (value == BoardModel.Shade)
+                {
+                    image.sprite = Art.ShadeBlock;
+                    image.color = Design.Shade;
                 }
                 else
                 {
@@ -231,7 +266,7 @@ namespace BlockPuzzle.Game
                 bool stone = _board.IsStone(col, row);
                 if (stone) image.color = Design.Stone;
 
-                bool glyph = _colorBlind && value != BoardModel.Empty && !stone;
+                bool glyph = _colorBlind && value >= 0 && !stone;
                 _glyphs[col, row].gameObject.SetActive(glyph);
                 if (glyph) _glyphs[col, row].sprite = Art.Glyph(value);
 
@@ -244,7 +279,111 @@ namespace BlockPuzzle.Game
                     _ice[col, row].sprite = Art.Ice(stone ? 2 : ice);
                     _ice[col, row].color = stone ? Design.StoneFrost : Design.Ice;
                 }
+
+                ShowTimer(col, row, _board.TimerAt(col, row));
             }
+        }
+
+        /// <summary>
+        /// A timer block's clock: a ring and the moves left. The last three turn the number rose —
+        /// steady, not blinking; the colour is the warning.
+        /// </summary>
+        void ShowTimer(int col, int row, int moves)
+        {
+            if (moves <= 0)
+            {
+                var old = _timerRings[col, row];
+                if (old == null || !old.gameObject.activeSelf) return;
+
+                // Still on the board at zero: this is the clock that ran out. It keeps its face.
+                if (_board.IsOccupied(col, row))
+                {
+                    old.color = Design.Timer;
+                    _timerLabels[col, row].text = "0";
+                    return;
+                }
+
+                old.gameObject.SetActive(false);
+                return;
+            }
+
+            if (_timerRings[col, row] == null)
+            {
+                var cell = _cells[col, row];
+                var ring = UiBuilder.Image(cell.rectTransform, "TimerRing", Art.TimerRing, Color.white);
+                ring.type = Image.Type.Simple;
+                ring.rectTransform.sizeDelta = new Vector2(_cellSize * 0.86f, _cellSize * 0.86f);
+                var label = UiBuilder.Label(ring.rectTransform, "Moves", "", _cellSize * 0.42f, Color.white, Design.FontDisplay);
+                label.rectTransform.sizeDelta = new Vector2(_cellSize, _cellSize);
+                label.rectTransform.anchoredPosition = new Vector2(0f, 2f);
+                UiBuilder.TextShadow(label, 0.55f, -0.3f, 0.4f);
+                _timerRings[col, row] = ring;
+                _timerLabels[col, row] = label;
+            }
+
+            var face = _timerRings[col, row];
+            face.gameObject.SetActive(true);
+            bool urgent = moves <= 3;
+            face.color = urgent ? Design.Timer : Color.white.WithAlpha(0.9f);
+            _timerLabels[col, row].text = moves.ToString();
+            _timerLabels[col, row].fontSize = _cellSize * (urgent ? 0.48f : 0.42f);
+        }
+
+        /// <summary>Every timer that just ticked into its last three moves gets a single nudge.</summary>
+        public void NudgeUrgentTimers()
+        {
+            if (_board == null || _board.TimerCount == 0) return;
+            for (int row = 0; row < _size; row++)
+            for (int col = 0; col < _size; col++)
+            {
+                int moves = _board.TimerAt(col, row);
+                if (moves > 0 && moves <= 3 && _timerRings[col, row] != null)
+                    StartCoroutine(Tween.Punch(_timerRings[col, row].transform, 0.22f, 0.26f));
+            }
+        }
+
+        /// <summary>Shade creeping into a cell: it rises out of the floor rather than appearing.</summary>
+        public void PlayShadeSpread(int col, int row)
+        {
+            if (col < 0 || row < 0 || col >= _size || row >= _size) return;
+            StartCoroutine(Tween.Scale(_cells[col, row].transform, Vector3.one * 0.2f, Vector3.one, 0.32f, Ease.OutBack, 0.18f));
+            Burst(col, row, Design.Shade, 0.8f, 1.8f, 0.18f);
+        }
+
+        /// <summary>Glow tiles going out: each flashes its own colour as it lifts.</summary>
+        public void PlayTilesLit(IReadOnlyList<CellOffset> cells)
+        {
+            for (int i = 0; i < cells.Count; i++)
+                Burst(cells[i].X, cells[i].Y, Design.TileGlow, 0.85f, 1.9f, 0.04f + i * 0.015f);
+        }
+
+        /// <summary>A timer taken in time: a mint flash where it stood.</summary>
+        public void PlayTimersDefused(IReadOnlyList<CellOffset> cells)
+        {
+            for (int i = 0; i < cells.Count; i++)
+                Burst(cells[i].X, cells[i].Y, Design.Mint, 0.9f, 2.2f, 0.06f);
+        }
+
+        /// <summary>The timer that ran out: a rose flash and a shake — the one thing on the board that failed.</summary>
+        public void PlayTimerBurst()
+        {
+            if (_board == null) return;
+            for (int row = 0; row < _size; row++)
+            for (int col = 0; col < _size; col++)
+                if (_timerRings[col, row] != null && _timerRings[col, row].gameObject.activeSelf &&
+                    _board.TimerAt(col, row) == 0 && _board.IsOccupied(col, row))
+                    Burst(col, row, Design.Timer, 1f, 3f, 0f);
+
+            PulseEdge(Design.Timer);
+            Shake(14f, 0.3f);
+        }
+
+        /// <summary>The hammer's target under the finger: one cell, warm where it would break something.</summary>
+        public void ShowHammerPreview(int col, int row)
+        {
+            HideGhost();
+            if (_board == null || col < 0 || row < 0 || col >= _size || row >= _size) return;
+            PlaceGhost(col, row, _board.IsOccupied(col, row) ? BombHot : BombCold);
         }
 
         /// <summary>

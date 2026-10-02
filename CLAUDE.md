@@ -2,8 +2,9 @@
 
 Unity 6 (6000.6.0f1) · URP · portre mobil, hedef Android.
 Block Blast türünde 8x8 blok bulmaca. Arayüz metinleri **Türkçe**.
-Üç mod: **Klasik** (sonsuz), **Günlük** (günde bir hedefli bulmaca, süre + seri + rozet + bildirim), **Macera** (sonsuz,
-prosedürel bölümler: kristal / buz / hamle bütçesi / yıldız). Hepsinde **Prizma güçleri**.
+Üç mod: **Klasik** (sonsuz), **Günlük** (günde bir hedefli bulmaca, süre + seri + rozet + bildirim), **Macera** (100 bölüm,
+10 dünya, Candy Crush tarzı yol haritası; kristal / ışık karosu / taş / gölge / renk siparişi / saatli blok / buz, zor
+bölümler, güçlendiriciler, galibiyet serisi, dünya sandıkları). Hepsinde **Prizma güçleri**.
 
 Sahne: `Assets/Scenes/SampleScene.unity` — içinde tek bir GameObject var: **`GameRoot`** + `AppController`.
 Başka hiçbir sahne kurulumu yok; tüm hiyerarşi çalışma anında koddan inşa ediliyor.
@@ -50,15 +51,43 @@ Unity'ye hiç bağımlı değil (`UnityEngine` import etmiyor). Bu yüzden test 
 ### `Assets/Scripts/Game/` — sunum
 `AppController` kök. Canvas + backdrop + ses + ekranları kurar, gezinmeyi yönetir.
 
-Ekranlar `AppScreen`'den türer. Sayfalar: `MainMenuScreen`, `GameScreen`, `LevelSelectScreen`.
-Modallar (`IsModal`): `SettingsScreen`, `ScoresScreen`, `PauseScreen`, `StatsScreen`, `ThemesScreen`,
-`DailyScreen`, `ReminderScreen`.
+Ekranlar `AppScreen`'den türer. Sayfalar: `MainMenuScreen`, `GameScreen`, `LevelSelectScreen` (harita, `AdventureScreens.cs`).
+Modallar (`SheetScreen`, `ModalScreens.cs` + `DailyScreen.cs` + `AdventureScreens.cs`): `SettingsScreen`, `ScoresScreen`, `PauseScreen`,
+`StatsScreen`, `ThemesScreen`, `DailyScreen`, `LevelStartScreen`, `ChestScreen`. Hepsi **alt sayfa** — aşağıda "Modallar" başlığı.
 `GameScreen` üç parçadan oluşur: `GameHud` (moda göre dolan üst şerit), `PowerBar` (prizma + güçler),
 `ResultCard` (her bitişin tek kartı). Tura giriş hep `AppController.PlayClassic/PlayDaily/PlayLevel`
 üzerinden — kayıttan devam ile yeni başlangıç tek yerde karar verilir.
 
 Modallar **yığın** (`AppController._modals`). Duraklatmadan ayarlar açılınca kapanışta
-duraklatmaya döner. Android geri tuşu da bu yığını izler.
+duraklatmaya döner. Android geri tuşu da bu yığını izler. Kapanış animasyonlu (`AppScreen.Dismiss`): sayfa inene kadar
+yığında ve engelleyici olarak kalır; ikinci bir kapanış/açılış gelirse ilki anında tamamlanır (`FinishDismiss`).
+
+### Modallar — alt sayfa (`ModalKit.cs`), oyun dilinde
+İki tur geri bildirim: önce "modallar çok karmaşık… 2010-2015 gibi arayüz istemiyorum" (ortada kart + altta KAPAT;
+şeritli başlık plakası + kırmızı X denemesi de reddedildi — **ona dönme**). Sonra alt sayfaya geçildi ama iOS ayarlar
+dilinde yapıldı (tutamak, sola yaslı başlık, gri X, ikon-ad-anahtar satırları, satır arası hairline, kayan segment) ve
+kullanıcı "mobil web sitesine benziyor" dedi. Karar: **yapı kalsın, dil oyunlaşsın, animasyonlu olsun.**
+
+- `Sheet`: alttan kalkar, üst köşeler `SheetRadius`, alt kenar jest çubuğunun altına taşar. Üst kenarından yarısı
+  taşan **madalyon** (`SheetHero` 176: beyaz halka + sayfanın renginde parlak disk + beyaz işaret + renkli hale),
+  altında **ortalı** büyük başlık, sayfanın üstünde o rengin ışığı (`Art.TopWash`). Tutamak yok (aşağı çekme yine
+  çalışır). Kapat: sağ üstte plastik disk (`UiButton.Style.Round`, dokunma alanı 144). Dört kapanış yolu aynı.
+  `BuildSheet(title, icon, tint)`; `Sheet.SetHero` sonradan renk/işaret değiştirir (bölüm sayfası dünya rengini alır).
+  Madalyonsuz sayfa (sonuç kartı, sandık) eski başlık düzenini kullanır.
+- **Hareket:** sayfa `Ease.OutBackSoft` ile hafif taşıp oturur, madalyon dönerek "pop" eder, başlık sonra gövdenin
+  parçaları yukarıdan aşağı sırayla gelir (`Cascade`: yalnız ölçek + saydamlık — yerleşime dokunmaz, yarıda kesilen
+  giriş hiçbir şeyi kaydırılmış bırakmaz; dinlenme saydamlığı `Cascade.Rest`'te saklanır). Madalyon açıkken hafif
+  süzülür. Butonlar bırakınca yaylanır, anahtar topuzu esneyerek kayar, kaydırıcı topuzu basılıyken büyür,
+  karolar dokununca madalyonu döner, istatistik sayıları sayarak yükselir, başarım çubukları dolar, skor tablosu
+  sırayla gelir, sandık açılırken sallanıp parlar.
+- **Malzeme:** kartlar ve butonlar blokla aynı yumuşak plastik (`Art.PanelGradient`, üstte açık kenar, yumuşak
+  gölge). Gradyan sprite'ın altı koyu olduğundan renk `SheetKit.Lifted` ile bir tık açılır.
+- **Liste yerine karo:** açma/kapama ayarları 2×2 `UiTile` (açıkken kendi renginde — rengi yüzeye **karıştırma**,
+  hardal/kahverengi olur; kendi rengini koyulaştır — kapalıyken sade, köşede tik). Duraklatma: üç eylem karosu +
+  DEVAM ET. Satır arası tam genişlik hairline yerine kısa yumuşak oluk. Segment başparmağı vurgu renginde.
+- Yüzey katmanları aynı: sayfa `SurfaceSheet` < grup `SurfaceGroup` < kontrol `SurfaceControl`.
+- **Hiçbir sayfaya "KAPAT" butonu koyma.** Sığmayan gövde bütün olarak küçülür (madalyonun taşan yarısı da hesapta).
+- Görünüş/hareket üzerinde çalışırken: `Tools/autotest.ps1 -Only modals` (80_…92_, giriş ortası + oturmuş hâl).
 
 Girdi tek yoldan: `PointerRouter` her kare `Pointer.current` okur. Widget'lar (`UiButton`,
 `UiSlider`, `UiToggle`) önce hak iddia eder, kalan her şey `IPointerFallback`'e (tahta) düşer.
@@ -268,30 +297,106 @@ Nasıl buraya gelindi — **sabit fiyata dönme**:
 
 ## Macera modu ve `LevelGenerator`
 
-Hiçbir bölüm saklanmaz: **numara → aynı tahta, hedef ve hamle bütçesi**. Mod sonsuz.
-İlk 3 bölüm elle yazılmış öğretici (`LevelGenerator.Authored`): tek hamlelik kristal, bir satır +
-bir sütun, ilk buz. Yazı yok — tahta, doğru hamle bariz olacak şekilde kurulu.
+Kullanıcı: "candy crush gibi bir yol olsun, 100 bölüm, bir çok yeni özellik; tasarım bizim dilimizde olsun".
+Eskiden sonsuz bir mod ve 4×6 numaralı karo ızgarası (sayfa sayfa) idi. Artık **100 bölüm, 10 dünya**, kıvrılan bir
+yol haritası. Hiçbir bölüm saklanmaz: **numara → aynı tahta, hedef ve hamle bütçesi**.
 
-- **Kristal** (`BoardModel` katmanı): hücresi temizlenince toplanır, HUD'daki sayaca uçar.
-- **Buz**: her temizleme bir kat kırar, blok ancak buz bitince gider (1 veya 2 kat). Bomba ikisini de alır.
-- **Taş** (21. bölümden): satırını/sütununu doldurmaya sayılır ama temizlemeyle **hiç** gitmez, yalnız bomba
-  kırar. Buz katmanında `BoardModel.Stone` (9) değeri — kayıt, dağıtıcı ve bot değişmeden taşır. Satır/sütun
-  başına en çok bir taş. Taşlı tahtada tahtayı sıfırlama olmaz. Ölçülen (21–32): iyi %83–100, casual %33–92.
-- Hedefler: kristal (çoğu) / satır (her 6. bölüm) / puan (6k+3). 1-3 yıldız artan hamleye göre.
+### Dünyalar ve yeni öğeler (`LevelGenerator.*From`)
+Her dünya bir yeni şey getirir; ilk bölümü (`IsIntro`) o öğeyi **elle kurulmuş, kolay** bir tahtada yazısız gösterir
+(`LevelGenerator.Intro`) — ilk 3 bölümün öğretici mantığıyla. Günlük bulmaca bunların hiçbirini almaz (`adventure: false`),
+ölçülmüş haftası kaymasın diye.
+
+| Dünya | Bölüm | Getirdiği | Nasıl çalışır |
+|---|---|---|---|
+| 1 Kristal Kıyısı | 1 | kristal, satır, puan; 6'dan buz | eski kurallar |
+| 2 Işık Tarlası | 11 | **Işık karosu** (`GoalKind.Tiles`) | Candy Crush'ın jölesi: zemin katmanı (`BoardModel._tiles`), boş hücrede de durur; üstündeki blok **temizlenince** söner. Hedef: hepsini söndür |
+| 3 Taş Geçit | 21 | **Taş** | satırı doldurur, temizlemeyle gitmez; bomba/çekiç kırar |
+| 4 Gölge Ormanı | 31 | **Gölge** (`GoalKind.Shade`) | Çikolata: hücre değeri `BoardModel.Shade` (−2), renksiz blok. `LevelDefinition.ShadeSpread` sessiz hamlede bir boş komşuya yayılır (`SpreadShade`, oturum RNG'si → deterministik). Gölge temizleyen hamle sayacı sıfırlar. Tek renk satır olamaz |
+| 5 Renk Çarşısı | 41 | **Renk siparişi** (`GoalKind.Colors`) | `OrderColor` renginde N blok temizle; `ClearResult.ClearedColors` her silinen hücrenin rengini taşır |
+| 6 Saat Kulesi | 51 | **Saatli blok** | `BoardModel._timers`: her hamle 1 azalır (`TickTimers`), 0 olursa tur **şarjdan bağımsız** biter (`LossReason.Timer`). Satırı temizlenirse söner. Hedefe ulaşan hamle önceliklidir |
+| 7 Buz Sarayı | 61 | **Çift buz** yoğun | |
+| 8–10 | 71–100 | hepsi karışık | Fırtına Tepesi · Yıldız Denizi · Prizma Tacı |
+
+Hedef seçimi (`PickGoal`): 1–10 eski döngü; sonra ayrı bir RNG akışıyla, öğesini getiren dünyada yarı yarıya o hedef,
+geri kalanı açılmış hedeflerden ağırlıklı (kristal en sık).
+
+### Zor bölümler (`HardnessOf`)
+Her dünyanın 10. bölümü **çok zor** (taç rozeti, mor halka), 2. dünyadan itibaren 6. bölüm **zor** (şimşek, gül halka).
+Harita ve başlangıç sayfası işaretler — uyarılmadan gelen duvar oyuncuya haksızlık gibi gelir. Zorluk iki yoldan:
+tahta daha yüksek kademeden kurulur (`DifficultyTier`: +12 / +24, intro −14) **ve** bütçe botun daha iyi günlerinden
+(`percentile` 0.65 / 0.55, pay ×0.92 / ×0.84). Yalnız tahta zorlaştırmak yetmedi: `Difficulty` 100 civarında doyuyor,
+100. bölüm 99'dan kolay çıkıyordu.
+
+**Bütçe tavanı** `MaxAdventureBudget` 70: botun 100+ hamle istediği taslak sıkıcı, zor değil → daha hafifi denenir.
+
+### Ölçülen (`Tools/CoreHarness levels 1 100`, deneme başına kazanma)
+| Dünya | zorlanan 0.40 | casual 0.50 | iyi 0.85 |
+|---|---|---|---|
+| 1 | %79 | %87 | %99 |
+| 3 | %68 | %77 | %98 |
+| 5 | %58 | %73 | %95 |
+| 7 | %57 | %70 | %95 |
+| 9 | %47 | %58 | %94 |
+| 10 | %49 | %68 | %88 |
+
+Çok zor bölümler casual'da %25–58, 100. bölüm iyi oyuncuda %33 (final). Üretim 10–230 ms (renk hedefi en yavaş),
+önbellekte; harita ve başlangıç sayfası bir sonrakini `ThreadPool`'da hazırlar.
+
+### Bot (`Autoplayer.BuildWeights`)
+Her hedef ve engel **hücre başına bir ağırlık**: kristal 160, ışık 150, sipariş rengi 60, gölge 150/40, saat
+`120 + 900/kalan`. Temizlenen satırlardaki ağırlık toplamı + hedef satırlara konan hücreler. Bütçe bu botla ölçüldüğü
+için bot hedefi kovalamazsa bütçeler gevşek ve düzensiz olur (kristalde bir kez yaşandı).
+
+### Güçlendiriciler, seri, sandık (`Progress`, `Booster`)
+Reklam/satın alma yok — **oynayarak** kazanılır.
+- **+3 Hamle** ve **Şarj** bölüm başlamadan başlangıç sayfasında seçilir (`AppController.PlayLevel(n, moves, charge)`),
+  yalnız gerçekten yeni bir deneme başlarken harcanır. Ek hamleler (`SessionConfig.ExtraMoves`) **yıldıza sayılmaz**
+  (`StarsEarned` onları önce harcanmış sayar) — güçlendirici geçirir, daha iyi sonuç satın almaz.
+- **Çekiç** oyun içinde: HUD'da skorun sağında, stok rozetiyle (yalnız macerada). Tek bloğu buz/taş/gölge/saat dahil
+  kırar (`GameSession.TryHammer`, şarj yemez). Stokta çekiç varken sıkışma `Stuck` olur (`HasBoosterRescue`,
+  kaydedilmez — oyun her `Begin`'de stoktan kurar).
+- **Galibiyet serisi** (`WinStreak`, en çok 3): 1 → +2 hamle, 2 → +2 hamle +1 şarj, 3 → +4 hamle +1 şarj. Kayıp,
+  ya da hamle yapılmışken yeniden başlatmak sıfırlar.
+- **Dünya sandığı**: dünyanın son bölümü bitince yolun üstündeki sandık altın olur; açınca her güçlendiriciden 1
+  (4. dünyadan itibaren 2 çekiç, son dünya 3'er). İlk açılışta başlangıç stoku (2 / 2 / 3).
+
+### Harita (`AdventureScreens.cs` — `LevelSelectScreen`, `MapScroll`)
+- **Işık yolu.** Kullanıcı ilk hâli beğenmedi: "yolların kenarındaki siyah border". Şerit koyu bir `SurfaceInset`
+  yatağın üstündeydi ve her yerde ağır bir siyah çerçeve gibi okunuyordu. Artık yatak yok: **gidilmiş yol yanar** (dünya
+  renginin açığı şerit + beyaza yakın çekirdek + dünya renginde yumuşak parıltı), **gidilmemiş yol sessiz nokta izi**.
+  Yol, Catmull-Rom eğrisinde **mesafeyle** örneklenir (parçalar/noktalar eşit aralıklı); durak diski yolun ucunu örter.
+- Durak: bitmiş = dünya renginde yumuşak plastik disk (`Art.Node`), beyaz halka, altında 3 yıldız. Sıradaki = büyük
+  **düz beyaz** disk, sayı dünya renginde, dünya renginde halka + hale, üstünde prizma işaretçisi (hafif süzülür).
+  Kilitli = küçük **buzlu cam** (beyaz %14, halka %22). Burada saydamlık **bilerek**: opak dünya+zemin karışımı
+  yarı dünyalarda çamurlu bej çıktı; cam her zeminin rengini alır. Zor kilitli bölüm cam, zor renginde tonlu —
+  saydam camın altında dolu halka dolu disk gibi görünüp "oynanmış" okunuyordu.
+- Dünya girişinde kart: dünya renginde amblem (dünyanın işareti), "DÜNYA n" + ad, yıldız sayısı ve altın ilerleme
+  çubuğu; ulaşılmamışta kilit. Her dünya kendi **renk alanı** (iki geniş havuz + üstte bir sonraki dünyanın rengi,
+  geçiş yumuşak), arkada **paralaks** (0.3) süzülen kristaller ve dünyanın motifi. Blok şekilli süs yok: soluk bloklar
+  yerde yatan parça ya da çamur gibi okunuyordu.
+- Başlık kendi `Canvas`'ında: içerik de iç içe canvas ve sonra gelen kardeşlerin üstüne çiziliyordu (yol başlığın
+  üstünden geçiyordu). Üstteki geçiş 180° döndürülmüş `VerticalFade` — pivot **ortada** olmalı, üstteyken ekran dışına dönüyordu.
+- Görünüş üzerinde çalışırken: `Tools/autotest.ps1 -Only map` (70_…76_ görüntüleri, ~4 dk).
+- **Odanın ışığı ekrandaki dünyanın rengine döner** (`Backdrop.SetLight`) — Spektrum'la aynı dil.
+- Kaydırma: kendi widget'ı (`MapScroll`), fırlatma + yumuşak kenar. `UiScroll`'dan farkı **dokunmayı** bildirmesi
+  (22 birimden az hareket = dokunma, içerik koordinatında). Duraklar buton değil, çizili.
+- Performans: harita **ilk ziyarette** kurulur (~3000 görüntü; açılışı yavaşlatmasın), içerik kendi `Canvas`'ında,
+  yalnız görünen ±700 birimdeki dünyalar açık. Numaraların gölgesi **tek paylaşılan materyal** (`ShadowNumber`) —
+  TMP her gölgeli etikete ayrı materyal verir, 100 etiket 100 draw call olurdu.
+- **Kazanınca yürüyüş**: sonuç kartı "SONRAKİ" → harita (`ShowLevelSelect(afterWin)`), yol yeni bölüme kadar dünya
+  rengiyle dolar, işaretçi sekerek geçer, sonra o bölümün başlangıç sayfası kendiliğinden açılır. Dünya bitmişse
+  açmaz — önce sandık görülsün. `Progress.MapRevealed` yolun son çizildiği yeri tutar; bir adımdan fazla fark
+  (eski kayıt) animasyonsuz gösterilir.
+- **Başlangıç sayfası** (`LevelStartScreen`): dünya satırı + zor çipi, hedef ve hamle kartı, en iyi yıldızlar ya da
+  intro'da "YENİ · …" çipi, seri satırı (3 alev + hediye), 3 güçlendirici karosu, OYNA. Kayıtlı deneme varsa DEVAM ET
+  ve güçlendiriciler kapalı. Kaybedince "TEKRAR DENE" de buraya gelir (güçlendirici seçilebilsin).
+
 - Hamle biterken 2 şarj varsa tur hemen bitmez (`SessionState.OutOfMoves`): sonuç kartı
-  **+5 hamle** teklif eder, bölüm denemesi başına bir kez. Ek hamleyle bitirilen bölüm **1 yıldız** —
-  kurtarış, en iyi skora kestirme değil. Şarjların prizma dışındaki tek harcama yeri.
+  **+5 hamle** teklif eder, bölüm denemesi başına bir kez. Ek hamleyle bitirilen bölüm **1 yıldız**.
 
-**Hamle bütçesi tahmin değil, ölçüm:** taslak bot (skill 0.62) ile 15 kez oynanır, %75'lik dilimdeki
-hamle sayısı × pay (1.40 → 1.15, zorlukla azalır), ilk 10 bölüme +6. Bot %60'tan az kazanıyorsa taslak
-atılır, daha hafifi denenir. 7 koşu + medyan ile komşu bölümler %8 ile %100 arasında savruluyordu.
-
-Bot kristal satırlarını **hedefler** (`Autoplayer.CellsOnGemLines`). Bu olmadan kristaller tesadüfen
-toplanıyordu; bütçeler hem gevşek hem düzensizdi ve bölüm 1'i iyi bot bile %83 geçiyordu.
-
-Ölçülen (`levels 1 50`): iyi oyuncu (0.85) çoğu bölümde %92–100; casual (0.50) %17–100; bölüm 1–2 %100.
-Üretim 10–80 ms, önbellekte; bir sonraki bölüm arka planda (`ThreadPool`) hazırlanır — `LevelGenerator`
-Unity'ye dokunmadığı için güvenli.
+**Hamle bütçesi tahmin değil, ölçüm:** taslak bot (skill 0.62) ile 15 kez oynanır, %75'lik (zorda %65/%55) dilimdeki
+hamle sayısı × pay (1.40 → 1.15, zorlukla azalır), ilk 10 bölüme +6. Bot %60'tan az kazanıyorsa taslak atılır, daha
+hafifi denenir. 7 koşu + medyan ile komşu bölümler %8 ile %100 arasında savruluyordu.
 
 ---
 
@@ -347,7 +452,8 @@ Artık günde **bir** bulmaca var, herkese aynı, yalnız bugün oynanır. Kaça
   rozet istatistikleri, kusursuz hafta. Çözülen gün tekrar oynanmaz; `PlayDaily` kartı açar. Sonuç kartı: büyük sayı
   **süre**, ana eylem **PAYLAŞ**, not satırı yeni rozet > yeni tema > seri.
 - **Kart** (`DailyScreen`): Bugün sekmesi (seri + hafta şeridi + günün zorluğu/hedefi + sonuç ya da deneme durumu +
-  bir sonraki bulmacaya geri sayım + hatırlatıcı anahtarı) ve Rozetler sekmesi (4×4 madalyon + seçilen rozetin satırı).
+  bir sonraki bulmacaya geri sayım, kendi hapında) ve Rozetler sekmesi (4×4 madalyon + seçilen rozetin kartı).
+  **Hatırlatıcı anahtarı yok** — kullanıcı istemedi.
   Seri kart son gösterdiğinden büyükse bir kez sayarak yükselir (`Progress.DailyStreakShown`).
 - **Rozetler** (`DailyBadges`): 16 tane, `Achievements` gibi **durumsuz** — sayılardan hesaplanır. Her biri 1 yıldız →
   `Progress.TotalStars`. Görülmemiş rozet: menü kartında ve sekmede sabit nane nokta.
@@ -355,8 +461,10 @@ Artık günde **bir** bulmaca var, herkese aynı, yalnız bugün oynanır. Kaça
   **saatinde**, ertesi gün tek bildirim ("12:00'de çözdüyse yarın 12:00"). Eklenti yok: AlarmManager →
   `PrizmaReminderReceiver` bildirimi atar ve ertesi günü kurar; 3 cevapsız bildirimden sonra susar; `PrizmaReminderBoot`
   yeniden başlatma/güncellemede geri kurar. Tam zamanlı alarm izni bilerek yok (birkaç dakika sapabilir).
-  İzin **bir kez**, ilk çözümün sonuç kartı üstünde sorulur (`ReminderScreen`), sonra kartın anahtarıyla.
-  `Reminder.Refresh` açılışta, uygulama öne gelince, çözümde ve anahtarda çağrılır. Bildirim ikonu vektör XML —
+  İzin **ilk açılışta, splash sırasında** doğrudan sistemin kendi penceresiyle sorulur
+  (`AppController.AskNotificationsOnFirstLaunch`, `GameSettings.ReminderAsked`) — oyunun kendi modalı yok (kullanıcı
+  isteği). Sonradan Ayarlar → BİLDİRİMLER anahtarı. `Reminder.Refresh` açılışta, uygulama öne gelince, çözümde ve
+  anahtarda çağrılır; ilk çözümden önce kurulacak bir şey yoktur. Bildirim ikonu vektör XML —
   build sırasında `res/drawable`'a yazılıyor, kod gibi. **Cihazda doğrulanmadı** (Editor açıkken APK alınmadı);
   Java, Unity'nin JDK'sıyla `android-36` jar'ına karşı derlendi.
 - **Paylaş** (`ShareSheet`): günlük sonuç kartında; Android'in kendi paylaş penceresi (intent), eklenti yok.
@@ -489,7 +597,7 @@ Kurallar:
   - Oyun: `GameScreen.PlayLayout.Solve` — her bandın istediği ve razı olduğu boy var. Fazlalık tepsiye
     ve boşluklara, eksik önce boşluklardan → tepsiden → HUD'dan, **tahta en son** küçülür.
   - Menü alttan yukarı (başparmak), başlık kalan üst alanda ortalı. Macera haritası sığdığı kadar satır
-    (19.5:9'da 6 → sayfa başı 24). Modallar içerikten boylanır, listeler `ModalCard.FitRows` ile sayfaya sığar.
+    (19.5:9'da 6 → sayfa başı 24). Modallar içerikten boylanır, sığmayan gövde ölçeklenir ya da (başarımlar) kaydırılır.
 - 16:9'da `PageHeight` eskiden 1920'ye clamp ediliyordu; gerçek sayfa ~1700 olduğu için alt yığın jest
   çubuğuna biniyordu. Clamp kaldırıldı — geri koyma.
 - Yerleşim `Awake`'te bir kez kurulur; çalışırken ekran boyutu değişirse (katlanabilir) yalnız safe area yenilenir.
@@ -629,6 +737,8 @@ Denge değişikliklerinden sonra simülasyonla ölç (casual/iyi oyuncu, rastgel
   kayıtlardan geldiği için görüntü ile durum aynı anda doğrulanır. Tanım gerçek build'e girmez.
   **Arayüz değişikliğini tek oranda doğrulama.** `-SkipBuild -Width 540 -Height 960 -Tag 16x9` ile aynı
   build'i başka oranlarda koş (19.5:9 varsayılan 432x936, 20:9 432x960, 16:9 540x960, tablet 720x960).
+  `-Only adventure` yalnız macera görüntülerini alır (40_…61_, ~2 dk); `-Only play` hazır bir kayıtla oyunu **açık
+  bırakır** (elle denemek için). `-Monitor 2` pencereyi ikinci ekranda açar (kullanıcının dikey ikinci ekranı var).
   `-TopInset` (varsayılan 90) telefon çentiğini simüle eder — masaüstü oyuncusunun safe area'sı yoktur
   ve onsuz her görüntü telefondakinden fazla üst alan gösterir. Bir oran ~5 dk sürer.
 

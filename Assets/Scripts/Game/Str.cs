@@ -53,6 +53,7 @@ namespace BlockPuzzle.Game
         public static string Effects => T("EFEKTLER", "EFFECTS");
         public static string Vibration => T("TİTREŞİM", "VIBRATION");
         public static string ColorBlind => T("RENK KÖRÜ MODU", "COLOUR BLIND");
+        public static string Notifications => T("BİLDİRİMLER", "NOTIFICATIONS");
         /// <summary>Names the row in both languages, so it is found whichever one the phone is in.</summary>
         public static string LanguageLabel => T("DİL · LANGUAGE", "LANGUAGE · DİL");
 
@@ -121,6 +122,69 @@ namespace BlockPuzzle.Game
         public static string Next => T("SONRAKİ", "NEXT");
         public static string MovesSaved(int n) => T($"{n} HAMLE ARTTI", $"{n} MOVES TO SPARE");
 
+        // ------------------------------------------------------------------ adventure
+
+        static readonly string[] WorldsTr =
+        {
+            "Kristal Kıyısı", "Işık Tarlası", "Taş Geçit", "Gölge Ormanı", "Renk Çarşısı",
+            "Saat Kulesi", "Buz Sarayı", "Fırtına Tepesi", "Yıldız Denizi", "Prizma Tacı"
+        };
+
+        static readonly string[] WorldsEn =
+        {
+            "Crystal Shore", "Glow Fields", "Stone Pass", "Shade Woods", "Colour Bazaar",
+            "Clock Tower", "Ice Palace", "Storm Peak", "Star Sea", "Prism Crown"
+        };
+
+        public static string WorldName(int world) =>
+            (Current == Language.English ? WorldsEn : WorldsTr)[Math.Max(0, Math.Min(world, WorldsTr.Length - 1))];
+
+        public static string WorldN(int world) => T($"DÜNYA {world + 1}", $"WORLD {world + 1}");
+
+        public static string Goal => T("HEDEF", "GOAL");
+        public static string Boosters => T("GÜÇLENDİRİCİLER", "BOOSTERS");
+        public static string Hard => T("ZOR", "HARD");
+        public static string VeryHard => T("ÇOK ZOR", "SUPER HARD");
+        public static string New => T("YENİ", "NEW");
+        public static string WinStreak => T("GALİBİYET SERİSİ", "WIN STREAK");
+        public static string StreakGift(int moves, int charges) => charges > 0
+            ? T($"+{moves} HAMLE · +{charges} ŞARJ", $"+{moves} MOVES · +{charges} CHARGE")
+            : T($"+{moves} HAMLE", $"+{moves} MOVES");
+        public static string NoStreak => T("KAZANDIKÇA HEDİYE", "WIN FOR GIFTS");
+
+        public static string BoosterName(Booster booster)
+        {
+            switch (booster)
+            {
+                case Booster.Moves: return T("+3 HAMLE", "+3 MOVES");
+                case Booster.Charge: return T("ŞARJ", "CHARGE");
+                default: return T("ÇEKİÇ", "HAMMER");
+            }
+        }
+
+        public static string WorldChest => T("Dünya Sandığı", "World Chest");
+        public static string Collect => T("AL", "COLLECT");
+        public static string ChestLocked(int world) => T($"{world + 1}. DÜNYAYI BİTİR", $"FINISH WORLD {world + 1}");
+        public static string AdventureDone => T("Macera Tamamlandı", "Adventure Complete");
+        public static string AllStars(int stars, int max) => $"{stars} / {max}";
+
+        /// <summary>What a level adds to the board the first time it appears — the start sheet's chip.</summary>
+        public static string IntroName(int level)
+        {
+            switch (level)
+            {
+                case Core.LevelGenerator.TilesFrom: return T("IŞIK KAROSU", "GLOW TILE");
+                case Core.LevelGenerator.StoneFrom: return T("TAŞ", "STONE");
+                case Core.LevelGenerator.ShadeFrom: return T("GÖLGE", "SHADE");
+                case Core.LevelGenerator.ColorsFrom: return T("RENK SİPARİŞİ", "COLOUR ORDER");
+                case Core.LevelGenerator.TimersFrom: return T("SAATLİ BLOK", "TIMER BLOCK");
+                case Core.LevelGenerator.DoubleIceFrom: return T("ÇİFT BUZ", "THICK ICE");
+                default: return "";
+            }
+        }
+
+        public static string TimerBurst => T("SAAT DOLDU", "TIME'S UP");
+
         // ------------------------------------------------------------------ dates
 
         static readonly string[] MonthsTr =
@@ -169,7 +233,21 @@ namespace BlockPuzzle.Game
         public static string AttemptsLabel => T("DENEME", "TRIES");
         public static string StarsLabel => T("YILDIZ", "STARS");
         public static string Earned => T("KAZANILDI", "EARNED");
-        public static string NextPuzzleIn(string time) => T($"YENİ BULMACA  {time}", $"NEXT PUZZLE  {time}");
+        public static string NextPuzzle => T("YENİ BULMACA", "NEXT PUZZLE");
+
+        /// <summary>The word under the goal's number: "KRİSTAL" / "SATIR".</summary>
+        public static string GoalWord(Core.GoalKind goal)
+        {
+            switch (goal)
+            {
+                case Core.GoalKind.Lines: return T("SATIR", "LINES");
+                case Core.GoalKind.Score: return T("PUAN", "POINTS");
+                case Core.GoalKind.Tiles: return T("IŞIK", "GLOW");
+                case Core.GoalKind.Colors: return T("BLOK", "BLOCKS");
+                case Core.GoalKind.Shade: return T("GÖLGE", "SHADE");
+                default: return T("KRİSTAL", "CRYSTALS");
+            }
+        }
 
         public static string Grade(int grade)
         {
@@ -222,17 +300,6 @@ namespace BlockPuzzle.Game
 
         // ------------------------------------------------------------------ reminder
 
-        public static string ReminderLabel => T("HATIRLATICI", "REMINDER");
-        public static string ReminderAt(int minute) => T($"HER GÜN {minute / 60:00}:{minute % 60:00}", $"DAILY AT {minute / 60:00}:{minute % 60:00}");
-        public static string ReminderAfterSolve => T("İLK ÇÖZÜMDEN SONRA", "AFTER YOUR FIRST SOLVE");
-        public static string ReminderAskTitle => T("Hatırlatayım mı?", "Want a reminder?");
-
-        public static string ReminderAskBody(int minute) => T(
-            $"Yarın saat {minute / 60:00}:{minute % 60:00} olunca\nyeni bulmacayı haber vereyim.",
-            $"I'll let you know tomorrow at {minute / 60:00}:{minute % 60:00}\nwhen the new puzzle is ready.");
-
-        public static string RemindMe => T("HATIRLAT", "REMIND ME");
-        public static string NotNow => T("ŞİMDİ DEĞİL", "NOT NOW");
         public static string ReminderTitle => "PRIZMA";
         public static string ReminderChannel => T("Günlük bulmaca", "Daily puzzle");
 

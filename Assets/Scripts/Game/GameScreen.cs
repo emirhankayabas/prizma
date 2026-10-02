@@ -192,6 +192,7 @@ namespace BlockPuzzle.Game
 
             _hud = new GameHud();
             _hud.Build(Root, layout.Hud, () => { Audio.PlayClick(); App.OpenPause(); });
+            _hud.HammerClicked += OnHammerClicked;
 
             _powers = new PowerBar();
             _powers.Build(Root, rowWidth, layout.Power, layout.PowerBottom);
@@ -218,7 +219,7 @@ namespace BlockPuzzle.Game
             _hand.gameObject.SetActive(false);
 
             _result = new ResultCard();
-            _result.Build(Root);
+            _result.Build(this, Root, App.PageHeight);
             _result.PrimaryClicked += () => { Audio.PlayClick(); _resultPrimary?.Invoke(); };
             _result.SecondaryClicked += () => { Audio.PlayClick(); _resultSecondary?.Invoke(); };
         }
@@ -362,6 +363,9 @@ namespace BlockPuzzle.Game
             _board.SetColorBlind(_colorBlind);
             _tray.SetColorBlind(_colorBlind);
 
+            // A hammer in stock can free a jammed board, so a jam waits for the player.
+            session.HasBoosterRescue = HammerAvailable(session);
+
             _board.Bind(session.Board);
             _tray.Refresh(session);
 
@@ -416,6 +420,25 @@ namespace BlockPuzzle.Game
             _tray.SetDimmed(_session.State == SessionState.Stuck);
             _powers.Refresh(_session, _aiming);
             _tray.SetRotateHints(_session, _aiming == PowerKind.Rotate);
+
+            bool live = _session.State == SessionState.Playing || _session.State == SessionState.Stuck;
+            _hud.SetHammer(Progress.BoosterCount(Booster.Hammer), _aiming == PowerKind.Hammer, live);
+        }
+
+        static bool HammerAvailable(GameSession session) =>
+            session.Mode == GameMode.Level && Progress.BoosterCount(Booster.Hammer) > 0;
+
+        void OnHammerClicked()
+        {
+            if (_session == null || _dragging || _result.Visible) return;
+            if (_session.State != SessionState.Playing && _session.State != SessionState.Stuck) return;
+            if (Progress.BoosterCount(Booster.Hammer) <= 0) return;
+
+            _aiming = _aiming == PowerKind.Hammer ? (PowerKind?)null : PowerKind.Hammer;
+            _bombHeld = false;
+            _board.HideGhost();
+            Audio.PlayClick();
+            SyncState();
         }
 
         // ------------------------------------------------------------------ moves
@@ -479,6 +502,8 @@ namespace BlockPuzzle.Game
                 if (clear.CollectedGems.Count > 0)
                     FlyCrystals(clear.CollectedGems);
 
+                PlayLevelLayers(clear);
+
                 if (clear.PerfectClear)
                 {
                     _board.PlayBoardWave();
@@ -527,6 +552,15 @@ namespace BlockPuzzle.Game
                 _powers.CelebrateCharge(this, _session.Charges);
                 Audio.PlayCharge();
             }
+
+            // The board's answer to the move: shade creeping on, timers ticking down.
+            if (result.ShadeSpread.X >= 0)
+            {
+                _board.PlayShadeSpread(result.ShadeSpread.X, result.ShadeSpread.Y);
+                StartCoroutine(After(0.18f, Audio.PlayStuck));
+            }
+
+            if (_session.Board.TimerCount > 0) _board.NudgeUrgentTimers();
 
             if (result.TrayRefilled)
             {
@@ -723,6 +757,8 @@ namespace BlockPuzzle.Game
             for (int i = 0; i < cells.Count; i++)
             {
                 var crystal = RentFly();
+                crystal.sprite = Art.Crystal;
+                crystal.color = Design.Crystal;
                 crystal.rectTransform.sizeDelta = new Vector2(_board.CellSize * 0.66f, _board.CellSize * 0.66f);
                 crystal.rectTransform.position = _board.CellWorldPosition(cells[i].X, cells[i].Y);
                 crystal.gameObject.SetActive(true);
@@ -730,7 +766,62 @@ namespace BlockPuzzle.Game
             }
         }
 
-        IEnumerator FlyRoutine(Image crystal, Vector3 target, float delay, bool toGoal)
+        /// <summary>
+        /// The level layers a clear or a blast took: glow tiles going out, timers defused, and the
+        /// goal's own pieces flying to its counter — tiles, blocks of the order colour, shade.
+        /// </summary>
+        void PlayLevelLayers(ClearResult clear)
+        {
+            if (clear.CollectedTiles.Count > 0) _board.PlayTilesLit(clear.CollectedTiles);
+            if (clear.DefusedTimers.Count > 0)
+            {
+                _board.PlayTimersDefused(clear.DefusedTimers);
+                Audio.PlayCharge();
+            }
+
+            var level = _session.Level;
+            if (level == null) return;
+
+            switch (level.Goal)
+            {
+                case GoalKind.Tiles:
+                    FlyToGoal(clear.CollectedTiles, Art.Tile, Design.TileGlow);
+                    break;
+
+                case GoalKind.Colors:
+                case GoalKind.Shade:
+                {
+                    int wanted = level.Goal == GoalKind.Colors ? level.OrderColor : BoardModel.Shade;
+                    _flyCells.Clear();
+                    for (int i = 0; i < clear.ClearedCells.Count && i < clear.ClearedColors.Count; i++)
+                        if (clear.ClearedColors[i] == wanted) _flyCells.Add(clear.ClearedCells[i]);
+                    FlyToGoal(_flyCells, GameHud.GoalSprite(level), GameHud.GoalColor(level));
+                    break;
+                }
+            }
+        }
+
+        readonly List<CellOffset> _flyCells = new List<CellOffset>();
+
+        void FlyToGoal(IReadOnlyList<CellOffset> cells, Sprite sprite, Color color)
+        {
+            var target = _hud.GoalAnchor;
+            // A long line of them reads as a stream; past a dozen it only piles up.
+            int count = Mathf.Min(cells.Count, 12);
+            for (int i = 0; i < count; i++)
+            {
+                var piece = RentFly();
+                piece.sprite = sprite;
+                piece.color = color;
+                piece.type = Image.Type.Simple;
+                piece.rectTransform.sizeDelta = new Vector2(_board.CellSize * 0.6f, _board.CellSize * 0.6f);
+                piece.rectTransform.position = _board.CellWorldPosition(cells[i].X, cells[i].Y);
+                piece.gameObject.SetActive(true);
+                StartCoroutine(FlyRoutine(piece, target, i * 0.05f, true, silent: i > 0));
+            }
+        }
+
+        IEnumerator FlyRoutine(Image crystal, Vector3 target, float delay, bool toGoal, bool silent = false)
         {
             var rect = crystal.rectTransform;
             var start = rect.position;
@@ -752,7 +843,7 @@ namespace BlockPuzzle.Game
             }
 
             crystal.gameObject.SetActive(false);
-            Audio.PlayGem();
+            if (!silent) Audio.PlayGem();
             if (toGoal) StartCoroutine(Tween.Punch(_hud.GoalIcon, 0.3f, 0.3f));
         }
 
@@ -832,8 +923,21 @@ namespace BlockPuzzle.Game
                     _board.PlayBlast(result.Blast, result.Column, result.Row);
                     StartCoroutine(Tween.Punch(_board.transform, 0.035f, 0.26f));
                     if (result.Blast.CollectedGems.Count > 0) FlyCrystals(result.Blast.CollectedGems);
+                    PlayLevelLayers(result.Blast);
                     Audio.PlayBomb();
                     App.Vibrate();
+                    UpdateScore();
+                    break;
+
+                case PowerKind.Hammer:
+                    _board.HideGhost();
+                    _board.Refresh();
+                    _board.PlayBlast(result.Blast, result.Column, result.Row);
+                    if (result.Blast.CollectedGems.Count > 0) FlyCrystals(result.Blast.CollectedGems);
+                    PlayLevelLayers(result.Blast);
+                    StartCoroutine(Tween.Punch(_board.transform, 0.02f, 0.2f));
+                    Audio.PlayBomb();
+                    App.Tick();
                     UpdateScore();
                     break;
             }
@@ -903,7 +1007,7 @@ namespace BlockPuzzle.Game
             SyncState();
 
             var session = _session;
-            int left = Mathf.Max(0, session.Level.Target - session.GoalProgress);
+            int left = session.GoalRemaining;
 
             _resultPrimary = () =>
             {
@@ -944,13 +1048,19 @@ namespace BlockPuzzle.Game
                 case GameMode.Level:
                 {
                     int n = session.Level.Number;
-                    bool outOfMoves = session.MovesLeft <= 0;
-                    int left = Mathf.Max(0, session.Level.Target - session.GoalProgress);
+                    int left = session.GoalRemaining;
+                    Progress.RecordLevelResult(won: false);
 
-                    _resultPrimary = () => App.PlayLevel(n);
+                    string reason = session.LossReason == LossReason.Timer ? Str.TimerBurst
+                        : session.LossReason == LossReason.NoMoves || session.MovesLeft <= 0 ? Str.NoMovesLeft
+                        : Str.NoRoom;
+                    if (session.LossReason == LossReason.Timer) _board.PlayTimerBurst();
+
+                    // Another try goes through the level's own sheet, where boosters can be picked.
+                    _resultPrimary = () => App.OpenLevelStart(n);
                     _resultSecondary = App.ShowLevelSelect;
-                    _result.Show(this, Str.LevelTitle(n), left.ToString(),
-                        outOfMoves ? Str.NoMovesLeft : Str.NoRoom, Design.PreviewTint(3), GoalSprite(session.Level.Goal),
+                    _result.Show(this, Str.LevelTitle(n), left.ToString(), reason, Design.PreviewTint(3),
+                        session.LossReason == LossReason.Timer ? Icons.Clock : GameHud.GoalSprite(session.Level),
                         -1, Str.TryAgain, Str.Map);
                     Audio.PlayGameOver();
                     break;
@@ -962,12 +1072,12 @@ namespace BlockPuzzle.Game
                     // offers the next attempt straight away — the puzzle is there to be finished.
                     Progress.DailyAttemptEnded(App.DailyDate, session.PlaySeconds);
                     bool outOfMoves = session.MovesLeft <= 0;
-                    int left = Mathf.Max(0, session.Level.Target - session.GoalProgress);
+                    int left = session.GoalRemaining;
 
                     _resultPrimary = () => App.PlayDaily(fresh: true);
                     _resultSecondary = App.ShowMenu;
                     _result.Show(this, Str.DailyTitle(session.Level.Number), left.ToString(),
-                        outOfMoves ? Str.NoMovesLeft : Str.NoRoom, Design.PreviewTint(3), GoalSprite(session.Level.Goal),
+                        outOfMoves ? Str.NoMovesLeft : Str.NoRoom, Design.PreviewTint(3), GameHud.GoalSprite(session.Level),
                         -1, Str.TryAgain, Str.MainMenu);
                     Audio.PlayGameOver();
                     break;
@@ -1012,28 +1122,45 @@ namespace BlockPuzzle.Game
 
             int starsBefore = Progress.TotalStars;
             Progress.RecordLevel(n, stars);
+            Progress.RecordLevelResult(won: true);
             var unlocked = NewlyUnlockedTheme(starsBefore, Progress.TotalStars);
             Progress.RecordRun(session);
             RunStore.Clear(GameMode.Level);
             SyncState();
 
-            // Built while the stars pop, so "next" starts without a pause.
-            System.Threading.ThreadPool.QueueUserWorkItem(_ => LevelGenerator.Generate(n + 1, Design.PaletteSize));
+            bool last = n >= LevelGenerator.LevelCount;
+            bool worldDone = LevelGenerator.PlaceInWorld(n) == LevelGenerator.WorldSize && Progress.ChestReady(LevelGenerator.WorldOf(n));
 
-            _resultPrimary = () => App.PlayLevel(n + 1);
+            // Built while the stars pop, so "next" starts without a pause.
+            if (!last) System.Threading.ThreadPool.QueueUserWorkItem(_ => LevelGenerator.Generate(n + 1, Design.PaletteSize));
+
+            // Next goes by way of the map: the road is drawn on to the next level and its sheet
+            // opens there — the saga games' walk from one level to the next.
+            _resultPrimary = () => App.ShowLevelSelect(afterWin: n);
             _resultSecondary = App.ShowLevelSelect;
 
-            // A theme crossing its star threshold is news worth the note line; otherwise the moves saved.
-            if (unlocked != null)
+            string title = last ? Str.AdventureDone : Str.LevelTitle(n);
+            string primary = last || worldDone ? Str.Map : Str.Next;
+            string secondary = last ? Str.MainMenu : Str.Map;
+            if (last) _resultSecondary = App.ShowMenu;
+
+            // A world's chest waiting beats a theme, and a theme beats the moves saved.
+            if (worldDone)
             {
-                _result.Show(this, Str.LevelTitle(n), session.Score.ToString(),
+                _result.Show(this, title, session.Score.ToString(), Str.Upper(Str.WorldChest),
+                    Design.Gold, Icons.Chest, stars, primary, secondary, i => Audio.PlayStar(i));
+            }
+            else if (unlocked != null)
+            {
+                _result.Show(this, title, session.Score.ToString(),
                     Str.NewTheme(unlocked.Name),
-                    Design.Gold, Icons.Palette, stars, Str.Next, Str.Map, i => Audio.PlayStar(i));
+                    Design.Gold, Icons.Palette, stars, primary, secondary, i => Audio.PlayStar(i));
             }
             else
             {
-                _result.Show(this, Str.LevelTitle(n), session.Score.ToString(),
-                    Str.MovesSaved(session.MovesLeft), Design.Mint, Icons.Check, stars, Str.Next, Str.Map,
+                int spare = Mathf.Max(0, session.MovesLeft - session.Config.ExtraMoves);
+                _result.Show(this, title, session.Score.ToString(),
+                    Str.MovesSaved(spare), Design.Mint, Icons.Check, stars, primary, secondary,
                     i => Audio.PlayStar(i));
             }
 
@@ -1047,7 +1174,7 @@ namespace BlockPuzzle.Game
         /// Today's puzzle, solved. The card leads with the time — the number a daily puzzle is
         /// compared on — then the stars; the note is the streak, or a badge when one was earned
         /// (the streak is on the daily card a tap away). Sharing is the main action, the way it is
-        /// on every daily puzzle people pass around. A first solve then offers the reminder.
+        /// on every daily puzzle people pass around.
         /// </summary>
         void OnDailySolved()
         {
@@ -1115,9 +1242,6 @@ namespace BlockPuzzle.Game
                 else Audio.PlayStreak();
             }));
 
-            // Asked once, and only now: a player who has just solved one knows what the reminder is for.
-            if (!GameSettings.ReminderAsked)
-                StartCoroutine(After(2.4f, () => { if (_result.Visible && !App.HasModal) App.OpenReminderPrompt(); }));
         }
 
         static Themes.Theme NewlyUnlockedTheme(int before, int after)
@@ -1128,23 +1252,13 @@ namespace BlockPuzzle.Game
             return null;
         }
 
-        static Sprite GoalSprite(GoalKind goal)
-        {
-            switch (goal)
-            {
-                case GoalKind.Lines: return Icons.Rows;
-                case GoalKind.Score: return Icons.Star;
-                default: return Art.Crystal;
-            }
-        }
-
         // ------------------------------------------------------------------ pointer
 
         public void OnPointerDown(Vector2 screenPoint)
         {
             if (_result.Visible || _session == null) return;
 
-            if (_aiming == PowerKind.Bomb)
+            if (_aiming == PowerKind.Bomb || _aiming == PowerKind.Hammer)
             {
                 if (_board.ContainsScreenPoint(screenPoint))
                 {
@@ -1231,7 +1345,23 @@ namespace BlockPuzzle.Game
                 _bombHeld = false;
                 _board.HideGhost();
 
-                if (_board.TryGetCellFromScreenPoint(screenPoint, out int bc, out int br) && _session.CanBomb(bc, br))
+                bool onCell = _board.TryGetCellFromScreenPoint(screenPoint, out int bc, out int br);
+                if (_aiming == PowerKind.Hammer)
+                {
+                    if (onCell && _session.CanHammer(bc, br) && Progress.SpendBooster(Booster.Hammer))
+                    {
+                        _session.HasBoosterRescue = HammerAvailable(_session);
+                        _session.TryHammer(bc, br);
+                    }
+                    else
+                    {
+                        Audio.PlayInvalid();
+                    }
+
+                    return;
+                }
+
+                if (onCell && _session.CanBomb(bc, br))
                     _session.TryBomb(bc, br);
                 else
                     Audio.PlayInvalid();
@@ -1271,10 +1401,12 @@ namespace BlockPuzzle.Game
 
         void AimBomb(Vector2 screenPoint)
         {
-            if (_board.TryGetCellFromScreenPoint(screenPoint, out int col, out int row))
-                _board.ShowBombPreview(col, row);
-            else
+            if (!_board.TryGetCellFromScreenPoint(screenPoint, out int col, out int row))
                 _board.HideGhost();
+            else if (_aiming == PowerKind.Hammer)
+                _board.ShowHammerPreview(col, row);
+            else
+                _board.ShowBombPreview(col, row);
         }
 
         /// <summary>Puts a held piece back where it came from, for when the screen loses focus.</summary>
@@ -1399,6 +1531,17 @@ namespace BlockPuzzle.Game
 
         /// <summary>Test hook: holds the armed bomb over a cell.</summary>
         public void AutoBombPreview(int col, int row) => _board.ShowBombPreview(col, row);
+
+        /// <summary>Test hook: holds the armed hammer over a cell.</summary>
+        public void AutoHammerPreview(int col, int row) => _board.ShowHammerPreview(col, row);
+
+        /// <summary>Test hook: brings the hammer down on a cell, as a release there would.</summary>
+        public bool AutoHammer(int col, int row)
+        {
+            if (_session == null || !_session.CanHammer(col, row) || !Progress.SpendBooster(Booster.Hammer)) return false;
+            _session.HasBoosterRescue = HammerAvailable(_session);
+            return _session.TryHammer(col, row) != null;
+        }
 
         /// <summary>
         /// Test hook: holds a tray piece over a cell without a finger, so a shot can catch the

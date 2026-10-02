@@ -60,6 +60,41 @@ namespace BlockPuzzle.Game
             return sprite;
         }
 
+        static readonly Dictionary<int, Sprite> Washes = new Dictionary<int, Sprite>();
+
+        /// <summary>
+        /// Light across the top of a surface: solid at the top edge, rounded at the top corners,
+        /// fading to nothing at the bottom. Sliced so it stretches to any width and height and the
+        /// fade stays smooth.
+        /// </summary>
+        public static Sprite TopWash(float radius)
+        {
+            int key = Mathf.RoundToInt(radius);
+            if (!Washes.TryGetValue(key, out var sprite))
+            {
+                int w = key * 3 * Super, h = key * 3 * Super;
+                float r = key * Super;
+                var raster = new Raster(w, h);
+                raster.Paint((x, y) =>
+                {
+                    // Only the top corners are rounded: test against a squircle twice as tall.
+                    if (!Raster.SquircleInside(x, y, w, h * 2f, r, 4.5f)) return Color.clear;
+                    float fromTop = (h - y) / h;
+                    float a = 1f - Mathf.SmoothStep(0f, 1f, fromTop);
+                    return new Color(1f, 1f, 1f, a * a);
+                });
+                var down = raster.Downsample(Super);
+                var tex = down.ToTexture("TopWash" + key);
+                sprite = Sprite.Create(tex, new Rect(0, 0, down.Width, down.Height), new Vector2(0.5f, 0.5f), 100f, 0,
+                    SpriteMeshType.FullRect, new Vector4(key + 2, 0, key + 2, key + 2));
+                sprite.name = "TopWash" + key;
+                sprite.hideFlags = HideFlags.HideAndDontSave;
+                Washes[key] = sprite;
+            }
+
+            return sprite;
+        }
+
         /// <summary>A hairline squircle outline, nine-sliced.</summary>
         public static Sprite Stroke(float radius)
         {
@@ -566,6 +601,172 @@ namespace BlockPuzzle.Game
 
             raster.FillPolygon(points, Color.white);
             return raster.Downsample(Super).ToSprite("Sparkle");
+        }
+
+        // ------------------------------------------------------------------ adventure layers
+
+        static Sprite _tile;
+        static Sprite _shade;
+        static Sprite _timerRing;
+        static Sprite _node;
+        static Sprite _halo;
+
+        /// <summary>
+        /// A glow tile: a bright rim around the cell with a small diamond in the middle. Sits on the
+        /// floor under a block, so the rim shows in the gap around it and the diamond on a free cell.
+        /// </summary>
+        public static Sprite Tile
+        {
+            get { if (_tile == null) _tile = BuildTile(); return _tile; }
+        }
+
+        /// <summary>A shade block: a soft-plastic block with a smoke swirl lit inside it.</summary>
+        public static Sprite ShadeBlock
+        {
+            get { if (_shade == null) _shade = BuildShade(); return _shade; }
+        }
+
+        /// <summary>The clock face of a timer block: a ring with twelve ticks, the number goes inside.</summary>
+        public static Sprite TimerRing
+        {
+            get { if (_timerRing == null) _timerRing = BuildTimerRing(); return _timerRing; }
+        }
+
+        /// <summary>
+        /// A level on the adventure map: a round, soft-plastic button, lit from the top like the
+        /// blocks are, so the road reads as made of the same stuff as the game.
+        /// </summary>
+        public static Sprite Node
+        {
+            get { if (_node == null) _node = BuildNode(); return _node; }
+        }
+
+        /// <summary>A ring of light with a soft falloff both ways: the halo around the next level.</summary>
+        public static Sprite Halo
+        {
+            get { if (_halo == null) _halo = BuildHalo(); return _halo; }
+        }
+
+        static Sprite BuildTile()
+        {
+            const int Base = 160;
+            int s = Base * Super;
+            var raster = new Raster(s, s);
+            float radius = s * 0.235f;
+            float rim = s * 0.09f;
+
+            raster.Paint((x, y) =>
+            {
+                if (!Raster.SquircleInside(x, y, s, s, radius, 4.5f)) return Color.clear;
+
+                // A faint wash over the whole cell, a strong rim, and the diamond.
+                float a = 0.34f;
+                if (!Raster.SquircleInside(x - rim, y - rim, s - rim * 2f, s - rim * 2f, radius - rim, 4.5f)) a = 1f;
+
+                float dx = Mathf.Abs(x - s * 0.5f), dy = Mathf.Abs(y - s * 0.5f);
+                if (dx + dy < s * 0.16f) a = 1f;
+                return new Color(1f, 1f, 1f, a);
+            });
+
+            return raster.Downsample(Super).ToSprite("Tile", 0.34f);
+        }
+
+        static Sprite BuildShade()
+        {
+            const int Base = 160;
+            int s = Base * Super;
+            var raster = new Raster(s, s);
+            float radius = s * 0.235f;
+            float c = s * 0.5f;
+
+            raster.Paint((x, y) =>
+            {
+                if (!Raster.SquircleInside(x, y, s, s, radius, 4.5f)) return Color.clear;
+
+                // Dark as smoke, with a bright spiral turning in from the rim: nothing like a
+                // block, whose light only runs top to bottom.
+                float v = y / s;
+                float lum = Mathf.Lerp(0.30f, 0.46f, v);
+
+                float dx = (x - c) / c, dy = (y - c) / c;
+                float r = Mathf.Sqrt(dx * dx + dy * dy);
+                float angle = Mathf.Atan2(dy, dx);
+                float swirl = Mathf.Sin(angle * 2f + r * 7.5f);
+                if (r < 0.9f) lum += Mathf.Clamp01((swirl - 0.2f) / 0.5f) * 0.62f * (1f - r * 0.7f);
+
+                float fromTop = s - y;
+                if (fromTop < s * 0.07f) lum = Mathf.Lerp(1f, lum, fromTop / (s * 0.07f));
+                return new Color(Mathf.Clamp01(lum), Mathf.Clamp01(lum), Mathf.Clamp01(lum), 1f);
+            });
+
+            return raster.Downsample(Super).ToSprite("Shade", 0.34f);
+        }
+
+        static Sprite BuildTimerRing()
+        {
+            const int Base = 128;
+            int s = Base * Super;
+            var raster = new Raster(s, s);
+            float c = s * 0.5f;
+
+            raster.FillCircle(c, c, s * 0.44f, Color.white);
+            raster.EraseCircle(c, c, s * 0.34f);
+            for (int i = 0; i < 12; i++)
+            {
+                float a = i * Mathf.PI / 6f;
+                var dir = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
+                raster.Line(new Vector2(c, c) + dir * s * 0.47f, new Vector2(c, c) + dir * s * 0.495f, s * 0.035f, Color.white);
+            }
+
+            return raster.Downsample(Super).ToSprite("TimerRing");
+        }
+
+        static Sprite BuildNode()
+        {
+            const int Base = 192;
+            int s = Base * Super;
+            var raster = new Raster(s, s);
+            float c = s * 0.5f;
+            float r = s * 0.5f - 3f;
+
+            raster.Paint((x, y) =>
+            {
+                float d = Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c));
+                if (d > r) return Color.clear;
+
+                float v = y / s;
+                float lum = Mathf.Lerp(0.72f, 0.98f, v);
+
+                // A bright lip around the top and a darker one underneath: a pressed-out disc.
+                float edge = r - d;
+                if (edge < s * 0.06f)
+                    lum = y > c ? Mathf.Lerp(1f, lum, edge / (s * 0.06f)) : Mathf.Lerp(0.5f, lum, edge / (s * 0.06f));
+
+                float gx = x - s * 0.38f, gy = y - s * 0.70f;
+                float gloss = Mathf.Clamp01(1f - Mathf.Sqrt(gx * gx + gy * gy) / (s * 0.30f));
+                lum += gloss * gloss * 0.08f;
+                return new Color(Mathf.Clamp01(lum), Mathf.Clamp01(lum), Mathf.Clamp01(lum), 1f);
+            });
+
+            return raster.Downsample(Super).ToSprite("Node");
+        }
+
+        static Sprite BuildHalo()
+        {
+            const int size = 192;
+            var raster = new Raster(size, size);
+            float half = size * 0.5f;
+
+            raster.Paint((x, y) =>
+            {
+                float d = Mathf.Sqrt((x - half) * (x - half) + (y - half) * (y - half)) / half;
+                // Peaks at 60% of the radius and fades both inwards and out.
+                float a = Mathf.Clamp01(1f - Mathf.Abs(d - 0.6f) / 0.4f);
+                a = a * a * (3f - 2f * a);
+                return new Color(1f, 1f, 1f, a);
+            });
+
+            return raster.ToSprite("Halo");
         }
 
         static Sprite _medal;

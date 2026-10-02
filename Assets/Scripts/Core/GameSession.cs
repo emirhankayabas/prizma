@@ -48,6 +48,26 @@ namespace BlockPuzzle.Core
         public int MonoLines { get; private set; }
         public int PowersUsed { get; private set; }
 
+        /// <summary>Glow tiles put out, blocks of the order colour cleared, shade blocks cleared.</summary>
+        public int TilesCollected { get; private set; }
+        public int ColorCollected { get; private set; }
+        public int ShadeCleared { get; private set; }
+
+        /// <summary>Moves since shade last spread or was cleared.</summary>
+        public int ShadeQuiet { get; private set; }
+
+        /// <summary>Why the run was lost; <see cref="Core.LossReason.None"/> while it is not.</summary>
+        public LossReason LossReason { get; private set; }
+
+        /// <summary>
+        /// Set by the game when the player holds a booster that can free a jammed board (the
+        /// hammer). A jam then waits for the player instead of ending the run, the way it does
+        /// while a prism charge is left. Not saved: the game sets it from the player's stock.
+        /// </summary>
+        public bool HasBoosterRescue { get; set; }
+
+        bool _timerBurst;
+
         public bool IsGameOver => State == SessionState.Lost;
         public bool IsFinished => State == SessionState.Won || State == SessionState.Lost;
 
@@ -60,7 +80,7 @@ namespace BlockPuzzle.Core
         /// <summary>Moves bought when a level's budget ran out. Zero until then; at most one purchase.</summary>
         public int BonusMoves { get; private set; }
 
-        public int MovesLeft => Level == null ? int.MaxValue : Math.Max(0, Level.MoveLimit + BonusMoves - MovesUsed);
+        public int MovesLeft => Level == null ? int.MaxValue : Math.Max(0, Level.MoveLimit + Config.ExtraMoves + BonusMoves - MovesUsed);
 
         public bool CanBuyMoves => State == SessionState.OutOfMoves && BonusMoves == 0 && Charges >= PowerRules.ExtraMovesCost;
 
@@ -74,12 +94,27 @@ namespace BlockPuzzle.Core
                 {
                     case GoalKind.Gems: return GemsCollected;
                     case GoalKind.Lines: return LinesCleared;
+                    case GoalKind.Tiles: return TilesCollected;
+                    case GoalKind.Colors: return ColorCollected;
+                    // Shade grows back, so its progress is how much of the start is gone right now.
+                    case GoalKind.Shade: return Math.Max(0, Level.Target - Board.ShadeCount);
                     default: return Score;
                 }
             }
         }
 
-        public bool GoalMet => Level != null && GoalProgress >= Level.Target;
+        /// <summary>What is left of the goal, as the HUD counts it down.</summary>
+        public int GoalRemaining
+        {
+            get
+            {
+                if (Level == null) return 0;
+                if (Level.Goal == GoalKind.Shade) return Board.ShadeCount;
+                return Math.Max(0, Level.Target - GoalProgress);
+            }
+        }
+
+        public bool GoalMet => Level != null && (Level.Goal == GoalKind.Shade ? Board.ShadeCount == 0 : GoalProgress >= Level.Target);
 
         /// <summary>Assist applied to the most recent deal, 0..1. Surfaced for tuning and tests.</summary>
         public float LastAssist => _dealer.LastAssist;
@@ -118,8 +153,15 @@ namespace BlockPuzzle.Core
             if (config.Level != null)
             {
                 foreach (var cell in config.Level.Prefill)
-                    if (Board.InBounds(cell.X, cell.Y))
-                        Board.SetPrefill(cell.X, cell.Y, cell.Color % config.PaletteSize, cell.Gem, cell.Ice);
+                {
+                    if (!Board.InBounds(cell.X, cell.Y)) continue;
+                    if (cell.Color != BoardModel.Empty)
+                    {
+                        int colour = cell.Color == BoardModel.Shade ? BoardModel.Shade : cell.Color % config.PaletteSize;
+                        Board.SetPrefill(cell.X, cell.Y, colour, cell.Gem, cell.Ice, cell.Timer);
+                    }
+                    if (cell.Tile) Board.SetTile(cell.X, cell.Y, true);
+                }
             }
 
             Charges = config.PowersEnabled ? Math.Min(PowerRules.MaxCharges, Math.Max(0, config.StartCharges)) : 0;
@@ -153,14 +195,18 @@ namespace BlockPuzzle.Core
                 Level = puzzle
             });
 
-        public static GameSession NewLevelRun(LevelDefinition level, int boardSize = 8, int paletteSize = 6)
+        /// <param name="extraCharges">Charges on top of the level's own — the booster and the win streak.</param>
+        /// <param name="extraMoves">Moves on top of the budget, which do not count towards stars.</param>
+        public static GameSession NewLevelRun(LevelDefinition level, int boardSize = 8, int paletteSize = 6,
+            int extraCharges = 0, int extraMoves = 0)
             => new GameSession(new SessionConfig
             {
                 Mode = GameMode.Level,
                 Seed = level.Seed,
                 BoardSize = boardSize,
                 PaletteSize = paletteSize,
-                StartCharges = level.StartCharges,
+                StartCharges = Math.Min(PowerRules.MaxCharges, level.StartCharges + Math.Max(0, extraCharges)),
+                ExtraMoves = Math.Max(0, extraMoves),
                 Level = level
             });
 
@@ -210,8 +256,25 @@ namespace BlockPuzzle.Core
             GemsCollected += clear.CollectedGems.Count;
             MonoLines += clear.MonoLines;
             if (clear.PerfectClear) PerfectClears++;
+            result.OrderCleared = CountLayers(clear);
 
             result.ChargesGained = BankLines(clear.LinesCleared + clear.MonoLines, clear.PerfectClear);
+
+            // The board answers the move: shade left alone creeps on, and every timer ticks down.
+            if (Level != null && Level.ShadeSpread > 0 && Board.ShadeCount > 0)
+            {
+                if (clear.ClearedShade > 0)
+                {
+                    ShadeQuiet = 0;
+                }
+                else if (++ShadeQuiet >= Level.ShadeSpread)
+                {
+                    ShadeQuiet = 0;
+                    result.ShadeSpread = Board.SpreadShade(_random);
+                }
+            }
+
+            if (Board.TickTimers()) _timerBurst = true;
 
             if (IsTrayEmpty())
             {
@@ -307,6 +370,7 @@ namespace BlockPuzzle.Core
 
             Score += gained;
             GemsCollected += blast.CollectedGems.Count;
+            CountLayers(blast);
             if (blast.PerfectClear) PerfectClears++;
 
             return FinishPower(new PowerResult
@@ -319,11 +383,56 @@ namespace BlockPuzzle.Core
             });
         }
 
+        /// <summary>The hammer takes any single block — stone and ice included. The caller owns the stock.</summary>
+        public bool CanHammer(int col, int row)
+            => (State == SessionState.Playing || State == SessionState.Stuck)
+               && Board.InBounds(col, row) && Board.IsOccupied(col, row);
+
+        public PowerResult TryHammer(int col, int row)
+        {
+            if (!CanHammer(col, row)) return null;
+
+            var blast = Board.Blast(col, row, 0);
+            int gained = ScoreRules.BlastScore(blast);
+
+            Score += gained;
+            GemsCollected += blast.CollectedGems.Count;
+            CountLayers(blast);
+            if (blast.PerfectClear) PerfectClears++;
+
+            return FinishPower(new PowerResult
+            {
+                Kind = PowerKind.Hammer,
+                Column = col,
+                Row = row,
+                Blast = blast,
+                ScoreGained = gained
+            });
+        }
+
+        /// <summary>Folds the level layers a clear touched into the run's counts. Returns the order-colour blocks it took.</summary>
+        int CountLayers(ClearResult clear)
+        {
+            TilesCollected += clear.CollectedTiles.Count;
+            ShadeCleared += clear.ClearedShade;
+
+            int order = 0;
+            if (Level != null && Level.OrderColor >= 0)
+            {
+                for (int i = 0; i < clear.ClearedColors.Count; i++)
+                    if (clear.ClearedColors[i] == Level.OrderColor) order++;
+                ColorCollected += order;
+            }
+
+            return order;
+        }
+
         /// <summary>Gives up from a rescuable state rather than spending the remaining charges.</summary>
         public void Concede()
         {
             if (State != SessionState.Stuck && State != SessionState.OutOfMoves) return;
 
+            LossReason = State == SessionState.OutOfMoves ? LossReason.NoMoves : LossReason.NoRoom;
             State = SessionState.Lost;
             GameOver?.Invoke();
         }
@@ -345,7 +454,7 @@ namespace BlockPuzzle.Core
 
         PowerResult FinishPower(PowerResult result)
         {
-            Charges -= PowerRules.Cost(result.Kind);
+            if (result.Kind != PowerKind.Hammer) Charges -= PowerRules.Cost(result.Kind);
             PowersUsed++;
 
             var before = State;
@@ -395,14 +504,23 @@ namespace BlockPuzzle.Core
             if (Level != null && GoalMet)
             {
                 State = SessionState.Won;
+                LossReason = LossReason.None;
+                return;
+            }
+
+            // A timer that ran out ends the run outright: no charge buys it back.
+            if (_timerBurst)
+            {
+                State = SessionState.Lost;
+                LossReason = LossReason.Timer;
                 return;
             }
 
             if (Level != null && MovesLeft <= 0)
             {
-                State = Config.PowersEnabled && BonusMoves == 0 && Charges >= PowerRules.ExtraMovesCost
-                    ? SessionState.OutOfMoves
-                    : SessionState.Lost;
+                bool rescue = Config.PowersEnabled && BonusMoves == 0 && Charges >= PowerRules.ExtraMovesCost;
+                State = rescue ? SessionState.OutOfMoves : SessionState.Lost;
+                LossReason = rescue ? LossReason.None : LossReason.NoMoves;
                 return;
             }
 
@@ -412,7 +530,9 @@ namespace BlockPuzzle.Core
                 return;
             }
 
-            State = Config.PowersEnabled && Charges > 0 ? SessionState.Stuck : SessionState.Lost;
+            bool canSave = (Config.PowersEnabled && Charges > 0) || HasBoosterRescue;
+            State = canSave ? SessionState.Stuck : SessionState.Lost;
+            LossReason = canSave ? LossReason.None : LossReason.NoRoom;
         }
 
         void RaiseStateChange(SessionState before)
@@ -434,7 +554,8 @@ namespace BlockPuzzle.Core
             get
             {
                 if (State != SessionState.Won || Level == null) return 0;
-                return BonusMoves > 0 ? 1 : Level.StarsFor(MovesLeft);
+                // Moves a booster added are spent first, as far as stars are concerned.
+                return BonusMoves > 0 ? 1 : Level.StarsFor(Math.Max(0, MovesLeft - Config.ExtraMoves));
             }
         }
 
@@ -474,6 +595,14 @@ namespace BlockPuzzle.Core
                 Cells = new int[n * n],
                 Gems = new bool[n * n],
                 Ice = new int[n * n],
+                Tiles = new bool[n * n],
+                Timers = new int[n * n],
+                ExtraMoves = Config.ExtraMoves,
+                TilesCollected = TilesCollected,
+                ColorCollected = ColorCollected,
+                ShadeCleared = ShadeCleared,
+                ShadeQuiet = ShadeQuiet,
+                LossReason = (int)LossReason,
 
                 TrayShapes = new string[Tray.Length],
                 TrayColors = new int[Tray.Length],
@@ -503,6 +632,9 @@ namespace BlockPuzzle.Core
                 s.LevelGoal = (int)Level.Goal;
                 s.LevelTarget = Level.Target;
                 s.LevelMoveLimit = Level.MoveLimit;
+                s.LevelOrderColor = Level.OrderColor;
+                s.LevelShadeSpread = Level.ShadeSpread;
+                s.LevelHardness = Level.Hardness;
             }
 
             for (int y = 0; y < n; y++)
@@ -512,6 +644,8 @@ namespace BlockPuzzle.Core
                 s.Cells[i] = Board.GetCell(x, y);
                 s.Gems[i] = Board.HasGem(x, y);
                 s.Ice[i] = Board.IceAt(x, y);
+                s.Tiles[i] = Board.HasTile(x, y);
+                s.Timers[i] = Board.TimerAt(x, y);
             }
 
             for (int i = 0; i < Tray.Length; i++)
@@ -556,7 +690,10 @@ namespace BlockPuzzle.Core
                     Goal = (GoalKind)s.LevelGoal,
                     Target = s.LevelTarget,
                     MoveLimit = s.LevelMoveLimit,
-                    StartCharges = s.StartCharges
+                    StartCharges = s.StartCharges,
+                    OrderColor = s.LevelOrderColor,
+                    ShadeSpread = Math.Max(0, s.LevelShadeSpread),
+                    Hardness = s.LevelHardness
                 };
             }
 
@@ -568,8 +705,12 @@ namespace BlockPuzzle.Core
                 PaletteSize = Math.Max(1, s.PaletteSize),
                 PowersEnabled = s.PowersEnabled,
                 StartCharges = s.StartCharges,
+                ExtraMoves = Math.Max(0, s.ExtraMoves),
                 Level = level
             };
+
+            // The optional layers came later; an older save simply has none.
+            bool layers = s.Tiles != null && s.Tiles.Length == n * n && s.Timers != null && s.Timers.Length == n * n;
 
             var session = new GameSession(config, deal: false);
             session._random.LoadState(s.RngState);
@@ -579,8 +720,9 @@ namespace BlockPuzzle.Core
             for (int x = 0; x < n; x++)
             {
                 int i = y * n + x;
+                if (layers && s.Tiles[i]) session.Board.SetTile(x, y, true);
                 if (s.Cells[i] == BoardModel.Empty) continue;
-                session.Board.SetPrefill(x, y, s.Cells[i], s.Gems[i], s.Ice[i]);
+                session.Board.SetPrefill(x, y, s.Cells[i], s.Gems[i], s.Ice[i], layers ? s.Timers[i] : 0);
             }
 
             for (int i = 0; i < TraySlots; i++)
@@ -606,6 +748,11 @@ namespace BlockPuzzle.Core
             session.MonoLines = s.MonoLines;
             session.PowersUsed = s.PowersUsed;
             session.PlaySeconds = Math.Max(0f, s.PlaySeconds);
+            session.TilesCollected = s.TilesCollected;
+            session.ColorCollected = s.ColorCollected;
+            session.ShadeCleared = s.ShadeCleared;
+            session.ShadeQuiet = s.ShadeQuiet;
+            session.LossReason = (LossReason)s.LossReason;
 
             return session;
         }

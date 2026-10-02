@@ -120,8 +120,8 @@ namespace BlockPuzzle.Game
         const string ReminderAskedKey = "blockpuzzle.reminder.asked";
 
         /// <summary>
-        /// The daily reminder. Off until the player says yes — asked once, after their first solve,
-        /// when the offer means something — and switchable on the daily card afterwards.
+        /// The daily reminder. Set by the system's own permission dialog, asked once on the first
+        /// launch (<see cref="AppController"/>), and switchable in settings afterwards.
         /// </summary>
         public static bool Reminder
         {
@@ -135,7 +135,7 @@ namespace BlockPuzzle.Game
             }
         }
 
-        /// <summary>The one-time offer has been made, whatever the answer was.</summary>
+        /// <summary>The first-launch permission has been asked, whatever the answer was.</summary>
         public static bool ReminderAsked
         {
             get => PlayerPrefs.GetInt(ReminderAskedKey, 0) != 0;

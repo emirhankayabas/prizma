@@ -18,6 +18,18 @@ namespace BlockPuzzle.Core
         /// <summary>Iced cells whose ice took a hit. They stay on the board, one layer thinner.</summary>
         public readonly List<CellOffset> CrackedIce = new List<CellOffset>();
 
+        /// <summary>The colour each of <see cref="ClearedCells"/> had, in the same order. Shade is <see cref="BoardModel.Shade"/>.</summary>
+        public readonly List<int> ClearedColors = new List<int>();
+
+        /// <summary>Glow tiles this clear put out. Each one also appears in <see cref="ClearedCells"/>.</summary>
+        public readonly List<CellOffset> CollectedTiles = new List<CellOffset>();
+
+        /// <summary>Timer blocks taken before their clock ran out.</summary>
+        public readonly List<CellOffset> DefusedTimers = new List<CellOffset>();
+
+        /// <summary>Shade blocks among <see cref="ClearedCells"/>.</summary>
+        public int ClearedShade;
+
         /// <summary>Cleared lines that were a single colour end to end.</summary>
         public int MonoLines;
 
@@ -40,6 +52,10 @@ namespace BlockPuzzle.Core
             ClearedCells.Clear();
             CollectedGems.Clear();
             CrackedIce.Clear();
+            ClearedColors.Clear();
+            CollectedTiles.Clear();
+            DefusedTimers.Clear();
+            ClearedShade = 0;
             MonoRows.Clear();
             MonoColumns.Clear();
             MonoLines = 0;
@@ -78,9 +94,24 @@ namespace BlockPuzzle.Core
 
         public bool IsStone(int col, int row) => InBounds(col, row) && _ice[col, row] >= Stone;
 
+        /// <summary>
+        /// The cell value of a shade block: a colourless block that fills its lines and clears like
+        /// any other, but creeps into a free neighbour when the player leaves it alone (the session
+        /// decides when). Stored as a cell value rather than a layer, so saves, the dealer and the
+        /// computer player carry it unchanged — and it can never make a single-colour line.
+        /// </summary>
+        public const int Shade = -2;
+
+        public bool IsShade(int col, int row) => InBounds(col, row) && _cells[col, row] == Shade;
+
         readonly int[,] _cells;
         readonly bool[,] _gems;
         readonly int[,] _ice;
+        readonly bool[,] _tiles;
+        readonly int[,] _timers;
+
+        // Where shade could creep to, gathered without allocating.
+        readonly int[] _spreadScratch;
         readonly int[] _rowCount;
         readonly int[] _colCount;
 
@@ -106,6 +137,9 @@ namespace BlockPuzzle.Core
             _cells = new int[size, size];
             _gems = new bool[size, size];
             _ice = new int[size, size];
+            _tiles = new bool[size, size];
+            _timers = new int[size, size];
+            _spreadScratch = new int[size * size];
             _rowCount = new int[size];
             _colCount = new int[size];
             _rowAdd = new int[size];
@@ -120,6 +154,15 @@ namespace BlockPuzzle.Core
         /// <summary>Crystals still on the board.</summary>
         public int GemCount { get; private set; }
 
+        /// <summary>Glow tiles still lit.</summary>
+        public int TileCount { get; private set; }
+
+        /// <summary>Shade blocks on the board.</summary>
+        public int ShadeCount { get; private set; }
+
+        /// <summary>Timer blocks still ticking.</summary>
+        public int TimerCount { get; private set; }
+
         public void Clear()
         {
             for (int y = 0; y < Size; y++)
@@ -128,10 +171,15 @@ namespace BlockPuzzle.Core
 
             Array.Clear(_gems, 0, _gems.Length);
             Array.Clear(_ice, 0, _ice.Length);
+            Array.Clear(_tiles, 0, _tiles.Length);
+            Array.Clear(_timers, 0, _timers.Length);
             Array.Clear(_rowCount, 0, Size);
             Array.Clear(_colCount, 0, Size);
             OccupiedCount = 0;
             GemCount = 0;
+            TileCount = 0;
+            ShadeCount = 0;
+            TimerCount = 0;
         }
 
         /// <summary>A detached copy, for looking ahead without touching the live board.</summary>
@@ -150,10 +198,15 @@ namespace BlockPuzzle.Core
             Array.Copy(other._cells, _cells, _cells.Length);
             Array.Copy(other._gems, _gems, _gems.Length);
             Array.Copy(other._ice, _ice, _ice.Length);
+            Array.Copy(other._tiles, _tiles, _tiles.Length);
+            Array.Copy(other._timers, _timers, _timers.Length);
             Array.Copy(other._rowCount, _rowCount, Size);
             Array.Copy(other._colCount, _colCount, Size);
             OccupiedCount = other.OccupiedCount;
             GemCount = other.GemCount;
+            TileCount = other.TileCount;
+            ShadeCount = other.ShadeCount;
+            TimerCount = other.TimerCount;
         }
 
         public bool InBounds(int col, int row) => col >= 0 && col < Size && row >= 0 && row < Size;
@@ -171,6 +224,76 @@ namespace BlockPuzzle.Core
         /// <summary>Layers of ice on a cell; 0 for none.</summary>
         public int IceAt(int col, int row) => InBounds(col, row) ? _ice[col, row] : 0;
 
+        public bool HasTile(int col, int row) => InBounds(col, row) && _tiles[col, row];
+
+        /// <summary>Moves left on a timer block's clock; 0 when the cell has none.</summary>
+        public int TimerAt(int col, int row) => InBounds(col, row) ? _timers[col, row] : 0;
+
+        /// <summary>Lays or lifts a glow tile. Tiles belong to the floor, so an empty cell can hold one.</summary>
+        public void SetTile(int col, int row, bool tile)
+        {
+            if (!InBounds(col, row) || _tiles[col, row] == tile) return;
+            _tiles[col, row] = tile;
+            TileCount += tile ? 1 : -1;
+        }
+
+        void SetTimer(int col, int row, int moves)
+        {
+            moves = Math.Max(0, moves);
+            if (_timers[col, row] > 0) TimerCount--;
+            _timers[col, row] = moves;
+            if (moves > 0) TimerCount++;
+        }
+
+        /// <summary>
+        /// One move passes: every timer block's clock goes down by one. Returns true when one of
+        /// them reached zero — the run is lost unless the same move met the level's goal.
+        /// </summary>
+        public bool TickTimers()
+        {
+            if (TimerCount == 0) return false;
+
+            bool burst = false;
+            for (int y = 0; y < Size; y++)
+            for (int x = 0; x < Size; x++)
+            {
+                if (_timers[x, y] <= 0) continue;
+                _timers[x, y]--;
+                if (_timers[x, y] == 0)
+                {
+                    TimerCount--;
+                    burst = true;
+                }
+            }
+
+            return burst;
+        }
+
+        /// <summary>
+        /// Shade creeps into one free cell beside it, chosen by <paramref name="rng"/>. Returns the
+        /// cell it took, or (-1, -1) when it is boxed in or there is none.
+        /// </summary>
+        public CellOffset SpreadShade(Rng rng)
+        {
+            if (ShadeCount == 0) return new CellOffset(-1, -1);
+
+            int count = 0;
+            for (int y = 0; y < Size; y++)
+            for (int x = 0; x < Size; x++)
+            {
+                if (_cells[x, y] != Empty) continue;
+                if (IsShade(x - 1, y) || IsShade(x + 1, y) || IsShade(x, y - 1) || IsShade(x, y + 1))
+                    _spreadScratch[count++] = y * Size + x;
+            }
+
+            if (count == 0) return new CellOffset(-1, -1);
+
+            int pick = _spreadScratch[rng.Next(count)];
+            int px = pick % Size, py = pick / Size;
+            SetCell(px, py, Shade);
+            return new CellOffset(px, py);
+        }
+
         public int RowCount(int row) => _rowCount[row];
         public int ColumnCount(int col) => _colCount[col];
 
@@ -178,10 +301,10 @@ namespace BlockPuzzle.Core
         /// Puts a pre-placed block on the board — how a level lays out its starting position and
         /// how a saved run is restored. Crystals and ice only ever sit on an occupied cell.
         /// </summary>
-        public void SetPrefill(int col, int row, int colorIndex, bool gem = false, int ice = 0)
+        public void SetPrefill(int col, int row, int colorIndex, bool gem = false, int ice = 0, int timer = 0)
         {
             if (!InBounds(col, row)) throw new ArgumentOutOfRangeException($"Cell ({col},{row}) is off the board.");
-            if (colorIndex < 0) throw new ArgumentOutOfRangeException(nameof(colorIndex), "Prefill needs a colour.");
+            if (colorIndex < 0 && colorIndex != Shade) throw new ArgumentOutOfRangeException(nameof(colorIndex), "Prefill needs a colour.");
 
             SetCell(col, row, colorIndex);
 
@@ -192,6 +315,7 @@ namespace BlockPuzzle.Core
             }
 
             _ice[col, row] = Math.Max(0, ice);
+            SetTimer(col, row, timer);
         }
 
         /// <summary>True when every cell of the shape lands in bounds and on a free cell.</summary>
@@ -367,27 +491,57 @@ namespace BlockPuzzle.Core
             {
                 if (!InBounds(x, y) || _cells[x, y] == Empty) continue;
 
-                var cell = new CellOffset(x, y);
-                if (_gems[x, y])
-                {
-                    _gems[x, y] = false;
-                    GemCount--;
-                    result.CollectedGems.Add(cell);
-                }
-
                 _ice[x, y] = 0;
-                SetCell(x, y, Empty);
-                result.ClearedCells.Add(cell);
+                Wipe(x, y, result);
             }
 
             result.PerfectClear = result.ClearedCells.Count > 0 && OccupiedCount == 0;
             return result;
         }
 
+        /// <summary>
+        /// Takes a block off the board and writes down everything that went with it: its colour,
+        /// its crystal, the glow tile under it, a timer it was carrying.
+        /// </summary>
+        void Wipe(int x, int y, ClearResult result)
+        {
+            var cell = new CellOffset(x, y);
+            int colour = _cells[x, y];
+
+            if (_gems[x, y])
+            {
+                _gems[x, y] = false;
+                GemCount--;
+                result.CollectedGems.Add(cell);
+            }
+
+            if (_tiles[x, y])
+            {
+                _tiles[x, y] = false;
+                TileCount--;
+                result.CollectedTiles.Add(cell);
+            }
+
+            if (_timers[x, y] > 0)
+            {
+                SetTimer(x, y, 0);
+                result.DefusedTimers.Add(cell);
+            }
+
+            if (colour == Shade) result.ClearedShade++;
+
+            SetCell(x, y, Empty);
+            result.ClearedCells.Add(cell);
+            result.ClearedColors.Add(colour);
+        }
+
         void SetCell(int x, int y, int value)
         {
             int previous = _cells[x, y];
             if (previous == value) return;
+
+            if (previous == Shade) ShadeCount--;
+            if (value == Shade) ShadeCount++;
 
             if (previous == Empty)
             {
@@ -408,6 +562,7 @@ namespace BlockPuzzle.Core
         bool RowIsMono(int y)
         {
             int colour = _cells[0, y];
+            if (colour < 0) return false;
             for (int x = 1; x < Size; x++)
                 if (_cells[x, y] != colour) return false;
             return true;
@@ -416,6 +571,7 @@ namespace BlockPuzzle.Core
         bool ColumnIsMono(int x)
         {
             int colour = _cells[x, 0];
+            if (colour < 0) return false;
             for (int y = 1; y < Size; y++)
                 if (_cells[x, y] != colour) return false;
             return true;
@@ -478,15 +634,7 @@ namespace BlockPuzzle.Core
                     continue;
                 }
 
-                if (_gems[x, y])
-                {
-                    _gems[x, y] = false;
-                    GemCount--;
-                    result.CollectedGems.Add(new CellOffset(x, y));
-                }
-
-                SetCell(x, y, Empty);
-                result.ClearedCells.Add(new CellOffset(x, y));
+                Wipe(x, y, result);
             }
 
             result.PerfectClear = OccupiedCount == 0;

@@ -15,6 +15,11 @@ param(
     [int]$Height = 936,
     [int]$TopInset = 90,
     [string]$Tag = "",
+    # Which monitor the player window opens on (1-based; 0 leaves it to Windows). A second screen
+    # keeps the test out of the way of whoever is working on the first.
+    [int]$Monitor = 0,
+    # "adventure" runs only the adventure's shots; "play" sets up a save and leaves the game open.
+    [string]$Only = "",
     [string]$Unity = "C:\Program Files\Unity\Hub\Editor\6000.6.0f1"
 )
 
@@ -49,10 +54,14 @@ Remove-Item "HKCU:\Software\$company\$product" -Recurse -ErrorAction SilentlyCon
 if (Test-Path $shots) { Remove-Item $shots -Recurse -Force }
 New-Item -ItemType Directory $shots | Out-Null
 
-$run = Start-Process -FilePath $player -ArgumentList @(
+$runArgs = @(
     "-screen-fullscreen", "0", "-screen-width", "$Width", "-screen-height", "$Height",
     "-autotestTopInset", "$TopInset",
-    "-autotestOut", "`"$shots`"", "-logFile", "`"$work\player.log`"") -PassThru
+    "-autotestOut", "`"$shots`"", "-logFile", "`"$work\player.log`"")
+if ($Monitor -gt 0) { $runArgs += @("-monitor", "$Monitor") }
+if ($Only) { $runArgs += @("-autotestOnly", $Only) }
+$run = Start-Process -FilePath $player -ArgumentList $runArgs -PassThru
+if ($Only -eq "play") { "player left running (pid $($run.Id))"; exit 0 }
 if (-not $run.WaitForExit(300000)) { $run.Kill(); "player timed out" }
 "player exit: $($run.ExitCode)"
 Select-String -Path "$work\player.log" -Pattern "Exception|\[AutoTest\] done" | Select-Object -First 15 | ForEach-Object { $_.Line }
