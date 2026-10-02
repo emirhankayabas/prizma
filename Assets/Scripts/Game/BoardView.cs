@@ -821,6 +821,39 @@ namespace BlockPuzzle.Game
         // ------------------------------------------------------------------ impact
 
         /// <summary>
+        /// A page hidden mid-effect stops every coroutine where it stood: the board came back on
+        /// the next run a few units off its place or a little too large, with a sweep bar frozen
+        /// half-way across it, and the rim kept the colour of a pulse that never finished.
+        /// </summary>
+        void OnDisable()
+        {
+            if (_rect == null) return;
+
+            if (_shake != null)
+            {
+                _rect.anchoredPosition = _shakeHome;
+                _shake = null;
+            }
+
+            _rect.localScale = Vector3.one;
+
+            if (_pulse != null)
+            {
+                _pulse = null;
+                _edge.color = _rimRest;
+            }
+
+            HideClearOut();
+            HideShards();
+            foreach (var image in _sweepPool) image.gameObject.SetActive(false);
+            foreach (var image in _burstPool) image.gameObject.SetActive(false);
+            _wave.gameObject.SetActive(false);
+            _ring.gameObject.SetActive(false);
+            foreach (var ring in _timerRings)
+                if (ring != null) ring.rectTransform.localScale = Vector3.one;
+        }
+
+        /// <summary>
         /// A short, decaying shake of the whole board — the weight of a big clear. Small on
         /// purpose: a few units, over in a quarter of a second, so it is felt rather than watched.
         /// </summary>

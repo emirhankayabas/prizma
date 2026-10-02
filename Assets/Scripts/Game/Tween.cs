@@ -29,7 +29,6 @@ namespace BlockPuzzle.Game
             return 1f - inv * inv * inv * inv * inv;
         }
 
-        /// <summary>Overshoots past the target and settles back. This is what makes a placement feel solid.</summary>
         /// <summary>A gentler overshoot than <see cref="OutBack"/>: a spring that settles, not a bounce.</summary>
         public static float OutBackSoft(float t)
         {
@@ -39,6 +38,7 @@ namespace BlockPuzzle.Game
             return 1f + c3 * Mathf.Pow(t - 1f, 3f) + c1 * Mathf.Pow(t - 1f, 2f);
         }
 
+        /// <summary>Overshoots past the target and settles back. This is what makes a placement feel solid.</summary>
         public static float OutBack(float t)
         {
             const float c1 = 1.70158f;
@@ -56,10 +56,11 @@ namespace BlockPuzzle.Game
             if (target == null) yield break;
             ease ??= Ease.OutQuad;
 
+            // The starting size applies through the delay too. Set after it, a sheet's close button
+            // stood at full size for its delay and then vanished to pop in from nothing.
+            target.localScale = from;
             if (delay > 0f) yield return new WaitForSecondsRealtime(delay);
             if (target == null) yield break;
-
-            target.localScale = from;
 
             for (float t = 0f; t < duration; t += Time.unscaledDeltaTime)
             {

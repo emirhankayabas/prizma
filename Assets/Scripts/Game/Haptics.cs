@@ -44,6 +44,10 @@ namespace BlockPuzzle.Game
         public static void Pulse(long milliseconds, int amplitude = -1)
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
+            // Android throws outside 1..255 (or -1), and the fallback for a throw is the long buzz:
+            // a four-line clear asked for 270 and got half a second of motor.
+            if (amplitude != -1) amplitude = Mathf.Clamp(amplitude, 1, 255);
+
             var vibrator = Vibrator;
             if (vibrator == null)
             {

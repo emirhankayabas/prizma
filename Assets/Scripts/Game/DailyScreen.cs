@@ -364,7 +364,11 @@ namespace BlockPuzzle.Game
                 bool earned = badge.Earned;
                 _medals[i].color = earned ? badge.Tint() : Design.SurfaceControl;
                 _medalIcons[i].color = earned ? Color.white : Design.TextTertiary;
-                _badgeTiles[i].SetHighlighted(i == _selected, Design.SurfaceControl);
+                // A punch cut short by the sheet closing would leave a medal a size too large.
+                _medals[i].rectTransform.localScale = Vector3.one;
+                // Lit in the accent, not in the control surface: an unearned medal is that very
+                // colour, and on the picked tile it vanished into its own highlight.
+                _badgeTiles[i].SetHighlighted(i == _selected, SheetKit.Tinted(Design.SurfaceGroup, Design.AccentA, 0.24f));
             }
 
             var picked = DailyBadges.All[_selected];
@@ -442,6 +446,8 @@ namespace BlockPuzzle.Game
             Sheet.Title.text = Str.DailyTitle(_puzzle.Number);
 
             int streak = Progress.DailyStreak;
+            _streak.rectTransform.localScale = Vector3.one;
+            _flame.rectTransform.localScale = Vector3.one;
             _streak.text = streak.ToString();
             _streak.color = streak > 0 ? Design.TextPrimary : Design.TextTertiary;
             _flame.color = streak > 0 ? Design.Gold : Design.SurfaceControl;

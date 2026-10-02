@@ -134,11 +134,7 @@ namespace BlockPuzzle.Game
 
                 case Style.Round:
                     // A small plastic button of its own, not a grey dot: a soft shadow and a lit disc.
-                    var roundShadow = UiBuilder.Image(_content, "Shadow", Art.Shadow(Design.CloseDisc * 0.5f, 24f), Color.black.WithAlpha(0.3f));
-                    roundShadow.type = Image.Type.Simple;
-                    float roundPad = Art.ShadowPad(24f);
-                    roundShadow.rectTransform.sizeDelta = new Vector2(Design.CloseDisc + roundPad * 2f, Design.CloseDisc + roundPad * 2f);
-                    roundShadow.rectTransform.anchoredPosition = new Vector2(0f, -6f);
+                    UiBuilder.DiscShadow(_content, "Shadow", Design.CloseDisc, 24f, 0.3f, 6f);
                     _fill = UiBuilder.Image(_content, "Fill", Art.Node, SheetKit.Tinted(Design.SurfaceControl, Color.white, 0.14f));
                     _fill.type = Image.Type.Simple;
                     _fill.rectTransform.sizeDelta = new Vector2(Design.CloseDisc, Design.CloseDisc);
@@ -288,7 +284,7 @@ namespace BlockPuzzle.Game
             _fill.rectTransform.anchoredPosition = Vector2.zero;
 
             float knob = height * 2.3f;
-            UiBuilder.Shadow(_rect, "HandleShadow", new Vector2(knob, knob), knob * 0.5f, Design.E1);
+            UiBuilder.DiscShadow(_rect, "HandleShadow", knob, Design.E1.Spread, Design.E1.Alpha, Design.E1.OffsetY);
 
             var handle = UiBuilder.Image(_rect, "Handle", Art.Node, Color.white);
             handle.type = Image.Type.Simple;
@@ -398,7 +394,7 @@ namespace BlockPuzzle.Game
             _tick.rectTransform.anchoredPosition = new Vector2(-width * 0.5f + height * 0.52f, 0f);
 
             float knob = height - 12f;
-            _knobShadow = UiBuilder.Shadow(_rect, "KnobShadow", new Vector2(knob, knob), knob * 0.5f, Design.E1).rectTransform;
+            _knobShadow = UiBuilder.DiscShadow(_rect, "KnobShadow", knob, Design.E1.Spread, Design.E1.Alpha, Design.E1.OffsetY).rectTransform;
 
             var handle = UiBuilder.Image(_rect, "Knob", Art.Node, Color.white);
             handle.type = Image.Type.Simple;

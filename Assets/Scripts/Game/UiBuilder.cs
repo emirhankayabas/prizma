@@ -75,6 +75,18 @@ namespace BlockPuzzle.Game
             return image;
         }
 
+        /// <summary>The soft shadow of a disc <paramref name="diameter"/> across — round, where <see cref="Shadow"/> is a squircle.</summary>
+        public static Image DiscShadow(RectTransform parent, string name, float diameter, float spread, float alpha,
+            float offsetY, Color? tint = null)
+        {
+            var image = Image(parent, name, Art.DiscShadow(diameter, spread), (tint ?? Color.black).WithAlpha(alpha));
+            image.type = UnityEngine.UI.Image.Type.Simple;
+            float size = diameter + Art.ShadowPad(spread) * 2f;
+            image.rectTransform.sizeDelta = new Vector2(size, size);
+            image.rectTransform.anchoredPosition = new Vector2(0f, -offsetY);
+            return image;
+        }
+
         public static TextMeshProUGUI Label(RectTransform parent, string name, string content, float fontSize,
             Color color, TMP_FontAsset font = null, TextAlignmentOptions alignment = TextAlignmentOptions.Center,
             float tracking = 0f)

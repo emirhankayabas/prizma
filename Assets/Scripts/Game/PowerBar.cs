@@ -103,7 +103,7 @@ namespace BlockPuzzle.Game
             int cost = PowerRules.Cost(kind);
             for (int i = 0; i < cost; i++)
             {
-                var pip = UiBuilder.Image(button.Rect, "Cost" + i, Art.Disc, Design.Prism);
+                var pip = UiBuilder.Image(button.Content, "Cost" + i, Art.Disc, Design.Prism);
                 pip.type = Image.Type.Simple;
                 pip.rectTransform.sizeDelta = new Vector2(PipSize, PipSize);
                 pip.rectTransform.anchoredPosition = new Vector2((i - (cost - 1) * 0.5f) * PipStep, -height * 0.5f + PipSize + 8f);

@@ -193,11 +193,7 @@ namespace BlockPuzzle.Game
             glow.type = Image.Type.Simple;
             glow.rectTransform.sizeDelta = new Vector2(size * 2.2f, size * 2.2f);
 
-            var shadow = UiBuilder.Image(_hero, "Shadow", Art.Shadow(size * 0.5f, 36f), Color.black.WithAlpha(0.4f));
-            shadow.type = Image.Type.Simple;
-            float pad = Art.ShadowPad(36f);
-            shadow.rectTransform.sizeDelta = new Vector2(size + pad * 2f, size + pad * 2f);
-            shadow.rectTransform.anchoredPosition = new Vector2(0f, -10f);
+            UiBuilder.DiscShadow(_hero, "Shadow", size, 36f, 0.4f, 10f);
 
             var rim = UiBuilder.Image(_hero, "Rim", Art.Disc, Color.white);
             rim.type = Image.Type.Simple;
@@ -516,6 +512,25 @@ namespace BlockPuzzle.Game
         }
 
         /// <summary>
+        /// Changes a <see cref="Group"/>'s height after it was built, its card and shadow with it.
+        /// Setting the holder's size alone left the card at its first height, centred on the new
+        /// one: the top-ten table with a single score drew a ten-row card reaching far above the sheet.
+        /// </summary>
+        public static void ResizeGroup(RectTransform holder, float height)
+        {
+            var size = new Vector2(Design.ContentWidth, height);
+            holder.sizeDelta = size;
+
+            var fill = holder.Find("Fill") as RectTransform;
+            if (fill != null) fill.sizeDelta = size;
+            var edge = holder.Find("Edge") as RectTransform;
+            if (edge != null) edge.sizeDelta = size;
+            var shadow = holder.Find("Shadow") as RectTransform;
+            float pad = Art.ShadowPad(Design.E1.Spread);
+            if (shadow != null) shadow.sizeDelta = size + new Vector2(pad * 2f, pad * 2f);
+        }
+
+        /// <summary>
         /// A surface colour a step lighter, for the gradient sprite: its bottom is darker than its
         /// top, and the average has to land on the colour the design asked for.
         /// </summary>
@@ -655,7 +670,9 @@ namespace BlockPuzzle.Game
 
             float medal = Mathf.Min(116f, size.y * 0.52f);
             bool wide = size.x > size.y * 1.6f;
-            var medalPos = wide ? new Vector2(-size.x * 0.5f + Design.Space4 + medal * 0.5f, 0f) : new Vector2(0f, size.y * 0.14f);
+            var medalPos = wide
+                ? new Vector2(-size.x * 0.5f + Design.Space3 + medal * 0.5f, 0f)
+                : new Vector2(0f, size.y * 0.5f - Design.Space3 - medal * 0.5f);
 
             tile._medal = UiBuilder.Image(content, "Medal", Art.Node, tint);
             tile._medal.type = Image.Type.Simple;
@@ -667,44 +684,92 @@ namespace BlockPuzzle.Game
 
             if (wide)
             {
-                float left = -size.x * 0.5f + Design.Space4 + medal + Design.Space3;
-                // Room kept on the right for the tick in the corner.
-                float width = size.x * 0.5f - Design.Space5 - left;
+                // The word runs to the tile's edge: the tick sits on the medallion, not in the
+                // corner, where it used to cost the word a third of its room.
+                float left = medalPos.x + medal * 0.5f + Design.Space3;
+                float width = size.x * 0.5f - Design.Space3 - left;
                 tile._label = UiBuilder.Label(content, "Label", label, Design.Label, Color.white, Design.FontDisplay,
                     TextAlignmentOptions.Left, Design.TrackingLabel * 0.3f);
-                tile._label.rectTransform.sizeDelta = new Vector2(width, size.y - Design.Space4);
-                tile._label.rectTransform.anchoredPosition = new Vector2(left + width * 0.5f, 0f);
+                tile._label.rectTransform.sizeDelta = new Vector2(width, size.y - Design.Space3 * 2f);
+                tile._label.rectTransform.anchoredPosition = new Vector2(left + width * 0.5f, 2f);
             }
             else
             {
-                tile._label = UiBuilder.Label(content, "Label", label, Design.Caption, Color.white, Design.FontDisplay,
+                // Under the medallion, in the room between it and the tile's bottom edge.
+                float top = medalPos.y - medal * 0.5f - Design.Space1;
+                float bottom = -size.y * 0.5f + Design.Space2;
+                tile._label = UiBuilder.Label(content, "Label", label, Design.Label, Color.white, Design.FontDisplay,
                     TextAlignmentOptions.Center, Design.TrackingLabel * 0.3f);
-                tile._label.rectTransform.sizeDelta = new Vector2(size.x - Design.Space3, 70f);
-                tile._label.rectTransform.anchoredPosition = new Vector2(0f, -size.y * 0.32f);
+                tile._label.rectTransform.sizeDelta = new Vector2(size.x - Design.Space3, top - bottom);
+                tile._label.rectTransform.anchoredPosition = new Vector2(0f, (top + bottom) * 0.5f + 2f);
             }
 
-            // Two words may take two lines; one word never breaks — it shrinks instead
-            // ("NOTIFICATION / S" was what wrapping did to it).
+            // Two words may take two lines; one word never breaks ("NOTIFICATION / S" was what
+            // wrapping did to it). The size is set by MatchLabels, the same for a whole set.
             tile._label.textWrappingMode = label.Contains(" ") ? TextWrappingModes.Normal : TextWrappingModes.NoWrap;
             tile._label.lineSpacing = -14f;
-            tile._label.enableAutoSizing = true;
-            tile._label.fontSizeMin = Design.Caption * 0.7f;
-            tile._label.fontSizeMax = tile._label.fontSize;
+            tile._label.fontSize = tile.FitSize();
 
             if (toggle)
             {
+                float badge = wide ? 46f : 52f;
                 tile._check = UiBuilder.Image(content, "Check", Art.Disc, Color.white);
                 tile._check.type = Image.Type.Simple;
-                tile._check.rectTransform.sizeDelta = new Vector2(52f, 52f);
-                tile._check.rectTransform.anchoredPosition = new Vector2(size.x * 0.5f - 40f, size.y * 0.5f - 40f);
+                tile._check.rectTransform.sizeDelta = new Vector2(badge, badge);
+                tile._check.rectTransform.anchoredPosition = wide
+                    ? medalPos + new Vector2(medal * 0.36f, medal * 0.36f)
+                    : new Vector2(size.x * 0.5f - 40f, size.y * 0.5f - 40f);
                 var tick = UiBuilder.Image(tile._check.rectTransform, "Tick", Icons.Check, SheetKit.Tinted(tint, Color.black, 0.2f));
                 tick.type = Image.Type.Simple;
-                tick.rectTransform.sizeDelta = new Vector2(34f, 34f);
+                tick.rectTransform.sizeDelta = new Vector2(badge * 0.65f, badge * 0.65f);
             }
 
             button.Clicked += tile.OnClicked;
             tile.Paint();
             return tile;
+        }
+
+        /// <summary>
+        /// Gives a set of tiles one type size: the largest every one of their words fits at.
+        /// Each label shrinking on its own put a big word, a small word and a two-line word side
+        /// by side in the same row.
+        /// </summary>
+        public static void MatchLabels(params UiTile[] tiles)
+        {
+            float size = Design.Label;
+            foreach (var tile in tiles) size = Mathf.Min(size, tile.FitSize());
+            foreach (var tile in tiles) tile._label.fontSize = size;
+        }
+
+        /// <summary>The largest size, down to the caption floor, at which the label fits its box.</summary>
+        float FitSize()
+        {
+            var rect = _label.rectTransform.sizeDelta;
+            var words = _label.text.Split(' ');
+            int maxLines = Mathf.Min(words.Length, 2);
+
+            for (float size = Design.Label; size > Design.Caption; size -= 1f)
+            {
+                _label.fontSize = size;
+                // Ink height of the block: a cap height on the last line, a line's advance for each one above.
+                if (size * (0.75f + (maxLines - 1) * 1.36f) > rect.y) continue;
+
+                float space = _label.GetPreferredValues("A A").x - _label.GetPreferredValues("AA").x;
+                int lines = 1;
+                float line = 0f;
+                bool fits = true;
+                foreach (var word in words)
+                {
+                    float w = _label.GetPreferredValues(word).x;
+                    if (w > rect.x) { fits = false; break; }
+                    if (line > 0f && line + space + w > rect.x) { lines++; line = w; }
+                    else line += (line > 0f ? space : 0f) + w;
+                }
+
+                if (fits && lines <= maxLines) return size;
+            }
+
+            return Design.Caption;
         }
 
         void OnClicked()
@@ -730,7 +795,11 @@ namespace BlockPuzzle.Game
             // The medallion does a little flip, the tick pops: the tile answers the tap.
             _button.StartCoroutine(Flip());
             if (_on && _check != null)
+            {
+                // Hidden through the tween's delay, or it showed full size for a moment before popping in.
+                _check.rectTransform.localScale = Vector3.zero;
                 _button.StartCoroutine(Tween.Scale(_check.rectTransform, Vector3.zero, Vector3.one, 0.3f, Ease.OutBack, 0.08f));
+            }
         }
 
         IEnumerator Flip()
@@ -756,6 +825,9 @@ namespace BlockPuzzle.Game
             // that is on is its colour, deepened so white reads on it. Mixing the colour into the
             // surface instead turned gold into mustard and orange into brown.
             bool coloured = _toggle && _on;
+            // Settled here, before any flip starts: one cut short by a closing sheet stayed squashed.
+            _medal.rectTransform.localScale = Vector3.one;
+            if (_check != null) _check.rectTransform.localScale = Vector3.one;
             _fill.color = coloured ? SheetKit.Tinted(_tint, Color.black, 0.2f) : SheetKit.Lifted(Design.SurfaceGroup);
             _medal.color = !lit ? SheetKit.Tinted(Design.SurfaceControl, _tint, 0.25f)
                 : coloured ? SheetKit.Tinted(_tint, Color.white, 0.22f) : SheetKit.Tinted(_tint, Color.white, 0.1f);
@@ -1086,7 +1158,21 @@ namespace BlockPuzzle.Game
         sealed class Rest : MonoBehaviour
         {
             public float Alpha = 1f;
+            public Vector3 Scale = Vector3.one;
             public bool Running;
+        }
+
+        /// <summary>
+        /// A part that rests at another size than 1 — the themes preview, shrunk on a short phone.
+        /// Said once, where it is built: the cascade used to finish every part at exactly 1, and
+        /// reading the size off the part at the start would take a pop or a punch for its rest.
+        /// </summary>
+        public static void SetRestScale(RectTransform item, float scale)
+        {
+            var rest = item.GetComponent<Rest>();
+            if (rest == null) rest = item.gameObject.AddComponent<Rest>();
+            rest.Scale = new Vector3(scale, scale, 1f);
+            item.localScale = rest.Scale;
         }
 
         public static void Children(MonoBehaviour host, RectTransform parent, float delay)
@@ -1115,7 +1201,7 @@ namespace BlockPuzzle.Game
             rest.Running = true;
 
             group.alpha = 0f;
-            item.localScale = Vector3.one * 0.86f;
+            item.localScale = rest.Scale * 0.86f;
             if (delay > 0f) yield return new WaitForSecondsRealtime(delay);
 
             for (float t = 0f; t < Duration; t += Time.unscaledDeltaTime)
@@ -1123,7 +1209,7 @@ namespace BlockPuzzle.Game
                 if (item == null) yield break;
                 float k = t / Duration;
                 float s = Mathf.LerpUnclamped(0.86f, 1f, Ease.OutBack(k));
-                item.localScale = new Vector3(s, s, 1f);
+                item.localScale = new Vector3(rest.Scale.x * s, rest.Scale.y * s, rest.Scale.z);
                 group.alpha = rest.Alpha * Ease.OutQuad(Mathf.Min(1f, k * 1.8f));
                 yield return null;
             }
@@ -1143,7 +1229,7 @@ namespace BlockPuzzle.Game
             if (item == null) return;
             var rest = item.GetComponent<Rest>();
             if (rest == null) return;
-            item.localScale = Vector3.one;
+            item.localScale = rest.Scale;
             var group = item.GetComponent<CanvasGroup>();
             if (group != null) group.alpha = rest.Alpha;
             rest.Running = false;

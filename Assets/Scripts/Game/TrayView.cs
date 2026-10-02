@@ -156,10 +156,13 @@ namespace BlockPuzzle.Game
 
         IEnumerator SpinIn(RectTransform rect, float scale)
         {
+            // Picked up mid-turn, the piece is the drag's: it was being shrunk back to tray size
+            // under the finger.
+            var slot = rect.parent;
             const float duration = 0.24f;
             for (float t = 0f; t < duration; t += Time.unscaledDeltaTime)
             {
-                if (rect == null) yield break;
+                if (rect == null || rect.parent != slot) yield break;
                 float k = Ease.OutBack(t / duration);
                 rect.localEulerAngles = new Vector3(0f, 0f, Mathf.LerpUnclamped(90f, 0f, k));
                 rect.localScale = Vector3.one * scale * Mathf.LerpUnclamped(0.8f, 1f, k);
@@ -168,7 +171,7 @@ namespace BlockPuzzle.Game
 
             if (rect == null) yield break;
             rect.localEulerAngles = Vector3.zero;
-            rect.localScale = Vector3.one * scale;
+            if (rect.parent == slot) rect.localScale = Vector3.one * scale;
         }
 
         /// <summary>Detaches a slot's piece so the drag layer can own it. Returns null on an empty slot.</summary>
@@ -192,7 +195,26 @@ namespace BlockPuzzle.Game
             piece.SetAlpha(1f);
             piece.Rect.position = droppedAt;
 
-            StartCoroutine(Tween.MoveAnchored(piece.Rect, piece.Rect.anchoredPosition, Vector2.zero, 0.16f, Ease.OutCubic));
+            StartCoroutine(FlyHome(piece.Rect));
+        }
+
+        /// <summary>
+        /// The short flight back into the slot. A piece grabbed again on its way home belongs to
+        /// the new drag: a plain tween kept pulling it towards the slot under the finger.
+        /// </summary>
+        IEnumerator FlyHome(RectTransform rect)
+        {
+            var slot = rect.parent;
+            var from = rect.anchoredPosition;
+            const float duration = 0.16f;
+            for (float t = 0f; t < duration; t += Time.unscaledDeltaTime)
+            {
+                if (rect == null || rect.parent != slot) yield break;
+                rect.anchoredPosition = Vector2.LerpUnclamped(from, Vector2.zero, Ease.OutCubic(t / duration));
+                yield return null;
+            }
+
+            if (rect != null && rect.parent == slot) rect.anchoredPosition = Vector2.zero;
         }
 
         /// <summary>Faded while no piece fits, so the eye goes to the powers instead.</summary>

@@ -53,7 +53,7 @@ namespace BlockPuzzle.Game
         public static string Effects => T("EFEKTLER", "EFFECTS");
         public static string Vibration => T("TİTREŞİM", "VIBRATION");
         public static string ColorBlind => T("RENK KÖRÜ MODU", "COLOUR BLIND");
-        public static string Notifications => T("BİLDİRİMLER", "NOTIFICATIONS");
+        public static string Notifications => T("BİLDİRİMLER", "REMINDERS");
         /// <summary>Names the row in both languages, so it is found whichever one the phone is in.</summary>
         public static string LanguageLabel => T("DİL · LANGUAGE", "LANGUAGE · DİL");
 
@@ -65,7 +65,6 @@ namespace BlockPuzzle.Game
         public static string Paused => T("Duraklatıldı", "Paused");
         public static string Restart => T("YENİDEN BAŞLA", "RESTART");
         public static string SettingsButton => T("AYARLAR", "SETTINGS");
-        public static string Home => T("ANA SAYFAYA DÖN", "BACK TO MENU");
         public static string BestScores => T("En İyi Skorlar", "Best Scores");
         public static string NoScores => T("Henüz skor yok.\nİlk oyununu oyna.", "No scores yet.\nPlay your first game.");
         public static string StatsHeading => T("İstatistikler", "Statistics");
@@ -335,8 +334,9 @@ namespace BlockPuzzle.Game
             }
         }
 
-        public static string BadgeGoal(string id, long target)
+        public static string BadgeGoal(string id, long count)
         {
+            string target = count.ToString("N0", Culture);
             switch (id)
             {
                 case "first": return T("İlk günlük bulmacanı çöz", "Solve your first daily puzzle");
@@ -380,8 +380,10 @@ namespace BlockPuzzle.Game
             }
         }
 
-        public static string AchievementGoal(string id, long target)
+        public static string AchievementGoal(string id, long count)
         {
+            // Grouped like the count beside it ("1.000", "1,000"): "1000 lines" over "130 / 1.000" read as two numbers.
+            string target = count.ToString("N0", Culture);
             switch (id)
             {
                 // Short on purpose: one line beside a count and three stars, down to a 16:9 phone.

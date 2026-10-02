@@ -65,6 +65,10 @@ namespace BlockPuzzle.Game
             public TextMeshProUGUI Label;
             public Image[] Stars;
 
+            /// <summary>The hard badge on the right shoulder and the "new" picture on the left; null when none.</summary>
+            public RectTransform HardBadge;
+            public RectTransform NewBadge;
+
             /// <summary>The road leading up to this stop: lit (lane, core, glow) and unlit (dots).</summary>
             public readonly List<Image> Lane = new List<Image>();
             public readonly List<Image> Core = new List<Image>();
@@ -327,7 +331,7 @@ namespace BlockPuzzle.Game
             body.sizeDelta = rect.sizeDelta;
             stop.Body = body;
 
-            stop.Shadow = UiBuilder.Image(body, "Shadow", Art.Shadow(NodeSize * 0.5f, 30f), Color.black.WithAlpha(0.3f));
+            stop.Shadow = UiBuilder.Image(body, "Shadow", Art.DiscShadow(NodeSize, 30f), Color.black.WithAlpha(0.3f));
             stop.Shadow.type = Image.Type.Simple;
 
             stop.Rim = UiBuilder.Image(body, "Rim", Art.Disc, Color.white);
@@ -368,7 +372,7 @@ namespace BlockPuzzle.Game
                 var badge = UiBuilder.Image(body, "Hard", Art.Disc, HardColour(hardness));
                 badge.type = Image.Type.Simple;
                 badge.rectTransform.sizeDelta = new Vector2(58f, 58f);
-                badge.rectTransform.anchoredPosition = new Vector2(NodeSize * 0.4f, NodeSize * 0.36f);
+                stop.HardBadge = badge.rectTransform;
                 var glyph = UiBuilder.Image(badge.rectTransform, "Glyph", hardness == 2 ? Icons.Crown : Icons.Bolt, Color.white);
                 glyph.type = Image.Type.Simple;
                 glyph.rectTransform.sizeDelta = new Vector2(36f, 36f);
@@ -380,7 +384,7 @@ namespace BlockPuzzle.Game
                 var badge = UiBuilder.Image(body, "New", Art.Disc, Color.white);
                 badge.type = Image.Type.Simple;
                 badge.rectTransform.sizeDelta = new Vector2(62f, 62f);
-                badge.rectTransform.anchoredPosition = new Vector2(-NodeSize * 0.4f, NodeSize * 0.36f);
+                stop.NewBadge = badge.rectTransform;
                 var glyph = UiBuilder.Image(badge.rectTransform, "Glyph", intro.sprite, intro.colour);
                 glyph.type = Image.Type.Simple;
                 glyph.rectTransform.sizeDelta = new Vector2(40f, 40f);
@@ -581,7 +585,7 @@ namespace BlockPuzzle.Game
             _marker.anchorMin = _marker.anchorMax = new Vector2(0.5f, 0f);
             _marker.sizeDelta = new Vector2(120f, 150f);
 
-            var shadow = UiBuilder.Image(_marker, "Shadow", Art.Shadow(50f, 30f), Color.black.WithAlpha(0.3f));
+            var shadow = UiBuilder.Image(_marker, "Shadow", Art.DiscShadow(100f, 30f), Color.black.WithAlpha(0.3f));
             shadow.type = Image.Type.Simple;
             float pad = Art.ShadowPad(30f);
             shadow.rectTransform.sizeDelta = new Vector2(100f + pad * 2f, 100f + pad * 2f);
@@ -767,6 +771,12 @@ namespace BlockPuzzle.Game
             stop.Shadow.rectTransform.sizeDelta = new Vector2(size + rim + pad * 2f, size + rim + pad * 2f);
             stop.Shadow.rectTransform.anchoredPosition = new Vector2(0f, -8f);
             stop.Shadow.gameObject.SetActive(done || current);
+
+            // The badges ride the disc's shoulders at whatever size it is drawn: placed for the
+            // finished size, they sat inside the larger white disc of the level to play.
+            float shoulder = (size + rim) * 0.5f;
+            if (stop.HardBadge != null) stop.HardBadge.anchoredPosition = new Vector2(shoulder * 0.78f, shoulder * 0.7f);
+            if (stop.NewBadge != null) stop.NewBadge.anchoredPosition = new Vector2(-shoulder * 0.78f, shoulder * 0.7f);
 
             if (current)
             {
@@ -1339,10 +1349,15 @@ namespace BlockPuzzle.Game
             tile.Count.rectTransform.sizeDelta = badge.rectTransform.sizeDelta;
             tile.Count.rectTransform.anchoredPosition = new Vector2(0f, 2f);
 
-            tile.Check = UiBuilder.Image(button.Content, "Check", Icons.Check, Design.Mint);
+            // Picked: a mint disc with a tick in the corner opposite the count — the settings tiles'
+            // mark. A bare tick here sat half over the icon's corner.
+            tile.Check = UiBuilder.Image(button.Content, "Check", Art.Disc, Design.Mint);
             tile.Check.type = Image.Type.Simple;
             tile.Check.rectTransform.sizeDelta = new Vector2(52f, 52f);
-            tile.Check.rectTransform.anchoredPosition = new Vector2(-icon * 0.5f - 12f, size.y * 0.5f - 44f);
+            tile.Check.rectTransform.anchoredPosition = new Vector2(-size.x * 0.5f + 40f, size.y * 0.5f - 40f);
+            var tick = UiBuilder.Image(tile.Check.rectTransform, "Tick", Icons.Check, Color.white);
+            tick.type = Image.Type.Simple;
+            tick.rectTransform.sizeDelta = new Vector2(34f, 34f);
             tile.Check.gameObject.SetActive(false);
             return tile;
         }
@@ -1429,9 +1444,7 @@ namespace BlockPuzzle.Game
             _hardLabel = UiBuilder.Label(_hardChip, "Label", "", Design.Caption, Color.white, Design.FontDisplay);
             _hardLabel.rectTransform.sizeDelta = new Vector2(200f, WorldRow);
             _hardLabel.rectTransform.anchoredPosition = new Vector2(20f, 2f);
-            _hardLabel.enableAutoSizing = true;
-            _hardLabel.fontSizeMin = 30f;
-            _hardLabel.fontSizeMax = Design.Caption;
+            _hardLabel.textWrappingMode = TextWrappingModes.NoWrap;
 
             // The goal and the moves, side by side on one card.
             _goal = SheetKit.Group(Body, "Goal", 0f, GoalCard);
@@ -1488,9 +1501,6 @@ namespace BlockPuzzle.Game
                 TextAlignmentOptions.Left, Design.TrackingLabel * 0.5f);
             _introLabel.rectTransform.sizeDelta = new Vector2(380f, StarsRow - 16f);
             _introLabel.rectTransform.anchoredPosition = new Vector2(30f, 2f);
-            _introLabel.enableAutoSizing = true;
-            _introLabel.fontSizeMin = Design.Caption;
-            _introLabel.fontSizeMax = Design.Label;
             _introLabel.textWrappingMode = TextWrappingModes.NoWrap;
 
             // The win streak: three flames and what they give.
@@ -1553,6 +1563,11 @@ namespace BlockPuzzle.Game
             _hardFill.color = LevelSelectScreen.HardColour(hardness);
             _hardIcon.sprite = hardness == 2 ? Icons.Crown : Icons.Bolt;
             _hardLabel.text = hardness == 2 ? Str.VeryHard : Str.Hard;
+            if (hardness > 0)
+            {
+                float width = FitChip(_hardChip, _hardIcon, _hardLabel, Design.Space3, Design.Space1, Design.ContentWidth * 0.4f);
+                SheetKit.PinTop(_hardChip, 0f, Design.ContentWidth * 0.5f - width * 0.5f);
+            }
 
             _goalIcon.sprite = GameHud.GoalSprite(def);
             _goalIcon.color = GameHud.GoalColor(def);
@@ -1575,6 +1590,7 @@ namespace BlockPuzzle.Game
                 _introIcon.sprite = intro.sprite;
                 _introIcon.color = intro.colour;
                 _introLabel.text = $"{Str.New} · {Str.IntroName(_level)}";
+                FitChip(_intro, _introIcon, _introLabel, Design.Space4, Design.Space2, Design.ContentWidth);
                 SheetKit.PinTop(_intro, top + 8f);
                 top += StarsRow + Design.Space2;
             }
@@ -1611,6 +1627,29 @@ namespace BlockPuzzle.Game
 
             // Built behind the sheet while it is read.
             System.Threading.ThreadPool.QueueUserWorkItem(_ => LevelGenerator.Generate(_level, Design.PaletteSize));
+        }
+
+        /// <summary>
+        /// Sizes a chip to what it says: icon and word centred as one group, the pill around them.
+        /// At a fixed width a short word ("HARD") sat far from its icon in a pill made for a long one.
+        /// Returns the chip's width.
+        /// </summary>
+        static float FitChip(RectTransform chip, Image icon, TextMeshProUGUI label, float pad, float gap, float maxWidth)
+        {
+            float iconSize = icon.rectTransform.sizeDelta.x;
+            float text = Mathf.Min(label.GetPreferredValues(label.text).x, maxWidth - pad * 2f - iconSize - gap);
+            float group = iconSize + gap + text;
+            float width = group + pad * 2f;
+            float height = chip.sizeDelta.y;
+
+            chip.sizeDelta = new Vector2(width, height);
+            var fill = chip.Find("Fill") as RectTransform;
+            if (fill != null) fill.sizeDelta = chip.sizeDelta;
+
+            icon.rectTransform.anchoredPosition = new Vector2(-group * 0.5f + iconSize * 0.5f, 0f);
+            label.rectTransform.sizeDelta = new Vector2(text, height);
+            label.rectTransform.anchoredPosition = new Vector2(group * 0.5f - text * 0.5f, 2f);
+            return width;
         }
 
         void RefreshTile(BoosterTile tile)
@@ -1715,6 +1754,9 @@ namespace BlockPuzzle.Game
         protected override void OnShow()
         {
             _taken = false;
+            // A sheet closed mid-shake left the chest turned and swollen.
+            _hero.localEulerAngles = Vector3.zero;
+            _hero.localScale = Vector3.one;
             _world_label.text = $"{Str.WorldN(_world)} · {Str.Upper(Str.WorldName(_world))}";
             _heroDisc.color = Design.Gold;
             var (moves, charge, hammer) = Progress.ChestContents(_world);

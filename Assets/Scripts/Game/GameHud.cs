@@ -76,6 +76,23 @@ namespace BlockPuzzle.Game
             // Never above the top row's chip, though: on a 16:9 page it used to touch the moves chip.
             _readoutTop = Mathf.Min(-(RowTop + Design.IconButton + 4f) + squeeze * 0.4f, -(RowCenter + ChipHeight * 0.5f));
 
+            // The combo chip goes under the score, or onto the HUD's bottom edge when a short page
+            // has pulled that edge up. Pinned there, it used to sit over the lower half of the
+            // digits on every 16:9 phone and tablet. Then the score takes the room left between
+            // the top row and the chip, a size smaller if it must. Digits stand about 0.72 em
+            // tall, centred on their box.
+            float comboTop = Mathf.Max(_readoutTop - ReadoutBox - 8f, -(height - ChipHeight - 8f));
+            float readoutSize = Design.Readout;
+            float centre = _readoutTop - ReadoutBox * 0.5f;
+            if (centre - readoutSize * 0.36f < comboTop + Design.Space2)
+            {
+                float zoneTop = -(RowCenter + ChipHeight * 0.5f + Design.Space1);
+                float zoneBottom = comboTop + Design.Space2;
+                readoutSize = Mathf.Min(Design.Readout, (zoneTop - zoneBottom) / 0.72f);
+                centre = (zoneTop + zoneBottom) * 0.5f;
+                _readoutTop = centre + ReadoutBox * 0.5f;
+            }
+
             // The best score reads as the second number on the page, so it gets the second size.
             const float bestIcon = Design.IconMd * 0.8f;
             _leftIcon = UiBuilder.Image(_root, "LeftIcon", Icons.Gem, Design.Gold);
@@ -113,7 +130,7 @@ namespace BlockPuzzle.Game
                 Design.FontDisplay, tracking: Design.TrackingLabel * 0.5f);
             _chipLabel.rectTransform.sizeDelta = _chip.sizeDelta;
 
-            _readout = UiBuilder.Label(_root, "Readout", "0", Design.Readout, Design.TextPrimary,
+            _readout = UiBuilder.Label(_root, "Readout", "0", readoutSize, Design.TextPrimary,
                 Design.FontDisplay, tracking: Design.TrackingDisplay);
             _readout.rectTransform.anchorMin = _readout.rectTransform.anchorMax = new Vector2(0.5f, 1f);
             _readout.rectTransform.pivot = new Vector2(0.5f, 1f);
@@ -134,9 +151,7 @@ namespace BlockPuzzle.Game
             _comboChip.anchorMin = _comboChip.anchorMax = new Vector2(0.5f, 1f);
             _comboChip.pivot = new Vector2(0.5f, 1f);
             _comboChip.sizeDelta = new Vector2(460f, ChipHeight);
-            // Under the score, or pinned to the HUD's bottom edge when a short page has pulled that up.
-            _comboChip.anchoredPosition = new Vector2(0f,
-                Mathf.Max(_readoutTop - ReadoutBox - 8f, -(height - _comboChip.sizeDelta.y - 8f)));
+            _comboChip.anchoredPosition = new Vector2(0f, comboTop);
 
             UiBuilder.Panel(_comboChip, "Fill", _comboChip.sizeDelta, Design.SurfaceInset, ChipHeight * 0.5f);
             _comboChipEdge = UiBuilder.Hairline(_comboChip, "Edge", _comboChip.sizeDelta, ChipHeight * 0.5f, Design.Mint.WithAlpha(0.5f));
@@ -151,7 +166,9 @@ namespace BlockPuzzle.Game
             _hammer = UiBuilder.Button(_root, "Hammer", new Vector2(hammerSize, hammerSize), UiButton.Style.Icon, null, Design.Body, Icons.Hammer);
             _hammer.Rect.anchorMin = _hammer.Rect.anchorMax = new Vector2(1f, 1f);
             _hammer.Rect.pivot = new Vector2(1f, 0.5f);
-            _hammer.Rect.anchoredPosition = new Vector2(-Design.Gutter, _readoutTop - ReadoutBox * 0.5f);
+            // Level with the goal, but never closer than a small gap under the pause button above it.
+            float hammerY = Mathf.Min(_readoutTop - ReadoutBox * 0.5f, -(RowTop + Design.IconButton + Design.Space2 + hammerSize * 0.5f));
+            _hammer.Rect.anchoredPosition = new Vector2(-Design.Gutter, hammerY);
             _hammer.Clicked += () => HammerClicked?.Invoke();
 
             _hammerBadge = UiBuilder.Node(_hammer.Content, "Badge");

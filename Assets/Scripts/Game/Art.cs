@@ -108,6 +108,28 @@ namespace BlockPuzzle.Game
             return sprite;
         }
 
+        static readonly Dictionary<int, Sprite> Rings = new Dictionary<int, Sprite>();
+
+        /// <summary>
+        /// A squircle outline <paramref name="thickness"/> units wide, nine-sliced: a selection ring.
+        /// Hollow, so whatever sits inside it never has the ring's colour behind it.
+        /// </summary>
+        public static Sprite Ring(float radius, float thickness)
+        {
+            int r = Mathf.RoundToInt(radius), t = Mathf.RoundToInt(thickness);
+            int key = r * 100 + t;
+            if (!Rings.TryGetValue(key, out var sprite))
+            {
+                int size = Mathf.Max(96, r * 3) * Super;
+                var raster = new Raster(size, size);
+                raster.StrokeSquircle(0, 0, size, size, r * Super, t * Super, Color.white);
+                sprite = raster.Downsample(Super).ToSprite($"Ring{r}_{t}", (r + 3f) / (size / Super));
+                Rings[key] = sprite;
+            }
+
+            return sprite;
+        }
+
         /// <summary>
         /// A blurred squircle used as an ambient shadow. The sprite extends
         /// <see cref="ShadowPad"/> beyond the element on every side.
@@ -125,6 +147,30 @@ namespace BlockPuzzle.Game
         }
 
         public static float ShadowPad(float spread) => spread + 20f;
+
+        static readonly Dictionary<int, Sprite> DiscShadows = new Dictionary<int, Sprite>();
+
+        /// <summary>
+        /// A blurred circle: the shadow of a disc. <see cref="Shadow"/> is a squircle with a straight
+        /// run between its corners, and under a round button its square shoulders showed past the
+        /// disc's edge. Drawn as a whole (not sliced); size it <c>diameter + 2 × ShadowPad</c>.
+        /// </summary>
+        public static Sprite DiscShadow(float diameter, float spread)
+        {
+            int key = Mathf.RoundToInt(diameter) * 1000 + Mathf.RoundToInt(spread);
+            if (!DiscShadows.TryGetValue(key, out var sprite))
+            {
+                float pad = ShadowPad(spread);
+                int size = Mathf.CeilToInt(diameter + pad * 2f);
+                var raster = new Raster(size, size);
+                raster.FillCircle(size * 0.5f, size * 0.5f, diameter * 0.5f, Color.white);
+                raster.BlurAlpha(Mathf.Max(1, Mathf.RoundToInt(spread * 0.42f)));
+                sprite = raster.ToSprite($"DiscShadow{key}");
+                DiscShadows[key] = sprite;
+            }
+
+            return sprite;
+        }
 
         // ------------------------------------------------------------------ pieces
 

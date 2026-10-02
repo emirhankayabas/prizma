@@ -66,9 +66,18 @@ namespace BlockPuzzle.Game
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (SdkInt() >= 33 && !UnityEngine.Android.Permission.HasUserAuthorizedPermission(Permission))
             {
+                // The answer comes back through a Java proxy, which need not be Unity's main
+                // thread; PlayerPrefs and the settings tile may only be touched from that one.
+                var main = System.Threading.SynchronizationContext.Current;
+                void Answer(bool allowed)
+                {
+                    if (main != null) main.Post(_ => Finish(allowed, done), null);
+                    else Finish(allowed, done);
+                }
+
                 var callbacks = new UnityEngine.Android.PermissionCallbacks();
-                callbacks.PermissionGranted += _ => Finish(true, done);
-                callbacks.PermissionDenied += _ => Finish(false, done);
+                callbacks.PermissionGranted += _ => Answer(true);
+                callbacks.PermissionDenied += _ => Answer(false);
                 UnityEngine.Android.Permission.RequestUserPermission(Permission, callbacks);
                 return;
             }

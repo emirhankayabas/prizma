@@ -312,7 +312,9 @@ namespace BlockPuzzle.Game
         // solved in a row, and there is no going back — a missed day stays missed. Attempts and
         // time are tracked per puzzle so a solve reports how long it really took, retries included.
 
-        public static string DateKey(DateTime date) => date.ToString("yyyy-MM-dd");
+        // Invariant: in a locale with another calendar (Thai, Persian) the current culture wrote the
+        // year in that calendar, and the key would not match one written before a language change.
+        public static string DateKey(DateTime date) => date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
         public static string TodayKey => DateKey(DateTime.Now);
         static string YesterdayKey => DateKey(DateTime.Now.AddDays(-1));
 
@@ -587,13 +589,6 @@ namespace BlockPuzzle.Game
                 D.PowersHinted = value;
                 Save();
             }
-        }
-
-        /// <summary>Wipes everything. Only reachable from the settings, behind a confirmation.</summary>
-        public static void ResetAll()
-        {
-            _data = new Data();
-            Save();
         }
     }
 

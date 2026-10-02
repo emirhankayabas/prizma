@@ -649,7 +649,7 @@ namespace BlockPuzzle.Game
             }
 
             int steps = Mathf.Clamp(lines, 1, 4);
-            Haptics.Pulse(14 + 10 * steps, 90 + 45 * steps);
+            Haptics.Pulse(14 + 10 * steps, Mathf.Min(255, 90 + 45 * steps));
         }
 
         /// <summary>The lightest tick there is, for a piece landing. Felt more than noticed.</summary>

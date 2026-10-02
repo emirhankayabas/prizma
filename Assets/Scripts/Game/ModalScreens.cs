@@ -61,6 +61,7 @@ namespace BlockPuzzle.Game
             SheetKit.PinTop(_colorBlind.Rect, top, rightX);
             _colorBlind.Changed += v => { Progress.ColorBlind = v; Audio.PlayClick(); };
             top += TileHeight + Design.GroupGap;
+            UiTile.MatchLabels(_mute, _haptics, _notifications, _colorBlind);
 
             // The two volumes.
             float sound = Design.RowHeight * 2f;
@@ -94,6 +95,14 @@ namespace BlockPuzzle.Game
                 App.SetLanguage(i == 1 ? Language.English : Language.Turkish);
             };
             top += language;
+
+            // Which build this is, quietly at the foot — what a support conversation asks first.
+            const float versionRow = 56f;
+            var version = UiBuilder.Label(Body, "Version", "PRIZMA " + Application.version, Design.Caption, Design.TextTertiary,
+                Design.FontDisplay, tracking: Design.TrackingLabel * 0.5f);
+            version.rectTransform.sizeDelta = new Vector2(Design.ContentWidth, versionRow);
+            SheetKit.PinTop(version.rectTransform, top + Design.Space3);
+            top += Design.Space3 + versionRow;
 
             Sheet.SetBodyHeight(top);
         }
@@ -168,16 +177,18 @@ namespace BlockPuzzle.Game
     /// </summary>
     public sealed class PauseScreen : SheetScreen
     {
-        const float TileHeight = 232f;
+        // Tall enough for a two-line name under the medallion at the caption size or more.
+        const float TileHeight = 260f;
 
         protected override void Build()
         {
             BuildSheet(Str.Paused, Icons.Pause, Design.TintViolet);
 
             float width = (Design.ContentWidth - Design.Space3 * 2f) / 3f;
-            ActionTile(0, width, "Restart", Icons.Replay, Design.TintOrange, Str.Restart, () => App.RestartRun());
-            ActionTile(1, width, "Settings", Icons.Gear, Design.TintBlue, Str.SettingsButton, () => App.OpenSettings());
-            ActionTile(2, width, "Quit", Icons.Home, Design.TintViolet, Str.Home, () => App.LeaveRun());
+            UiTile.MatchLabels(
+                ActionTile(0, width, "Restart", Icons.Replay, Design.TintOrange, Str.Restart, () => App.RestartRun()),
+                ActionTile(1, width, "Settings", Icons.Gear, Design.TintBlue, Str.SettingsButton, () => App.OpenSettings()),
+                ActionTile(2, width, "Quit", Icons.Home, Design.TintViolet, Str.MainMenu, () => App.LeaveRun()));
 
             var resume = UiBuilder.Button(Body, "Resume", new Vector2(Design.ContentWidth, Design.ButtonLg), UiButton.Style.Primary,
                 Str.Continue, Design.Headline, Icons.Play);
@@ -187,11 +198,12 @@ namespace BlockPuzzle.Game
             Sheet.SetBodyHeight(TileHeight + Design.Space5 + Design.ButtonLg);
         }
 
-        void ActionTile(int index, float width, string name, Sprite icon, Color tint, string label, System.Action action)
+        UiTile ActionTile(int index, float width, string name, Sprite icon, Color tint, string label, System.Action action)
         {
             var tile = UiTile.CreateAction(Body, name, new Vector2(width, TileHeight), icon, tint, label);
             SheetKit.PinTop(tile.Rect, 0f, -Design.ContentWidth * 0.5f + width * 0.5f + index * (width + Design.Space3));
             tile.Clicked += () => { Audio.PlayClick(); action(); };
+            return tile;
         }
     }
 
@@ -272,7 +284,7 @@ namespace BlockPuzzle.Game
 
             _empty.gameObject.SetActive(count == 0);
             _group.gameObject.SetActive(count > 0);
-            _group.sizeDelta = new Vector2(Design.ContentWidth, Row * Mathf.Max(1, count));
+            SheetKit.ResizeGroup(_group, Row * Mathf.Max(1, count));
 
             for (int i = 0; i < _rows.Count; i++)
             {
@@ -290,7 +302,7 @@ namespace BlockPuzzle.Game
                 _scores[i].color = i == 0 ? Design.Gold : Design.TextPrimary;
 
                 var when = entry.When;
-                _dates[i].text = when == System.DateTime.MinValue ? "" : when.ToString("dd.MM.yyyy");
+                _dates[i].text = when == System.DateTime.MinValue ? "" : when.ToString("dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture);
             }
 
             Sheet.SetBodyHeight(count == 0 ? EmptyHeight : Row * count);
@@ -581,6 +593,7 @@ namespace BlockPuzzle.Game
             _preview = new ThemePreview();
             _preview.Build(Body, Design.ContentWidth, scale);
             SheetKit.PinTop(_preview.Holder, 0f);
+            Cascade.SetRestScale(_preview.Holder, scale);
 
             float top = previewHeight + Design.Space5;
             for (int i = 0; i < count; i++)
@@ -598,7 +611,8 @@ namespace BlockPuzzle.Game
             var size = new Vector2(Design.ContentWidth, Row);
 
             // A ring just outside the row: mint on the theme in use, white on one being previewed.
-            var ring = UiBuilder.Panel(Body, "Ring" + index, size + Vector2.one * Ring * 2f, Design.Mint, Design.RadiusMd + Ring);
+            var ring = UiBuilder.Image(Body, "Ring" + index, Art.Ring(Design.RadiusMd + Ring, Ring + 2f), Design.Mint);
+            ring.rectTransform.sizeDelta = size + Vector2.one * Ring * 2f;
             SheetKit.PinTop(ring.rectTransform, top - Ring);
             _rings.Add(ring);
 

@@ -258,6 +258,10 @@ namespace BlockPuzzle.Game
         {
             PointerRouter.Fallback = this;
 
+            // A player thinking over a hard board touches nothing for a while; the phone's own
+            // timeout used to darken the screen mid-run. Only on this page — the menus sleep as usual.
+            Screen.sleepTimeout = SleepTimeout.NeverSleep;
+
             // Show runs again on a page that is already up — a restart, "play again" — so the
             // subscription is made idempotent. It used to stack one handler per restart and drop
             // only one on hide; harmless while this page lived forever, but a theme change destroys
@@ -272,6 +276,8 @@ namespace BlockPuzzle.Game
         {
             if (ReferenceEquals(PointerRouter.Fallback, this))
                 PointerRouter.Fallback = null;
+
+            Screen.sleepTimeout = SleepTimeout.SystemSetting;
 
             Progress.Changed -= OnProgressChanged;
             CancelDrag();
@@ -439,6 +445,8 @@ namespace BlockPuzzle.Game
             _board.HideGhost();
             Audio.PlayClick();
             SyncState();
+            if (_aiming != null) StopPowerHint();
+            else if (_session.State == SessionState.Stuck) MaybeHintPowers();
         }
 
         // ------------------------------------------------------------------ moves
@@ -880,6 +888,10 @@ namespace BlockPuzzle.Game
                     _board.HideGhost();
                     Audio.PlayClick();
                     SyncState();
+                    // The hand points at the dice; with another power armed it would point away
+                    // from what the player is doing. It comes back if they disarm without using it.
+                    if (_aiming != null) StopPowerHint();
+                    else if (_session.State == SessionState.Stuck) MaybeHintPowers();
                     break;
             }
         }
@@ -892,6 +904,7 @@ namespace BlockPuzzle.Game
             _bombHeld = false;
             _board.HideGhost();
             SyncState();
+            if (_session != null && _session.State == SessionState.Stuck) MaybeHintPowers();
         }
 
         void OnPowerUsed(PowerResult result)
@@ -1141,8 +1154,11 @@ namespace BlockPuzzle.Game
 
             string title = last ? Str.AdventureDone : Str.LevelTitle(n);
             string primary = last || worldDone ? Str.Map : Str.Next;
-            string secondary = last ? Str.MainMenu : Str.Map;
-            if (last) _resultSecondary = App.ShowMenu;
+            // When the main action already is the map, the second one leaves for the menu — two
+            // buttons both reading "map" was what a world's last level showed.
+            bool primaryIsMap = last || worldDone;
+            string secondary = primaryIsMap ? Str.MainMenu : Str.Map;
+            if (primaryIsMap) _resultSecondary = App.ShowMenu;
 
             // A world's chest waiting beats a theme, and a theme beats the moves saved.
             if (worldDone)
@@ -1296,8 +1312,27 @@ namespace BlockPuzzle.Game
             if (_hand.gameObject.activeSelf) _hand.gameObject.SetActive(false);
 
             _dragPiece.Rect.SetParent(_dragLayer, false);
-            StartCoroutine(Tween.Scale(_dragPiece.Rect, _dragPiece.Rect.localScale, Vector3.one, 0.12f, Ease.OutCubic));
+            StartCoroutine(LiftRoutine(_dragPiece.Rect));
             MoveDragPiece(screenPoint);
+        }
+
+        /// <summary>
+        /// The piece grows to board size as it is lifted. Only while it is still held: a quick tap
+        /// hands it back to the tray inside these 0.12 s, and a plain tween then carried on and
+        /// left it at board size in its slot, over its neighbours.
+        /// </summary>
+        IEnumerator LiftRoutine(RectTransform rect)
+        {
+            var from = rect.localScale;
+            const float duration = 0.12f;
+            for (float t = 0f; t < duration; t += Time.unscaledDeltaTime)
+            {
+                if (rect == null || rect.parent != _dragLayer) yield break;
+                rect.localScale = Vector3.LerpUnclamped(from, Vector3.one, Ease.OutCubic(t / duration));
+                yield return null;
+            }
+
+            if (rect != null && rect.parent == _dragLayer) rect.localScale = Vector3.one;
         }
 
         public void OnPointerDrag(Vector2 screenPoint)

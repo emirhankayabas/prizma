@@ -88,6 +88,10 @@ kullanıcı "mobil web sitesine benziyor" dedi. Karar: **yapı kalsın, dil oyun
 - Yüzey katmanları aynı: sayfa `SurfaceSheet` < grup `SurfaceGroup` < kontrol `SurfaceControl`.
 - **Hiçbir sayfaya "KAPAT" butonu koyma.** Sığmayan gövde bütün olarak küçülür (madalyonun taşan yarısı da hesapta).
 - Görünüş/hareket üzerinde çalışırken: `Tools/autotest.ps1 -Only modals` (80_…92_, giriş ortası + oturmuş hâl).
+- **Karo yazıları set hâlinde boylanır** (`UiTile.MatchLabels`): her karo kendi yazısını küçültünce aynı sırada
+  büyük, küçük ve iki satırlı kelime yan yana duruyordu. Grup kartının boyu sonradan değişirse `SheetKit.ResizeGroup`
+  — tutucunun boyunu değiştirmek kartı ilk boyunda bırakır (skor tablosu tek skorla on satırlık kart çiziyordu).
+  1'den farklı boyda dinlenen parça `Cascade.SetRestScale` ile söylenir.
 
 Girdi tek yoldan: `PointerRouter` her kare `Pointer.current` okur. Widget'lar (`UiButton`,
 `UiSlider`, `UiToggle`) önce hak iddia eder, kalan her şey `IPointerFallback`'e (tahta) düşer.
@@ -152,6 +156,17 @@ Girdi tek yoldan: `PointerRouter` her kare `Pointer.current` okur. Widget'lar (`
     abone olup çıkışta bir kez ayrılıyordu. Ekran hep yaşadığı için zararsızdı — tema değişimi ekranı yok
     edince kalan abonelik yok edilmiş tahtaya dokunup `NullReferenceException` attı. Statik bir olaya
     abone olan her ekran: abonelikten önce çık (`-=` sonra `+=`) ve `OnDestroy`'da da çık.
+
+11. **Daireye squircle gölgesi koyma.** `Art.Shadow` köşeleri yuvarlatılmış bir kare (ortasında düz kenar payı
+    var); yuvarlak kapat butonunun, madalyonun, kaydırıcı topuzunun arkasında diskin kenarından **kare bir hale**
+    taşıyordu — kullanıcı fark etti. Daire elemanların gölgesi `Art.DiscShadow` / `UiBuilder.DiscShadow`.
+
+12. **Yarıda kesilen animasyon iz bırakır.** Sayfa kapanınca (`SetActive(false)`) üstündeki coroutine'ler olduğu
+    yerde durur: tahta sarsıntıdan kaymış, punch'tan büyümüş, kenar nabzın renginde kalıyordu; tutulan parça
+    bırakılınca büyüme tween'i onu tepside tahta boyunda bırakıyordu. Kural: kalıcı bir değeri (konum, ölçek, renk)
+    oynatan rutin ya `OnDisable`'da geri koyulur (`BoardView.OnDisable`) ya da ekran açılırken sıfırlanır, ve
+    sahibi değişebilen nesneyi (sürüklenen parça) oynatan rutin her karede hâlâ sahibi olduğunu kontrol eder.
+    `Tween.Scale` gecikmeli başlıyorsa başlangıç ölçeği gecikmeden **önce** uygulanır.
 
 7. **Dağıtıcı çok güçlü olursa oyun hiç bitmez.** Bir kez yardımı tavansız bıraktım; yetkin bir
    oyuncuyla tahta hiç dolmadı, test döngüsü sonsuza girdi ve **Unity'yi kilitledi**.

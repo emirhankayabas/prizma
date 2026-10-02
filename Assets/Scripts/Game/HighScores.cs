@@ -11,7 +11,10 @@ namespace BlockPuzzle.Game
         public string Date;
         public int Lines;
 
-        public DateTime When => DateTime.TryParse(Date, out var d) ? d : DateTime.MinValue;
+        // Written round-trip ("o"), so read back the same way: parsed in the current culture, a
+        // phone set to a non-Gregorian calendar would have read the year in that calendar.
+        public DateTime When => DateTime.TryParse(Date, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind, out var d) ? d : DateTime.MinValue;
     }
 
     /// <summary>
