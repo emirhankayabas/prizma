@@ -261,6 +261,17 @@ static class Program
             Check(s.Board.OccupiedCount == level.Prefill.Count, "prefill applied");
             var restored = GameSession.Restore(s.CreateSnapshot());
             Check(restored.Level.MoveLimit == level.MoveLimit && restored.Level.Target == level.Target, "level survives a save");
+
+            // A prefetch on a worker and a tap on the main thread asking for the same level: the
+            // second waits for the first instead of building it again.
+            Check(!LevelGenerator.IsReady(57), "level 57 not built yet");
+            LevelDefinition a = null, b = null;
+            var worker = new System.Threading.Thread(() => a = LevelGenerator.Generate(57));
+            worker.Start();
+            System.Threading.Thread.Sleep(5);
+            b = LevelGenerator.Generate(57);
+            worker.Join();
+            Check(ReferenceEquals(a, b) && LevelGenerator.IsReady(57), "concurrent requests share one build");
         }
     }
 

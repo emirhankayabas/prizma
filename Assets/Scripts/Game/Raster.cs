@@ -6,6 +6,13 @@ namespace BlockPuzzle.Game
     /// A tiny software rasteriser. Everything the game draws — blocks, icons, frames — is generated
     /// through this at startup, so the project needs no imported art at all.
     /// Coordinates are pixel space with y = 0 at the bottom, matching Unity textures.
+    ///
+    /// All of it runs before the first frame, so it is the bulk of the start-up time. Two things
+    /// keep that short without changing a single output pixel: a shape only samples the pixels
+    /// inside its bounding box (outside it every sample is zero, and a zero blend is no blend), and
+    /// rows are spread over the cores (every pixel is computed on its own, from nothing but its
+    /// position, so the order does not matter). Shaders passed to <see cref="Paint"/> must stay
+    /// pure for the second to hold.
     /// </summary>
     public sealed class Raster
     {
@@ -68,16 +75,16 @@ namespace BlockPuzzle.Game
         // ------------------------------------------------------------------ shapes
 
         public void FillCircle(float cx, float cy, float radius, Color color) =>
-            Shade((x, y) => CircleCoverage(x, y, cx, cy, radius), color);
+            Shade((x, y) => CircleCoverage(x, y, cx, cy, radius), color, Box(cx - radius, cy - radius, cx + radius, cy + radius));
 
         public void EraseCircle(float cx, float cy, float radius) =>
-            ShadeErase((x, y) => CircleCoverage(x, y, cx, cy, radius));
+            ShadeErase((x, y) => CircleCoverage(x, y, cx, cy, radius), Box(cx - radius, cy - radius, cx + radius, cy + radius));
 
         public void EraseRect(float x0, float y0, float w, float h) =>
-            ShadeErase((x, y) => (x >= x0 && x < x0 + w && y >= y0 && y < y0 + h) ? 1f : 0f);
+            ShadeErase((x, y) => (x >= x0 && x < x0 + w && y >= y0 && y < y0 + h) ? 1f : 0f, Box(x0, y0, x0 + w, y0 + h));
 
         public void ErasePolygon(Vector2[] points) =>
-            ShadeErase((x, y) => PointInPolygon(points, x, y) ? 1f : 0f);
+            ShadeErase((x, y) => PointInPolygon(points, x, y) ? 1f : 0f, Bounds(points));
 
         /// <summary>Draws a thick line segment as a quad. The building block for most icon glyphs.</summary>
         public void Line(Vector2 a, Vector2 b, float thickness, Color color)
@@ -90,13 +97,13 @@ namespace BlockPuzzle.Game
         }
 
         public void FillRect(float x0, float y0, float w, float h, Color color) =>
-            Shade((x, y) => (x >= x0 && x < x0 + w && y >= y0 && y < y0 + h) ? 1f : 0f, color);
+            Shade((x, y) => (x >= x0 && x < x0 + w && y >= y0 && y < y0 + h) ? 1f : 0f, color, Box(x0, y0, x0 + w, y0 + h));
 
         public void FillRoundRect(float x0, float y0, float w, float h, float radius, Color color) =>
-            Shade((x, y) => RoundRectInside(x - x0, y - y0, w, h, radius) ? 1f : 0f, color);
+            Shade((x, y) => RoundRectInside(x - x0, y - y0, w, h, radius) ? 1f : 0f, color, Box(x0, y0, x0 + w, y0 + h));
 
         public void FillPolygon(Vector2[] points, Color color) =>
-            Shade((x, y) => PointInPolygon(points, x, y) ? 1f : 0f, color);
+            Shade((x, y) => PointInPolygon(points, x, y) ? 1f : 0f, color, Bounds(points));
 
         /// <summary>
         /// A squircle: straight edges meeting corners shaped by a superellipse. This continuous
@@ -104,7 +111,7 @@ namespace BlockPuzzle.Game
         /// where the arc meets the edge at a visible seam.
         /// </summary>
         public void FillSquircle(float x0, float y0, float w, float h, float radius, Color color, float exponent = 4.5f) =>
-            Shade((x, y) => SquircleInside(x - x0, y - y0, w, h, radius, exponent) ? 1f : 0f, color);
+            Shade((x, y) => SquircleInside(x - x0, y - y0, w, h, radius, exponent) ? 1f : 0f, color, Box(x0, y0, x0 + w, y0 + h));
 
         public void StrokeSquircle(float x0, float y0, float w, float h, float radius, float thickness, Color color,
             float exponent = 4.5f)
@@ -115,7 +122,7 @@ namespace BlockPuzzle.Game
                 bool inner = SquircleInside(x - x0 - thickness, y - y0 - thickness,
                     w - thickness * 2f, h - thickness * 2f, Mathf.Max(0.01f, radius - thickness), exponent);
                 return (outer && !inner) ? 1f : 0f;
-            }, color);
+            }, color, Box(x0, y0, x0 + w, y0 + h));
         }
 
         public static bool SquircleInside(float px, float py, float w, float h, float radius, float exponent)
@@ -167,7 +174,7 @@ namespace BlockPuzzle.Game
             int inner = horizontal ? Width : Height;
             float norm = 1f / (radius * 2 + 1);
 
-            for (int o = 0; o < outer; o++)
+            Rows(outer, o =>
             {
                 for (int i = 0; i < inner; i++)
                 {
@@ -181,7 +188,7 @@ namespace BlockPuzzle.Game
                     if (horizontal) dst[o * Width + i] = sum * norm;
                     else dst[i * Width + o] = sum * norm;
                 }
-            }
+            });
         }
 
         /// <summary>
@@ -205,7 +212,7 @@ namespace BlockPuzzle.Game
             {
                 float d = Mathf.Sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy));
                 return (d <= radius && d >= radius - thickness) ? 1f : 0f;
-            }, color);
+            }, color, Box(cx - radius, cy - radius, cx + radius, cy + radius));
         }
 
         public void StrokeRoundRect(float x0, float y0, float w, float h, float radius, float thickness, Color color)
@@ -216,53 +223,112 @@ namespace BlockPuzzle.Game
                 bool inner = RoundRectInside(x - x0 - thickness, y - y0 - thickness,
                     w - thickness * 2f, h - thickness * 2f, Mathf.Max(0f, radius - thickness));
                 return (outer && !inner) ? 1f : 0f;
-            }, color);
+            }, color, Box(x0, y0, x0 + w, y0 + h));
         }
 
         /// <summary>Fills the whole canvas from a callback that returns a colour per pixel.</summary>
         public void Paint(System.Func<float, float, Color> shader)
         {
-            for (int y = 0; y < Height; y++)
-            for (int x = 0; x < Width; x++)
-                Blend(x, y, shader(x + 0.5f, y + 0.5f), 1f);
+            Rows(Height, y =>
+            {
+                for (int x = 0; x < Width; x++)
+                    Blend(x, y, shader(x + 0.5f, y + 0.5f), 1f);
+            });
         }
 
         // ------------------------------------------------------------------ sampling
 
-        /// <summary>Super-samples a coverage function across each pixel and blends the result.</summary>
-        void Shade(System.Func<float, float, float> coverage, Color color)
+        /// <summary>
+        /// Super-samples a coverage function across each pixel and blends the result. Only the pixels
+        /// inside <paramref name="box"/> are visited: the shape covers nothing outside it.
+        /// </summary>
+        void Shade(System.Func<float, float, float> coverage, Color color, RectInt box)
         {
             float step = 1f / Samples;
             float weight = 1f / (Samples * Samples);
 
-            for (int y = 0; y < Height; y++)
-            for (int x = 0; x < Width; x++)
+            Rows(box.height, row =>
             {
-                float total = 0f;
-                for (int sy = 0; sy < Samples; sy++)
-                for (int sx = 0; sx < Samples; sx++)
-                    total += coverage(x + (sx + 0.5f) * step, y + (sy + 0.5f) * step) * weight;
+                int y = box.y + row;
+                for (int x = box.x; x < box.xMax; x++)
+                {
+                    float total = 0f;
+                    for (int sy = 0; sy < Samples; sy++)
+                    for (int sx = 0; sx < Samples; sx++)
+                        total += coverage(x + (sx + 0.5f) * step, y + (sy + 0.5f) * step) * weight;
 
-                if (total > 0f) Blend(x, y, color, total);
-            }
+                    if (total > 0f) Blend(x, y, color, total);
+                }
+            }, box.width);
         }
 
-        void ShadeErase(System.Func<float, float, float> coverage)
+        void ShadeErase(System.Func<float, float, float> coverage, RectInt box)
         {
             float step = 1f / Samples;
             float weight = 1f / (Samples * Samples);
 
-            for (int y = 0; y < Height; y++)
-            for (int x = 0; x < Width; x++)
+            Rows(box.height, row =>
             {
-                float total = 0f;
-                for (int sy = 0; sy < Samples; sy++)
-                for (int sx = 0; sx < Samples; sx++)
-                    total += coverage(x + (sx + 0.5f) * step, y + (sy + 0.5f) * step) * weight;
+                int y = box.y + row;
+                for (int x = box.x; x < box.xMax; x++)
+                {
+                    float total = 0f;
+                    for (int sy = 0; sy < Samples; sy++)
+                    for (int sx = 0; sx < Samples; sx++)
+                        total += coverage(x + (sx + 0.5f) * step, y + (sy + 0.5f) * step) * weight;
 
-                if (total > 0f) Erase(x, y, total);
-            }
+                    if (total > 0f) Erase(x, y, total);
+                }
+            }, box.width);
         }
+
+        /// <summary>
+        /// The pixels a shape spanning [x0, x1] × [y0, y1] can touch, clipped to the canvas. A pixel's
+        /// samples sit strictly inside it, so one pixel of margin on the low side is all it needs.
+        /// </summary>
+        RectInt Box(float x0, float y0, float x1, float y1)
+        {
+            if (float.IsNaN(x0) || float.IsNaN(y0) || float.IsNaN(x1) || float.IsNaN(y1))
+                return new RectInt(0, 0, Width, Height);
+
+            int px0 = Mathf.Max(0, Mathf.FloorToInt(Mathf.Max(Mathf.Min(x0, x1), -1f)) - 1);
+            int py0 = Mathf.Max(0, Mathf.FloorToInt(Mathf.Max(Mathf.Min(y0, y1), -1f)) - 1);
+            int px1 = Mathf.Min(Width, Mathf.CeilToInt(Mathf.Min(Mathf.Max(x0, x1), Width + 1f)) + 1);
+            int py1 = Mathf.Min(Height, Mathf.CeilToInt(Mathf.Min(Mathf.Max(y0, y1), Height + 1f)) + 1);
+            return new RectInt(px0, py0, Mathf.Max(0, px1 - px0), Mathf.Max(0, py1 - py0));
+        }
+
+        RectInt Bounds(Vector2[] points)
+        {
+            if (points.Length == 0) return new RectInt(0, 0, 0, 0);
+            float x0 = points[0].x, x1 = x0, y0 = points[0].y, y1 = y0;
+            foreach (var p in points)
+            {
+                x0 = Mathf.Min(x0, p.x); x1 = Mathf.Max(x1, p.x);
+                y0 = Mathf.Min(y0, p.y); y1 = Mathf.Max(y1, p.y);
+            }
+
+            return Box(x0, y0, x1, y1);
+        }
+
+        /// <summary>
+        /// Runs <paramref name="row"/> for 0..count-1, across the cores when there is enough work to
+        /// be worth it. Each row writes only its own pixels.
+        /// </summary>
+        static void Rows(int count, System.Action<int> row, int width = 256)
+        {
+            if (count <= 0) return;
+            if ((long)count * width < ParallelMinimum)
+            {
+                for (int i = 0; i < count; i++) row(i);
+                return;
+            }
+
+            System.Threading.Tasks.Parallel.For(0, count, row);
+        }
+
+        // Below this many pixels a job finishes before the threads it would be spread over wake up.
+        const int ParallelMinimum = 8192;
 
         static float CircleCoverage(float x, float y, float cx, float cy, float radius)
         {
@@ -316,6 +382,16 @@ namespace BlockPuzzle.Game
 
             tex.SetPixels(_pixels);
             tex.Apply();
+#if PRIZMA_AUTOTEST
+            // A fingerprint of every generated texture: a change to the rasteriser that is meant to
+            // be invisible is checked by comparing these before and after.
+            unchecked
+            {
+                long hash = 1469598103934665603L;
+                foreach (var b in tex.GetRawTextureData()) hash = (hash ^ b) * 1099511628211L;
+                Debug.Log($"[Raster] {name} {Width}x{Height} {hash:X16}");
+            }
+#endif
             return tex;
         }
 
@@ -325,7 +401,8 @@ namespace BlockPuzzle.Game
             var result = new Raster(Width / factor, Height / factor);
             float weight = 1f / (factor * factor);
 
-            for (int y = 0; y < result.Height; y++)
+            Rows(result.Height, y =>
+            {
             for (int x = 0; x < result.Width; x++)
             {
                 float r = 0f, g = 0f, b = 0f, a = 0f;
@@ -348,6 +425,7 @@ namespace BlockPuzzle.Game
                 float inv = weight / a;
                 result._pixels[y * result.Width + x] = new Color(r * inv, g * inv, b * inv, a);
             }
+            }, result.Width * factor * factor);
 
             return result;
         }

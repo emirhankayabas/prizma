@@ -5,6 +5,24 @@
 Bugünkü APK Google Play'e yüklenemez; yüklenebilse de yüklenmemeli. Eksiklerin çoğu teknik ve birkaç
 günde kapanır. Asıl uzun süren kısım Google'ın zorunlu kapalı test süreci.
 
+## Güncelleme — 2026-10-03: Aşama 0'ın kodla yapılan kısmı bitti
+
+| Madde | Durum |
+|---|---|
+| AAB | **Tamam.** *PRIZMA → Android Yayın Build'i (AAB + APK)* `Builds/PRIZMA.aab` (Play'e) ve aynı paketten `Builds/PRIZMA.apk` (telefona) üretir |
+| Yayın imzası | **Tamam.** Yükleme anahtarı `%USERPROFILE%\.prizma\prizma-upload.jks`, ayarı `signing.json` — ikisi de projenin ve git'in dışında. **Yedekle** (şifre yöneticisi + ikinci bir yer) |
+| versionCode | **Tamam.** 1 Ocak 2026'dan beri geçen dakika; hep artar, dosya tutmaz. versionName (`0.1.0`) elle |
+| Geliştirme paketleri | **Tamam.** `Editor/DevAssemblyFilter` yayın build'inde AI Assistant, Pipeline (HTTP sunucusu + Roslyn), Visual Scripting, AI Navigation derlemelerini çıkarır; Editor'de kalırlar |
+| `submitAnalytics` + Engine Diagnostics | **Tamam.** Yayın build'i ikisini de kapatır |
+| Build sonu kontrolü | **Tamam.** Hedef API ≥ 36, izin listesi (`ReleaseBuild.Checks.Allowed`), debug imza yok, debuggable değil, 16 KB (zip + ELF), oyuna geliştirme derlemesi girmemiş. Biri tutmazsa dosyalar silinir, neden `Builds/PRIZMA-build.txt`'de |
+| INTERNET izni | **Karar değişti:** reklam gelecek, izin listesinde. Reklam SDK'sı eklenince onun izinleri de listeye, gizlilik metnine ve Veri güvenliği formuna aynı değişiklikte girer |
+| Gizlilik politikası | **Metin hazır:** `docs/privacy-policy.html` (TR + EN). Eksik: geliştirici adı, e-posta, kalıcı adres. Adres `ShareSheet.PrivacyLink`'e yazılınca ayarlarda bağlantı çıkar |
+| Ekran uykusu, sürüm etiketi | Zaten yapılmıştı |
+| Dil | TR + EN; diller artık `Assets/Resources/Lang/*.json` |
+
+**Telefonda deneme:** eski APK debug anahtarıyla imzalıydı; yenisi farklı anahtarla imzalı olduğu için
+**üstüne kurulmaz** — önce eskisini kaldır (kayıtlı ilerleme silinir).
+
 ---
 
 ## Hazır olanlar

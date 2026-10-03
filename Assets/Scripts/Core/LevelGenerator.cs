@@ -99,18 +99,75 @@ namespace BlockPuzzle.Core
         public static LevelDefinition Generate(int number, int paletteSize = 6)
         {
             number = Math.Max(1, number);
-            lock (Cache)
+            return Once(Cache, number, () =>
             {
-                if (Cache.TryGetValue(number, out var cached)) return cached;
+                var rng = new Rng(unchecked(number * 7919 + 104729));
+                var built = Build(number, DifficultyTier(number), rng, unchecked(number * 7919 + 17), PickGoal(number),
+                    paletteSize, adventure: true);
+                built.Hardness = HardnessOf(number);
+                return built;
+            });
+        }
+
+        /// <summary>True once <see cref="Generate"/> would return at once.</summary>
+        public static bool IsReady(int number)
+        {
+            lock (Cache) return Cache.ContainsKey(Math.Max(1, number));
+        }
+
+        /// <summary>Starts building a level on a worker thread, unless it is built or already being built.</summary>
+        public static void Prefetch(int number, int paletteSize = 6)
+        {
+            if (IsReady(number)) return;
+            System.Threading.ThreadPool.QueueUserWorkItem(_ => Generate(number, paletteSize));
+        }
+
+        // Builds in flight, so a second caller waits for the first instead of building the same level
+        // again. The map prefetches the next level on a worker; a tap that came before it finished
+        // used to start a second build on the main thread — the whole cost again, as a frozen frame.
+        static readonly Dictionary<(Dictionary<int, LevelDefinition>, int), System.Threading.ManualResetEventSlim> Building =
+            new Dictionary<(Dictionary<int, LevelDefinition>, int), System.Threading.ManualResetEventSlim>();
+
+        static LevelDefinition Once(Dictionary<int, LevelDefinition> cache, int number, Func<LevelDefinition> build)
+        {
+            System.Threading.ManualResetEventSlim pending;
+            bool mine = false;
+            lock (cache)
+            {
+                if (cache.TryGetValue(number, out var cached)) return cached;
+                lock (Building)
+                {
+                    if (!Building.TryGetValue((cache, number), out pending))
+                    {
+                        pending = new System.Threading.ManualResetEventSlim(false);
+                        Building[(cache, number)] = pending;
+                        mine = true;
+                    }
+                }
             }
 
-            var rng = new Rng(unchecked(number * 7919 + 104729));
-            var built = Build(number, DifficultyTier(number), rng, unchecked(number * 7919 + 17), PickGoal(number),
-                paletteSize, adventure: true);
-            built.Hardness = HardnessOf(number);
+            if (!mine)
+            {
+                pending.Wait();
+                lock (cache)
+                {
+                    if (cache.TryGetValue(number, out var done)) return done;
+                }
+                // The other build failed; build it here.
+                return build();
+            }
 
-            lock (Cache) Cache[number] = built;
-            return built;
+            try
+            {
+                var built = build();
+                lock (cache) cache[number] = built;
+                return built;
+            }
+            finally
+            {
+                lock (Building) Building.Remove((cache, number));
+                pending.Set();
+            }
         }
 
         // ------------------------------------------------------------------ daily
@@ -166,11 +223,11 @@ namespace BlockPuzzle.Core
         public static LevelDefinition GenerateDaily(DateTime date, int paletteSize = 6)
         {
             int number = DailyNumber(date);
-            lock (DailyCache)
-            {
-                if (DailyCache.TryGetValue(number, out var cached)) return cached;
-            }
+            return Once(DailyCache, number, () => BuildDaily(date, number, paletteSize));
+        }
 
+        static LevelDefinition BuildDaily(DateTime date, int number, int paletteSize)
+        {
             int seedBase = unchecked(number * 48271 + 911);
             var rng = new Rng(unchecked(seedBase * 16807 + 12345));
 
@@ -182,9 +239,7 @@ namespace BlockPuzzle.Core
             bool early = DailyGrade(date.DayOfWeek) <= 1;
             var goal = rng.Chance(early ? 0.4 : 0.0) ? GoalKind.Lines : GoalKind.Gems;
 
-            var built = Build(number, DailyTier(date.DayOfWeek), rng, seedBase, goal, paletteSize, adventure: false);
-            lock (DailyCache) DailyCache[number] = built;
-            return built;
+            return Build(number, DailyTier(date.DayOfWeek), rng, seedBase, goal, paletteSize, adventure: false);
         }
 
         /// <summary>

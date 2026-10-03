@@ -27,6 +27,24 @@ namespace BlockPuzzle.Game
         Image _deep;
         Image _grid;
 
+        // Drawn by one shader in one opaque pass (PrizmaBackdrop) where the device runs it; the
+        // separate images above are the fallback. Either way the same layers, colours and order.
+        RectTransform _root;
+        Material _single;
+        float _breathe = 1f;
+        Vector2 _glowAt, _auraAt, _floorAt;
+        Vector2 _glowSize, _auraSize, _floorSize;
+
+        static readonly int DeepId = Shader.PropertyToID("_Deep");
+        static readonly int GlowId = Shader.PropertyToID("_Glow");
+        static readonly int AuraId = Shader.PropertyToID("_Aura");
+        static readonly int FloorId = Shader.PropertyToID("_Floor");
+        static readonly int GridColorId = Shader.PropertyToID("_GridColor");
+        static readonly int GlowRectId = Shader.PropertyToID("_GlowRect");
+        static readonly int AuraRectId = Shader.PropertyToID("_AuraRect");
+        static readonly int FloorRectId = Shader.PropertyToID("_FloorRect");
+        static readonly int SizeId = Shader.PropertyToID("_Size");
+
         /// <summary>The one backdrop on screen. Replaced when the interface is rebuilt for a theme.</summary>
         public static Backdrop Current { get; private set; }
 
@@ -97,10 +115,82 @@ namespace BlockPuzzle.Game
             var root = (RectTransform)transform;
             root.SetParent(parent, false);
             UiBuilder.Stretch(root);
+            _root = root;
 
             // Its own canvas: the glow breathes every frame, and on the shared canvas that
             // re-batched the whole UI every frame too. Nested this way only these few layers do.
-            gameObject.AddComponent<Canvas>();
+            var canvas = gameObject.AddComponent<Canvas>();
+
+            PlacePools();
+
+            var shader = Resources.Load<Shader>("Shaders/PrizmaBackdrop");
+            if (shader != null && shader.isSupported) BuildSingle(root, shader, canvas);
+            else BuildLayers(root);
+
+            Current = this;
+            _tint = Design.BgGlow;
+        }
+
+        /// <summary>
+        /// Where the three light pools sit. Centred on the board, which is also where the grid
+        /// converges: one focal point, so the eye is pulled to the same place by the light and by
+        /// the perspective. The backdrop is full-bleed while the page is inset, and the insets are
+        /// not symmetric (a cutout on top, the gesture bar below), so the page centre is not the
+        /// screen centre.
+        /// </summary>
+        void PlacePools()
+        {
+            var insets = AppController.SafeInsets;
+            float centre = GameScreen.BoardCenterY + (insets.y - insets.w) * 0.5f;
+
+            _glowSize = new Vector2(GlowSize, GlowSize);
+            _glowAt = new Vector2(0f, centre);
+
+            // A second, wider pool high up behind the score: the stage colour needs somewhere to
+            // show that the board does not cover. Invisible until a run has a light of its own.
+            _auraSize = new Vector2(GlowSize * 1.25f, GlowSize * 0.9f);
+            _auraAt = new Vector2(0f, centre + 820f);
+
+            // And one low, behind the tray, so the colour holds the page from top to bottom.
+            _floorSize = new Vector2(GlowSize * 1.3f, GlowSize * 0.75f);
+            _floorAt = new Vector2(0f, centre - 900f);
+        }
+
+        /// <summary>
+        /// Every layer in one opaque pass. Stacked as images they were seven full-screen blends a
+        /// frame — on a weak phone GPU more fill rate than the whole rest of the interface.
+        /// </summary>
+        void BuildSingle(RectTransform root, Shader shader, Canvas canvas)
+        {
+            _single = new Material(shader) { name = "Backdrop", hideFlags = HideFlags.HideAndDontSave };
+            _single.SetTexture("_Fade", Art.VerticalFade.texture);
+            _single.SetTexture("_Pool", Art.Pool.texture);
+            _single.SetTexture("_Grid", Art.Grid.texture);
+            _single.SetTexture("_Vignette", Art.Vignette.texture);
+            _single.SetTexture("_Grain", Art.Grain.texture);
+            // Under everything: the camera's clear colour, which is what the image layers lay over.
+            SetColour("_Base", Design.BgTop);
+            SetColour("_VignetteColor", Design.BgVignette.WithAlpha(VignetteAlpha));
+            SetColour("_GrainColor", Color.white.WithAlpha(GrainAlpha));
+
+            // The grain was a tiled image: one tile is the sprite's size at the canvas's pixel density.
+            var grain = Art.Grain;
+            float density = grain.pixelsPerUnit / Mathf.Max(0.0001f, canvas.referencePixelsPerUnit);
+            var tile = grain.rect.size / density;
+            _single.SetVector("_GrainTile", new Vector4(tile.x, tile.y, 0f, 0f));
+
+            var surface = UiBuilder.Image(root, "Surface", null, Color.white);
+            surface.type = Image.Type.Simple;
+            surface.material = _single;
+            UiBuilder.Stretch(surface.rectTransform);
+
+            Paint(Design.BgBottom, Design.BgGlow.WithAlpha(Design.GlowAlpha), Color.clear, Color.clear, Design.BgGrid);
+            PlaceSingle();
+        }
+
+        /// <summary>The layers as separate images — for a device that cannot run the backdrop shader.</summary>
+        void BuildLayers(RectTransform root)
+        {
 
             // The field itself is the camera's clear colour (AppController.ConfigureCamera) — the
             // same Design.BgTop, but a clear is free where a full-screen blended layer is not.
@@ -124,56 +214,88 @@ namespace BlockPuzzle.Game
             var grain = UiBuilder.Image(root, "Grain", Art.Grain, Color.white.WithAlpha(GrainAlpha));
             grain.type = Image.Type.Tiled;
             UiBuilder.Stretch(grain.rectTransform);
-
-            Current = this;
-            _tint = Design.BgGlow;
         }
 
         void OnDestroy()
         {
             if (Current == this) Current = null;
+            if (_single != null) Destroy(_single);
+        }
+
+        /// <summary>The colours of the layers the light moves.</summary>
+        void Paint(Color deep, Color glow, Color aura, Color floor, Color grid)
+        {
+            if (_single != null)
+            {
+                SetColour(DeepId, deep);
+                SetColour(GlowId, glow);
+                SetColour(AuraId, aura);
+                SetColour(FloorId, floor);
+                SetColour(GridColorId, grid);
+                return;
+            }
+
+            _deep.color = deep;
+            _glow.color = glow;
+            _aura.color = aura;
+            _floor.color = floor;
+            _grid.color = grid;
+        }
+
+        // In linear space, as the canvas hands its vertex colours to the GPU. SetColor converts only
+        // the properties a shader declares as colours; these are not declared, and passed as they
+        // were, every layer came out a gamma step too light.
+        void SetColour(int id, Color colour) => _single.SetVector(id, colour.linear);
+        void SetColour(string name, Color colour) => _single.SetVector(name, colour.linear);
+
+        /// <summary>The pools' rectangles, measured from the backdrop's bottom-left corner.</summary>
+        void PlaceSingle()
+        {
+            var size = _root.rect.size;
+            _single.SetVector(SizeId, new Vector4(size.x, size.y, 0f, 0f));
+            _single.SetVector(GlowRectId, PoolRect(size, _glowAt, _glowSize * _breathe));
+            _single.SetVector(AuraRectId, PoolRect(size, _auraAt, _auraSize));
+            _single.SetVector(FloorRectId, PoolRect(size, _floorAt, _floorSize));
+        }
+
+        static Vector4 PoolRect(Vector2 size, Vector2 at, Vector2 extent)
+        {
+            var min = size * 0.5f + at - extent * 0.5f;
+            return new Vector4(min.x, min.y, extent.x, extent.y);
         }
 
         void BuildGlow(RectTransform root)
         {
-            // Centred on the board, which is also where the grid converges: one focal point, so the
-            // eye is pulled to the same place by the light and by the perspective.
             _glow = UiBuilder.Image(root, "Glow", Art.Pool, Design.BgGlow.WithAlpha(Design.GlowAlpha));
             _glow.type = Image.Type.Simple;
-
             _glowRect = _glow.rectTransform;
-            _glowRect.sizeDelta = new Vector2(GlowSize, GlowSize);
-            // The backdrop is full-bleed while the page is inset, and the insets are not symmetric
-            // (a cutout on top, the gesture bar below), so the page centre is not the screen centre.
-            var insets = AppController.SafeInsets;
-            _glowRect.anchoredPosition = new Vector2(0f, GameScreen.BoardCenterY + (insets.y - insets.w) * 0.5f);
+            _glowRect.sizeDelta = _glowSize;
+            _glowRect.anchoredPosition = _glowAt;
 
-            // A second, wider pool high up behind the score: the stage colour needs somewhere to
-            // show that the board does not cover. Invisible until a run has a light of its own.
             _aura = UiBuilder.Image(root, "Aura", Art.Pool, Color.clear);
             _aura.type = Image.Type.Simple;
-            _aura.rectTransform.sizeDelta = new Vector2(GlowSize * 1.25f, GlowSize * 0.9f);
-            _aura.rectTransform.anchoredPosition = new Vector2(0f, GameScreen.BoardCenterY + 820f + (insets.y - insets.w) * 0.5f);
+            _aura.rectTransform.sizeDelta = _auraSize;
+            _aura.rectTransform.anchoredPosition = _auraAt;
 
-            // And one low, behind the tray, so the colour holds the page from top to bottom.
             _floor = UiBuilder.Image(root, "Floor", Art.Pool, Color.clear);
             _floor.type = Image.Type.Simple;
             // Both pools are fully clear outside a lit run; a clear mesh is then not drawn at all.
             _floor.canvasRenderer.cullTransparentMesh = true;
             _aura.canvasRenderer.cullTransparentMesh = true;
-            _floor.rectTransform.sizeDelta = new Vector2(GlowSize * 1.3f, GlowSize * 0.75f);
-            _floor.rectTransform.anchoredPosition = new Vector2(0f, GameScreen.BoardCenterY - 900f + (insets.y - insets.w) * 0.5f);
+            _floor.rectTransform.sizeDelta = _floorSize;
+            _floor.rectTransform.anchoredPosition = _floorAt;
         }
 
         void Update()
         {
             // An Editor domain reload wipes these plain fields without re-running Build, so the
             // backdrop idles instead of throwing every frame.
-            if (_glowRect == null) return;
+            if (_glowRect == null && _single == null) return;
 
             // Heat breathes a little larger: the room leaning in with the streak.
-            float breathe = 1f + BreatheDepth * Mathf.Sin(Time.unscaledTime * BreatheSpeed) + 0.08f * _heat;
-            _glowRect.localScale = new Vector3(breathe, breathe, 1f);
+            _breathe = 1f + BreatheDepth * Mathf.Sin(Time.unscaledTime * BreatheSpeed) + 0.08f * _heat;
+            if (_single != null) PlaceSingle();
+            else _glowRect.localScale = new Vector3(_breathe, _breathe, 1f);
 
             UpdateLight(Time.unscaledDeltaTime);
         }
@@ -220,18 +342,20 @@ namespace BlockPuzzle.Game
             // Mixed into the theme's glow rather than replacing it: the theme stays recognisable,
             // the stage reads as the light it is lit by. Alphas are low on purpose: the project
             // blends in linear space, where a little alpha shows far brighter than it reads here.
-            var glow = Color.Lerp(Design.BgGlow, light, 0.6f * amount);
-            _glow.color = glow.WithAlpha(Mathf.Clamp01(Design.GlowAlpha * (1f + 0.5f * _heat + 0.25f * amount)));
+            var glow = Color.Lerp(Design.BgGlow, light, 0.6f * amount)
+                .WithAlpha(Mathf.Clamp01(Design.GlowAlpha * (1f + 0.5f * _heat + 0.25f * amount)));
 
             // Measured off screenshots on the bright default ground: at 0.2 the aura read as a
             // white haze and a stage change as nothing. The light has to reach the ground itself.
-            _aura.color = light.WithAlpha(0.36f * amount + 0.08f * _heat);
+            var aura = light.WithAlpha(0.36f * amount + 0.08f * _heat);
             // Kept under the aura: the tray pieces sit on this part of the ground and must not sink into it.
-            _floor.color = light.WithAlpha(0.2f * amount + 0.05f * _heat);
-            _deep.color = Color.Lerp(Design.BgBottom, light * 0.55f, 0.3f * amount).WithAlpha(Design.BgBottom.a);
+            var floor = light.WithAlpha(0.2f * amount + 0.05f * _heat);
+            var deep = Color.Lerp(Design.BgBottom, light * 0.55f, 0.3f * amount).WithAlpha(Design.BgBottom.a);
 
             var grid = Design.BgGrid;
-            _grid.color = Color.Lerp(grid, light, 0.45f * amount).WithAlpha(grid.a * (1f + 0.6f * amount));
+            grid = Color.Lerp(grid, light, 0.45f * amount).WithAlpha(grid.a * (1f + 0.6f * amount));
+
+            Paint(deep, glow, aura, floor, grid);
         }
     }
 }

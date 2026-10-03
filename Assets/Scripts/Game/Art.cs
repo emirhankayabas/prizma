@@ -783,10 +783,15 @@ namespace BlockPuzzle.Game
                 float v = y / s;
                 float lum = Mathf.Lerp(0.72f, 0.98f, v);
 
-                // A bright lip around the top and a darker one underneath: a pressed-out disc.
+                // A bright lip around the top and a darker one underneath: a pressed-out disc. The lip's
+                // shade turns from dark to bright gradually around the sides — switching at the equator
+                // left a visible step halfway down every disc.
                 float edge = r - d;
                 if (edge < s * 0.06f)
-                    lum = y > c ? Mathf.Lerp(1f, lum, edge / (s * 0.06f)) : Mathf.Lerp(0.5f, lum, edge / (s * 0.06f));
+                {
+                    float side = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(-0.6f, 0.6f, (y - c) / r));
+                    lum = Mathf.Lerp(Mathf.Lerp(0.5f, 1f, side), lum, edge / (s * 0.06f));
+                }
 
                 float gx = x - s * 0.38f, gy = y - s * 0.70f;
                 float gloss = Mathf.Clamp01(1f - Mathf.Sqrt(gx * gx + gy * gy) / (s * 0.30f));

@@ -78,3 +78,10 @@ __pycache__/
 
 # Referans oyun kayitlari (docs/REFERANS-ANALIZ.md): yerelde kalir, depoya girmez
 *.mp4
+
+# ---------------------------------------------------------------- imza
+# Yükleme anahtarı projenin dışında durur (%USERPROFILE%\.prizma). Yanlışlıkla buraya
+# kopyalanırsa git'e girmesin.
+*.jks
+*.keystore
+signing.json

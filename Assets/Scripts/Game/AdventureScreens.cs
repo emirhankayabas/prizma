@@ -126,12 +126,46 @@ namespace BlockPuzzle.Game
             BuildHeader();
         }
 
+        System.Collections.IEnumerator _building;
+
+        /// <summary>
+        /// Builds the next part of the map, if any is left; true once the map is complete. The menu
+        /// calls this while it sits idle, a part a frame, so the first tap on the adventure does not
+        /// build all ~3000 images in one frame — a long freeze on a slow phone.
+        /// </summary>
+        public bool BuildAhead()
+        {
+            if (!_built) BuildStep();
+            return _built;
+        }
+
         void BuildMap()
         {
-            _built = true;
+            while (!_built) BuildStep();
+        }
+
+        readonly System.Diagnostics.Stopwatch _buildTime = new System.Diagnostics.Stopwatch();
+        long _longestStep;
+
+        void BuildStep()
+        {
+            if (_building == null) _building = BuildSteps();
+            long before = _buildTime.ElapsedMilliseconds;
+            _buildTime.Start();
+            bool more = _building.MoveNext();
+            _buildTime.Stop();
+            _longestStep = System.Math.Max(_longestStep, _buildTime.ElapsedMilliseconds - before);
+            if (!more) _building = null;
+
+            // One line in the log: what the map costs to build, and its worst single frame.
+            if (_built)
+                Debug.Log($"[PRIZMA] map built: {_buildTime.ElapsedMilliseconds} ms, longest step {_longestStep} ms");
+        }
+
+        System.Collections.IEnumerator BuildSteps()
+        {
             LayOutStops();
             _scroll.SetContentHeight(_contentHeight, App.PageHeight);
-            _scroll.Moved += OnScrolled;
 
             var layers = new RectTransform[Worlds, 7];
             for (int w = 0; w < Worlds; w++)
@@ -147,19 +181,32 @@ namespace BlockPuzzle.Game
                 layers[w, 6] = Layer(world, "Stops");
             }
 
+            yield return null;
+
             for (int w = 0; w < Worlds; w++)
             {
                 BuildField(layers[w, 0], w);
                 BuildDecor(layers[w, 1], w);
+                yield return null;
             }
 
             BuildRoad(layers);
-            foreach (var stop in _stops) BuildStop(layers[stop.World, 6], stop);
-            for (int w = 0; w < Worlds; w++) BuildCard(layers[w, 6], w);
+            yield return null;
+
+            for (int w = 0; w < Worlds; w++)
+            {
+                foreach (var stop in _stops)
+                    if (stop.World == w) BuildStop(layers[w, 6], stop);
+                BuildCard(layers[w, 6], w);
+                yield return null;
+            }
 
             _top = Layer(_content, "Top");
             BuildFinale();
             BuildMarker();
+
+            _scroll.Moved += OnScrolled;
+            _built = true;
         }
 
         static RectTransform Layer(RectTransform parent, string name)
@@ -723,7 +770,7 @@ namespace BlockPuzzle.Game
 
             // The next level is generated in the background, so tapping it starts instantly.
             int next = unlocked;
-            System.Threading.ThreadPool.QueueUserWorkItem(_ => LevelGenerator.Generate(next, Design.PaletteSize));
+            LevelGenerator.Prefetch(next, Design.PaletteSize);
         }
 
         protected override void OnHide() => Progress.Changed -= OnProgressChanged;
@@ -1626,7 +1673,7 @@ namespace BlockPuzzle.Game
             Sheet.SetBodyHeight(top);
 
             // Built behind the sheet while it is read.
-            System.Threading.ThreadPool.QueueUserWorkItem(_ => LevelGenerator.Generate(_level, Design.PaletteSize));
+            LevelGenerator.Prefetch(_level, Design.PaletteSize);
         }
 
         /// <summary>

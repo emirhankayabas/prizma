@@ -145,9 +145,16 @@ Girdi tek yoldan: `PointerRouter` her kare `Pointer.current` okur. Widget'lar (`
    - `Editor/ReleaseBuild` artık build öncesi `AppController`'ın bir sınıfa çözüldüğünü kontrol ediyor,
      build sırasında "missing script" uyarısını yakalıyor; ikisinden biri olursa APK'yı **siliyor**
      ve `Builds/PRIZMA-build.txt`'ye nedenini yazıyor. Bu korumayı kaldırma.
-   - APK'yı gerçek projeden al (menü: *PRIZMA → Android APK Al*, ya da Editor kapalıyken batchmode
+   - APK'yı gerçek projeden al (menü: *PRIZMA → Android Yayın Build'i (AAB + APK)*, ya da Editor kapalıyken batchmode
      `-executeMethod BlockPuzzle.EditorTools.ReleaseBuild.BuildAndroid`). Kopyadan build sadece
-     `Tools/autotest.ps1`'in Windows testi için.
+     test için — yalnız **kısa bir yoldaki** kopyadan (`C:\pzb`) Android doğrulaması alınabilir.
+   - Yayın build'i **AAB** (Play'e) + aynı paketten **evrensel APK** (telefona, bundletool) üretir, ikisi de
+     **yükleme anahtarıyla** imzalı: `%USERPROFILE%\.prizma\` (anahtar + `signing.json`) — projenin ve
+     git'in dışında, **asla repoya koyma**. versionCode = 2026'dan beri geçen dakika. Sonunda APK açılıp
+     kontrol edilir (`ReleaseBuild.Checks`): hedef API ≥36, izin listesi, imza, 16 KB, geliştirme derlemesi
+     yok. Yeni bir izin bilerek geliyorsa (reklam SDK'sı) `Checks.Allowed`'a nedeniyle ekle.
+     `DevAssemblyFilter` geliştirme paketlerini (AI Assistant, Pipeline, Visual Scripting, Navigation) yalnız
+     yayın build'inden çıkarır; Editor'de kalırlar.
    - Uzun proje yolu Android'de Gradle'ı düşürür (`prefab_command.bat` 260 karakter sınırını aşar,
      "CreateProcess error=2"). `%TEMP%` altındaki kopyalardan Android build alma.
 
@@ -439,13 +446,21 @@ satır ve `theme-check.py` kontrastları olduğu gibi kalır.
   Işığın zemine (`Deep`) işlemesi gerekti. `Floor` bilerek aura'dan düşük: tepsi parçaları o zeminde durur.
 - Boş havuzlar `cullTransparentMesh` ile çizilmez; ışık değişmiyorken `UpdateLight` hiçbir şeyi boyamaz.
 
-## Dil — `Str`
+## Dil — `Str` + `Assets/Resources/Lang/*.json`
 
-Arayüz **Türkçe + İngilizce**. Oyuncunun okuduğu her kelime `Str.cs`'te (`T(tr, en)`); çağrı yerinde metin
-yazma — grep ile Türkçe sabit kalmadığı doğrulandı, öyle kalsın. Varsayılan telefon dilinden
-(`GameSettings.Language`: Türkçe telefon → TR, diğerleri → EN). Değiştirmek `AppController.SetLanguage` →
-tema değişimi gibi arayüzü yeniden kurar. Ayarların ilk satırı, satır adı iki dilde ("DİL · LANGUAGE").
-Büyük harf `Str.Upper` ile — Türkçe i/İ kuralı. Yeni dil: `Language` enum'una ekle, `T`'ye sütun.
+Arayüz **Türkçe + İngilizce**; hedef yurt dışı pazarlar, dil sayısı artacak. Kelimeler **dil başına bir JSON**
+(`tr.json`, `en.json`: düz `"anahtar": "metin"` ya da liste), `Str` yalnız hangi anahtarın nereye gittiğini
+bilir ve dışa açık adları (`Str.Play`, `Str.LevelN(n)` …) değişmedi. Çağrı yerinde metin yazma.
+Dil kodu metin (`GameSettings.Language` = "tr"/"en"); eski sürümdeki sayı kaydı bir kez okunup taşınır.
+Varsayılan telefon dilinden, dosyası yoksa EN. Eksik anahtar EN'e düşer (boş etiket olmaz).
+Değiştirmek `AppController.SetLanguage` → tema değişimi gibi arayüzü yeniden kurar.
+- **Yeni dil = yeni dosya** (`de.json` …), kod değişmez. `_name` (seçicide görünen ad), `_culture` (sayı
+  gruplama, büyük harf), `_font` (Poppins'te olmayan harfler için `Resources/Fonts` altında yedek TMP font).
+  Sonra **`python Tools/lang-check.py`**: aynı anahtarlar, aynı `{0}`'lar, liste uzunlukları, Poppins'te
+  harf var mı. Poppins Batı/Orta Avrupa, Türkçe, Endonezce kapsar; **Kiril, Yunan, CJK, Arapça, Tay,
+  Vietnamca kapsamaz** — bunlar `_font` ister (Noto ailesi OFL; CJK fontları büyük, boyut kararı gerekir).
+- Tarih şablonları belirteçle: `{day} {MONTH}` / `{MON} {day}`.
+- Dil seçici segment, dosya listesinden kurulur; **3 dili sığdırır, 4. dil bir liste sayfası ister.**
 İngilizce metinler Türkçeden uzun: sabit genişlikli etiketleri **iki dilde** görüntüyle doğrula
 (AutoTest `20_en_*` görüntüleri bunun için).
 
@@ -570,8 +585,23 @@ Artık günde **bir** bulmaca var, herkese aynı, yalnız bugün oynanır. Kaça
 Ölçülen (editör, oyun içi): ana iş parçacığı **0.97 ms/kare**, GPU 0.27 ms, 36 draw call.
 Bütçe 16.7 ms — bolca yer var.
 
-Hâlâ 60 tutmazsa sıradaki aday: backdrop'un 5 tam ekran katmanını (Deep/Glow/Grid/Vignette/Grain)
-tek bir RenderTexture'a bir kez çizmek. Görünüm birebir kalmalı — Linear renk uzayında sRGB RT şart.
+### Zayıf telefon için (2026-10) — geri alma
+Masaüstünde hissedilmeyen, zayıf telefonda (PowerVR GE8320 / Mali-G52 sınıfı) kasan üç şey bulundu:
+- **Arka plan tek opak geçiş** (`Resources/Shaders/PrizmaBackdrop.shader`). Eskiden 7 yarı saydam tam ekran
+  katman (Deep, 3 havuz, Grid, Vignette, Grain) her kare bütün ekranı boyuyordu — ucuz GPU'nun dolum
+  hızını tek başına yiyordu. Shader aynı dokuları aynı sırayla aynı formülle harmanlar; oyun ekranında
+  fark ≤4/255. Desteklenmezse eski katmanlar (`Backdrop.BuildLayers`). **Renkler `SetVector(c.linear)`
+  ile** — `SetColor` yalnız Properties'te tanımlı renkleri lineerleştirir; ilk denemede her şey bir gama
+  adımı açık çıktı.
+- **Açılış 9.8 sn → 1.3 sn** (masaüstü). Neredeyse tamamı `Raster`'ın ilk çizimiydi: her şekil (ikondaki
+  ince çizgi bile) tüm tuvali piksel başı 9 örnekle tarıyordu. Artık yalnız şeklin sınır kutusu ve satırlar
+  çekirdeklere dağıtılıyor. 106 dokunun hash'i önce/sonra **bit bit aynı** (AutoTest `[Raster]` satırları).
+  `Paint`'e verilen fonksiyonlar **saf** kalmalı (ortak değişkene yazmasın) — paralel çalışıyorlar.
+  Ana iş parçacığı 5 sn'den uzun kilitlenirse Android ANR verir; açılış bu yüzden önemli.
+- **Takılmalar:** harita (~3000 görüntü, ~700 ms) menü boştayken kare kare önceden kurulur
+  (`LevelSelectScreen.BuildAhead`); arka planda üretilmekte olan bölüme dokununca ikinci kez üretilmez,
+  beklenir (`LevelGenerator.Once`), sayfa hazır olunca açılır (`AppController.OpenLevelStart`).
+Log'da `[PRIZMA] boot: … ms` ve `map built: … ms` satırları telefonda da (logcat) ölçü verir.
 
 ---
 

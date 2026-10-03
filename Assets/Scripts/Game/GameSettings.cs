@@ -88,29 +88,37 @@ namespace BlockPuzzle.Game
         /// <summary>Effective effects level after the master mute.</summary>
         public static float EffectiveSfxVolume => Muted ? 0f : SfxVolume;
 
+        // The language used to be stored as a number (0 Turkish, 1 English); since the languages
+        // became files it is their code. The old number is read once, so a choice made before the
+        // change survives it.
         const string LanguageKey = "blockpuzzle.language";
-        static int _language = -1;
+        const string LanguageCodeKey = "blockpuzzle.language.code";
+        static string _language;
 
         /// <summary>
-        /// The interface language. Until the player picks one it follows the phone: Turkish on a
-        /// Turkish phone, English everywhere else.
+        /// The interface language, as the code of its file in Resources/Lang ("tr", "en", …). Until
+        /// the player picks one it follows the phone, and English where there is no file for it.
         /// </summary>
-        public static Language Language
+        public static string Language
         {
             get
             {
-                if (_language < 0)
+                if (_language == null)
                 {
-                    int system = Application.systemLanguage == SystemLanguage.Turkish ? (int)Language.Turkish : (int)Language.English;
-                    _language = PlayerPrefs.GetInt(LanguageKey, system);
+                    if (PlayerPrefs.HasKey(LanguageCodeKey)) _language = PlayerPrefs.GetString(LanguageCodeKey);
+                    else if (PlayerPrefs.HasKey(LanguageKey)) _language = PlayerPrefs.GetInt(LanguageKey) == 0 ? "tr" : "en";
+                    else _language = Str.SystemLanguage();
+
+                    // A language whose file has since been removed.
+                    if (!Str.Has(_language)) _language = Str.SystemLanguage();
                 }
-                return (Language)_language;
+                return _language;
             }
             set
             {
-                if (Language == value) return;
-                _language = (int)value;
-                PlayerPrefs.SetInt(LanguageKey, _language);
+                if (Language == value || !Str.Has(value)) return;
+                _language = value;
+                PlayerPrefs.SetString(LanguageCodeKey, _language);
                 PlayerPrefs.Save();
                 Changed?.Invoke();
             }

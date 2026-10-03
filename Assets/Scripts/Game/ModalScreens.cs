@@ -85,14 +85,20 @@ namespace BlockPuzzle.Game
             SheetKit.RowIcon(languageGroup, "LanguageIcon", Icons.Globe, Design.Mint, SheetKit.RowLeft + Design.RowIcon * 0.5f, rowY);
             SheetKit.RowLabel(languageGroup, "LanguageLabel", Str.LanguageLabel, SheetKit.RowText, SheetKit.RowRight - SheetKit.RowText, rowY);
 
-            var choice = UiSegmented.Create(languageGroup, "LanguageChoice", Design.ContentWidth - Design.GroupPadding * 2f,
-                Str.LanguageName(Language.Turkish), Str.LanguageName(Language.English));
+            // One segment per language file. Fits three; a fourth language wants a list of its own.
+            var languages = Str.Languages;
+            var names = new string[languages.Count];
+            for (int i = 0; i < names.Length; i++) names[i] = Str.LanguageName(languages[i]);
+
+            var choice = UiSegmented.Create(languageGroup, "LanguageChoice", Design.ContentWidth - Design.GroupPadding * 2f, names);
             choice.Rect.anchoredPosition = new Vector2(0f, -language * 0.5f + Design.GroupPadding + Design.SegmentHeight * 0.5f);
-            choice.Select(GameSettings.Language == Language.English ? 1 : 0, false);
+            int current = 0;
+            for (int i = 0; i < languages.Count; i++) if (languages[i] == GameSettings.Language) current = i;
+            choice.Select(current, false);
             choice.Changed += i =>
             {
                 Audio.PlayClick();
-                App.SetLanguage(i == 1 ? Language.English : Language.Turkish);
+                App.SetLanguage(languages[i]);
             };
             top += language;
 
@@ -103,6 +109,21 @@ namespace BlockPuzzle.Game
             version.rectTransform.sizeDelta = new Vector2(Design.ContentWidth, versionRow);
             SheetKit.PinTop(version.rectTransform, top + Design.Space3);
             top += Design.Space3 + versionRow;
+
+            // The privacy policy, once it has an address: Play wants it reachable from inside the app.
+            if (!string.IsNullOrEmpty(ShareSheet.PrivacyLink))
+            {
+                var privacy = UiBuilder.Button(Body, "Privacy", new Vector2(Design.ContentWidth * 0.8f, Design.TouchTarget),
+                    UiButton.Style.Bare, Str.PrivacyPolicy, Design.Caption);
+                privacy.Label.color = Design.TextSecondary;
+                SheetKit.PinTop(privacy.Rect, top);
+                privacy.Clicked += () =>
+                {
+                    Audio.PlayClick();
+                    Application.OpenURL(ShareSheet.PrivacyLink);
+                };
+                top += Design.TouchTarget;
+            }
 
             Sheet.SetBodyHeight(top);
         }

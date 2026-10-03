@@ -252,7 +252,7 @@ namespace BlockPuzzle.Game
 
             // English: the same key screens after a language switch, which rebuilds in place.
             _app.ShowMenu();
-            _app.SetLanguage(Language.English);
+            _app.SetLanguage("en");
             yield return Wait(0.5f);
             yield return Shot("20_en_menu");
             _app.OpenSettings();
@@ -275,7 +275,7 @@ namespace BlockPuzzle.Game
             yield return Wait(0.8f);
             yield return Shot("24_en_level");
             _app.ShowMenu();
-            _app.SetLanguage(Language.Turkish);
+            _app.SetLanguage("tr");
 
             _app.OpenThemes();
             yield return Wait(0.5f);
@@ -515,7 +515,7 @@ namespace BlockPuzzle.Game
             yield return Wait(1.2f);
             yield return Shot("59b_map_world6");
 
-            _app.SetLanguage(Language.English);
+            _app.SetLanguage("en");
             yield return Wait(0.6f);
             _app.LevelsPage.AutoFocus(22);
             yield return Wait(1f);
@@ -524,7 +524,7 @@ namespace BlockPuzzle.Game
             yield return Wait(0.6f);
             yield return Shot("61_en_start");
             _app.CloseModal();
-            _app.SetLanguage(Language.Turkish);
+            _app.SetLanguage("tr");
         }
 
         /// <summary>Every sheet, caught mid-entrance and at rest — for working on their look and motion.</summary>
@@ -589,14 +589,14 @@ namespace BlockPuzzle.Game
             yield return Shot("91_chest");
             _app.CloseModal();
 
-            _app.SetLanguage(Language.English);
+            _app.SetLanguage("en");
             yield return Wait(0.4f);
             _app.ShowMenu();
             _app.OpenSettings();
             yield return Wait(1f);
             yield return Shot("92_en_settings");
             _app.CloseModal();
-            _app.SetLanguage(Language.Turkish);
+            _app.SetLanguage("tr");
         }
 
         /// <summary>The map alone, at the moments that show the most of it — for working on its look.</summary>

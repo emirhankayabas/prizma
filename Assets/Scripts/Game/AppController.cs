@@ -102,6 +102,7 @@ namespace BlockPuzzle.Game
 
             QualitySettings.vSyncCount = 0;
             Application.targetFrameRate = TargetFrameRate;
+            var boot = System.Diagnostics.Stopwatch.StartNew();
 
             ConfigureCamera();
             BuildCanvas();
@@ -114,9 +115,15 @@ namespace BlockPuzzle.Game
             Audio = gameObject.AddComponent<AudioKit>();
             Music = gameObject.AddComponent<MusicPlayer>();
             gameObject.AddComponent<PointerRouter>();
+            Str.ApplyFont();
+#if PRIZMA_AUTOTEST
+            Debug.Log($"[PRIZMA] audio + canvas: {boot.ElapsedMilliseconds} ms");
+#endif
 
             BuildInterface();
             ShowMenu();
+            // The frozen frame behind the splash: everything drawn and built before the first one.
+            Debug.Log($"[PRIZMA] boot: {boot.ElapsedMilliseconds} ms");
 
             // Today's puzzle is built while the menu is up, so the daily starts on the first tap.
             var today = DateTime.Now.Date;
@@ -141,8 +148,14 @@ namespace BlockPuzzle.Game
         {
             if (_camera != null) _camera.backgroundColor = Design.BgTop;
 
+#if PRIZMA_AUTOTEST
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+#endif
             _backdrop = new GameObject("Backdrop", typeof(RectTransform));
             _backdrop.AddComponent<Backdrop>().Build(_root);
+#if PRIZMA_AUTOTEST
+            Debug.Log($"[PRIZMA] built Backdrop: {watch.ElapsedMilliseconds} ms");
+#endif
 
             _pageLayer = UiBuilder.Child(_root, "Pages");
             _modalLayer = UiBuilder.Child(_root, "Modals");
@@ -331,9 +344,15 @@ namespace BlockPuzzle.Game
 
         T CreateScreen<T>(string name, RectTransform layer) where T : AppScreen
         {
+#if PRIZMA_AUTOTEST
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+#endif
             var go = new GameObject(name, typeof(RectTransform));
             var screen = go.AddComponent<T>();
             screen.Init(this, layer);
+#if PRIZMA_AUTOTEST
+            Debug.Log($"[PRIZMA] built {name}: {watch.ElapsedMilliseconds} ms");
+#endif
             return screen;
         }
 
@@ -388,10 +407,11 @@ namespace BlockPuzzle.Game
         }
 
         /// <summary>Switches the interface language and rebuilds it in place, like a theme change.</summary>
-        public void SetLanguage(Language language)
+        public void SetLanguage(string language)
         {
-            if (GameSettings.Language == language) return;
+            if (GameSettings.Language == language || !Str.Has(language)) return;
             GameSettings.Language = language;
+            Str.ApplyFont();
             RebuildInterface();
         }
 
@@ -425,6 +445,40 @@ namespace BlockPuzzle.Game
 
         /// <summary>A level's sheet: its goal, the streak and the boosters, and the button that starts it.</summary>
         public void OpenLevelStart(int number)
+        {
+            if (_levelWait != null) StopCoroutine(_levelWait);
+            _levelWait = null;
+
+            // The sheet reads the level as it opens. Usually it is built already (the map builds the
+            // next one ahead); otherwise it is built on a worker and the sheet opens when it is ready,
+            // instead of the build freezing the map for its whole length on a slow phone.
+            if (LevelGenerator.IsReady(number)) ShowLevelStart(number);
+            else _levelWait = StartCoroutine(OpenLevelStartWhenReady(number));
+        }
+
+        Coroutine _levelWait;
+
+        System.Collections.IEnumerator OpenLevelStartWhenReady(int number)
+        {
+            var page = _currentPage;
+            int modals = _modals.Count;
+            LevelGenerator.Prefetch(number, Design.PaletteSize);
+
+            // Bounded: the sheet would build it itself after that, as it always did.
+            float waited = 0f;
+            while (!LevelGenerator.IsReady(number) && waited < 5f)
+            {
+                waited += Time.unscaledDeltaTime;
+                yield return null;
+            }
+
+            _levelWait = null;
+            // The player went somewhere else while it was being built.
+            if (_currentPage != page || _modals.Count != modals) yield break;
+            ShowLevelStart(number);
+        }
+
+        void ShowLevelStart(int number)
         {
             _levelStart.Prepare(number);
             if (_modals.Contains(_levelStart)) CloseAllModals();
@@ -684,7 +738,20 @@ namespace BlockPuzzle.Game
                 else if (_currentPage == _levels) ShowMenu();
                 else if (_currentPage == _menu) SendToBackground();
             }
+
+            // The adventure map is built ahead while the menu sits idle, a part a frame, so the first
+            // tap on it does not build it all in one long frame.
+            if (_currentPage == _menu && _modals.Count == 0)
+            {
+                if (_menuIdleSince < 0f) _menuIdleSince = Time.unscaledTime;
+                else if (Time.unscaledTime - _menuIdleSince > MapAheadDelay) _levels.BuildAhead();
+            }
+            else _menuIdleSince = -1f;
         }
+
+        // Past the splash and the menu's own entrance, which should not share their frames with it.
+        const float MapAheadDelay = 3f;
+        float _menuIdleSince = -1f;
 
         /// <summary>
         /// Back on the title page leaves the app the way Android expects: sent to the background,
