@@ -94,8 +94,10 @@ Builds/
   koddaki referanslardan okur — `Assembly-CSharp` kâğıt üstünde her pakete bağlıdır.
 - Unity'nin veri gönderimi (donanım istatistikleri, Engine Diagnostics) yayın build'inde kapatılır.
 - **Telefona kurarken:** farklı anahtarla imzalı eski bir APK varsa üstüne kurulmaz; önce kaldır (ilerleme silinir).
-- Build **gerçek projeden** alınır. Editor açıkken doğrulama gerekiyorsa yalnız **kısa bir yoldaki** kopyadan
-  (`C:\pzb` gibi) — uzun yolda Gradle düşer (tuzak 9) — ve iş bitince kopya silinir.
+- Build **gerçek projeden** alınır. Editor kapalıysa batchmode ile doğrudan, açıksa menüden. **Önce Editor'ün gerçekten
+  açık olduğunu kontrol et** (`Get-CimInstance Win32_Process -Filter "Name='Unity.exe'"` → komut satırında `-projectPath`);
+  `unity mcp` işlemi Editor değildir — bir kez bu yüzden boşuna geçici kopya açıldı. Kopya gerekirse yalnız **kısa bir
+  yolda** (`C:\pzb` gibi; uzun yolda Gradle düşer, tuzak 9) ve iş bitince silinir.
 - `Builds/` **yalnız sürüm klasörleri** içerir. Başka çıktı (dinleme WAV'ları, test görüntüleri) oraya konmaz;
   `AudioCheck wav` çıktısı `Tools/AudioCheck/Output/` altında (git dışında).
 
