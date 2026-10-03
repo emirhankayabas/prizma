@@ -11,7 +11,7 @@ günde kapanır. Asıl uzun süren kısım Google'ın zorunlu kapalı test süre
 |---|---|
 | AAB | **Tamam.** *PRIZMA → Android Yayın Build'i (AAB + APK)* `Builds/<sürüm>-active/` altına `PRIZMA-<sürüm>.aab` (Play'e) ve aynı paketten `PRIZMA-<sürüm>.apk` (telefona) üretir; eski sürümün `-active` işareti kalkar |
 | Yayın imzası | **Tamam.** Yükleme anahtarı `%USERPROFILE%\.prizma\prizma-upload.jks`, ayarı `signing.json` — ikisi de projenin ve git'in dışında. **Yedekle** (şifre yöneticisi + ikinci bir yer) |
-| versionCode | **Tamam.** 1 Ocak 2026'dan beri geçen dakika; hep artar, dosya tutmaz. versionName (`0.1.0`) elle |
+| versionCode | **Tamam.** 1 Ocak 2026'dan beri geçen dakika; hep artar, dosya tutmaz. versionName (`1.0.0`, semantik sürüm) elle |
 | Geliştirme paketleri | **Tamam.** `Editor/DevAssemblyFilter` yayın build'inde AI Assistant, Pipeline (HTTP sunucusu + Roslyn), Visual Scripting, AI Navigation derlemelerini çıkarır; Editor'de kalırlar |
 | `submitAnalytics` + Engine Diagnostics | **Tamam.** Yayın build'i ikisini de kapatır |
 | Build sonu kontrolü | **Tamam.** Hedef API ≥ 36, izin listesi (`ReleaseBuild.Checks.Allowed`), debug imza yok, debuggable değil, 16 KB (zip + ELF), oyuna geliştirme derlemesi girmemiş. Biri tutmazsa dosyalar silinir, neden `Builds/PRIZMA-build.txt`'de |
