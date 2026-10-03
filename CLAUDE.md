@@ -706,7 +706,7 @@ aynı ilkellerle (Chime/Tone), aynı pentatonikte, üstüne biner:
   −14.5'te telefon hoparlöründe temizlemeye 2 dB'ye yaklaşıyordu; geri çekildi.
 - `surge` (−12): her 5. combo'da tam akor. `deal` (−19): tepsi yenilenince üç hafif tık.
 - `record` (rekor geçildi), `badge` (rozet), `streak` (seri sayacı).
-Dinlemek için: `AudioCheck wav <klasör>` → `4_KATMANLI_combo_dizisi.wav` / `4b_KATMANSIZ_...` (A/B).
+Dinlemek için: `AudioCheck wav <klasör>` → `4_layered_combo_sequence.wav` / `4b_unlayered_...` (A/B).
 
 ### Temizleme tek çağrı
 `PlayClear(lines, comboStreak, monoLines, perfectClear)`. Öncesinde iyi bir hamle

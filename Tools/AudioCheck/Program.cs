@@ -142,28 +142,28 @@ static class Program
                 SoundSynth.SampleRate, 0.8f), SoundMaster.DefaultEffectsVolume);
         var musicPresent = Scale(Upsample(WithPresence("music", musicRaw, SoundSynth.MusicSampleRate, 0.5f)), SoundMaster.DefaultMusicVolume);
 
-        var once = Sequence(raw, musicOld);
-        var sonra = Sequence(mastered, musicNew);
-        var telefon = Sequence(present, musicPresent);
+        var before = Sequence(raw, musicOld);
+        var after = Sequence(mastered, musicNew);
+        var phone = Sequence(present, musicPresent);
 
-        WriteWav(Path.Combine(folder, "1_ONCE_oyun_dizisi.wav"), once);
-        WriteWav(Path.Combine(folder, "2_SONRA_oyun_dizisi.wav"), sonra);
-        WriteWav(Path.Combine(folder, "3_SONRA_telefon_eki_oyun_dizisi.wav"), telefon);
+        WriteWav(Path.Combine(folder, "1_before_game_sequence.wav"), before);
+        WriteWav(Path.Combine(folder, "2_after_game_sequence.wav"), after);
+        WriteWav(Path.Combine(folder, "3_after_phone_presence_game_sequence.wav"), phone);
 
         // The added layers, A/B: one combo run climbing to ten, once as the game plays it now and
         // once with only the sounds it had before. Same timings, same music.
-        WriteWav(Path.Combine(folder, "4_KATMANLI_combo_dizisi.wav"), ComboRun(mastered, musicNew, layers: true));
-        WriteWav(Path.Combine(folder, "4b_KATMANSIZ_combo_dizisi.wav"), ComboRun(mastered, musicNew, layers: false));
+        WriteWav(Path.Combine(folder, "4_layered_combo_sequence.wav"), ComboRun(mastered, musicNew, layers: true));
+        WriteWav(Path.Combine(folder, "4b_unlayered_combo_sequence.wav"), ComboRun(mastered, musicNew, layers: false));
 
         // The same three through a phone speaker model, for listening on a desktop.
-        WriteWav(Path.Combine(folder, "hoparlor_simulasyonu", "1_ONCE.wav"), PhoneSpeaker(once));
-        WriteWav(Path.Combine(folder, "hoparlor_simulasyonu", "2_SONRA.wav"), PhoneSpeaker(sonra));
-        WriteWav(Path.Combine(folder, "hoparlor_simulasyonu", "3_SONRA_telefon_eki.wav"), PhoneSpeaker(telefon));
+        WriteWav(Path.Combine(folder, "phone_speaker_simulation", "1_before.wav"), PhoneSpeaker(before));
+        WriteWav(Path.Combine(folder, "phone_speaker_simulation", "2_after.wav"), PhoneSpeaker(after));
+        WriteWav(Path.Combine(folder, "phone_speaker_simulation", "3_after_phone_presence.wav"), PhoneSpeaker(phone));
 
         foreach (var name in raw.Keys)
         {
-            WriteWav(Path.Combine(folder, "clips", name + "_once.wav"), raw[name]);
-            WriteWav(Path.Combine(folder, "clips", name + "_sonra.wav"), mastered[name]);
+            WriteWav(Path.Combine(folder, "clips", name + "_before.wav"), raw[name]);
+            WriteWav(Path.Combine(folder, "clips", name + "_after.wav"), mastered[name]);
         }
 
         Console.WriteLine("wrote " + Path.GetFullPath(folder));
