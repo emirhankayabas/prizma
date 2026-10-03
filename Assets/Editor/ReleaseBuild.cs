@@ -15,12 +15,19 @@ namespace BlockPuzzle.EditorTools
 {
     /// <summary>
     /// The release build: one press makes the two files a release needs, and refuses to hand over
-    /// either if something is wrong with them.
+    /// either if something is wrong with them. Every version gets a folder of its own, named after
+    /// the version (Player Settings → Version, e.g. 1.0.0), and the newest good one is marked active:
     ///
-    ///   Builds/PRIZMA.aab — what is uploaded to Google Play. Play builds the per-phone APKs from it
-    ///                       and signs them with its own key ("Play App Signing").
-    ///   Builds/PRIZMA.apk — the same bundle, made into one APK that installs on any phone, for
-    ///                       trying the release on a real device before uploading it.
+    ///   Builds/1.0.0/                  an earlier release, kept as it was shipped
+    ///   Builds/1.1.0-active/           the current one
+    ///       PRIZMA-1.1.0.aab           what is uploaded to Google Play. Play builds the per-phone APKs
+    ///                                  from it and signs them with its own key ("Play App Signing")
+    ///       PRIZMA-1.1.0.apk           the same bundle as one APK that installs on any phone, for
+    ///                                  trying the release on a real device before uploading it
+    ///       build-report.txt           what was checked, and how it came out
+    ///   Builds/1.2.0-failed/           a build that did not pass: only its report, the active one untouched
+    ///
+    /// Building a version that already has a folder replaces that folder.
     ///
     /// Both are signed with the upload key (<see cref="Signing"/>), never the debug key. The version
     /// code counts up by itself (<see cref="VersionCode"/>). Development packages are left out of the
@@ -31,11 +38,11 @@ namespace BlockPuzzle.EditorTools
     /// once went out where the build could not resolve that script: it built "successfully", with
     /// only a warning in the log, and on the phone the Unity splash gave way to the empty default
     /// sky. So this checks the script before building and watches the build for a missing-script
-    /// warning. Any failure deletes the outputs. The outcome is written to Builds/PRIZMA-build.txt.
+    /// warning. Any failure deletes the outputs and leaves the active version where it was.
     ///
     /// Three ways in: the menu, the command line on the closed project
     ///   Unity -batchmode -quit -projectPath &lt;project&gt; -buildTarget Android
-    ///         -executeMethod BlockPuzzle.EditorTools.ReleaseBuild.BuildAndroid [-releaseBuildDir &lt;dir&gt;]
+    ///         -executeMethod BlockPuzzle.EditorTools.ReleaseBuild.BuildAndroid [-releaseBuildDir &lt;Builds folder&gt;]
     /// or, with the Editor already open, an empty file at Temp/prizma-build-request, which the next
     /// script reload picks up (<see cref="BuildRequest"/>).
     /// </summary>
@@ -50,13 +57,22 @@ namespace BlockPuzzle.EditorTools
 
         public static void BuildAndroid() => Build(Arg("-releaseBuildDir") ?? DefaultDir, exit: true);
 
-        static void Build(string dir, bool exit)
+        const string ActiveSuffix = "-active";
+        const string FailedSuffix = "-failed";
+        const string BuildingSuffix = "-building";
+
+        static void Build(string root, bool exit)
         {
+            root = Path.GetFullPath(root);
+            string version = PlayerSettings.bundleVersion.Trim();
+
+            // Built into a folder of its own first; it only takes the version's name once it passes.
+            string dir = Path.Combine(root, version + BuildingSuffix);
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
             Directory.CreateDirectory(dir);
-            string aab = Path.GetFullPath(Path.Combine(dir, "PRIZMA.aab"));
-            string apk = Path.GetFullPath(Path.Combine(dir, "PRIZMA.apk"));
-            foreach (var old in new[] { aab, apk })
-                if (File.Exists(old)) File.Delete(old);
+
+            string aab = Path.Combine(dir, $"PRIZMA-{version}.aab");
+            string apk = Path.Combine(dir, $"PRIZMA-{version}.apk");
 
             var problems = new List<string>();
             var notes = new List<string>();
@@ -85,25 +101,61 @@ namespace BlockPuzzle.EditorTools
                 foreach (var file in new[] { aab, apk })
                     if (File.Exists(file)) File.Delete(file);
 
+            // The folder's final name: the new active version, or a failure beside the active one.
+            string final = Path.Combine(root, version + (ok ? ActiveSuffix : FailedSuffix));
+
             var lines = new List<string>
             {
                 $"PRIZMA release build — {DateTime.Now:yyyy-MM-dd HH:mm:ss}",
                 $"Sonuç: {(ok ? "BAŞARILI" : "BAŞARISIZ")} (Unity: {result})",
-                $"Sürüm: {PlayerSettings.bundleVersion} · versionCode {versionCode}",
-                $"Mağaza paketi (Google Play'e yüklenir): {aab}" + (File.Exists(aab) ? $" — {new FileInfo(aab).Length / (1024 * 1024)} MB" : ""),
-                $"Telefon APK'sı (doğrudan kurulur): {apk}" + (File.Exists(apk) ? $" — {new FileInfo(apk).Length / (1024 * 1024)} MB" : ""),
+                $"Sürüm: {version} · versionCode {versionCode}",
+                $"Klasör: {final}",
+                $"Mağaza paketi (Google Play'e yüklenir): {Path.GetFileName(aab)}" + (File.Exists(aab) ? $" — {new FileInfo(aab).Length / (1024 * 1024)} MB" : " — yok"),
+                $"Telefon APK'sı (doğrudan kurulur): {Path.GetFileName(apk)}" + (File.Exists(apk) ? $" — {new FileInfo(apk).Length / (1024 * 1024)} MB" : " — yok"),
                 "Development Build: kapalı"
             };
             lines.AddRange(notes.Select(n => "  " + n));
             lines.AddRange(problems.Select(p => "Sorun: " + p));
 
-            File.WriteAllLines(Path.Combine(dir, "PRIZMA-build.txt"), lines);
+            File.WriteAllLines(Path.Combine(dir, "build-report.txt"), lines);
+            Publish(root, version, dir, final, ok);
 
             foreach (var line in lines)
                 if (ok) Debug.Log("[ReleaseBuild] " + line);
                 else Debug.LogError("[ReleaseBuild] " + line);
 
             if (exit) EditorApplication.Exit(ok ? 0 : 1);
+        }
+
+        /// <summary>
+        /// Gives the finished folder its name. A good build takes the active mark from whichever
+        /// version had it and replaces any earlier folder of the same version; a failed one replaces
+        /// only an earlier failure of the same version, so the active build is never disturbed by it.
+        /// </summary>
+        static void Publish(string root, string version, string dir, string final, bool ok)
+        {
+            if (ok)
+            {
+                foreach (var other in Directory.GetDirectories(root))
+                {
+                    string name = Path.GetFileName(other);
+                    if (!name.EndsWith(ActiveSuffix) || other == dir) continue;
+
+                    string plain = Path.Combine(root, name.Substring(0, name.Length - ActiveSuffix.Length));
+                    if (Directory.Exists(plain)) Directory.Delete(plain, true);
+                    Directory.Move(other, plain);
+                }
+
+                // An earlier build of this same version, active or not, or its failure: replaced.
+                foreach (var stale in new[] { version, version + FailedSuffix })
+                {
+                    string path = Path.Combine(root, stale);
+                    if (Directory.Exists(path)) Directory.Delete(path, true);
+                }
+            }
+
+            if (Directory.Exists(final)) Directory.Delete(final, true);
+            Directory.Move(dir, final);
         }
 
         static void CheckRoot(List<string> problems)
