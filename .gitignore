@@ -76,7 +76,7 @@ sysinfo.txt
 # ---------------------------------------------------------------- Python araçları
 __pycache__/
 
-# Referans oyun kayitlari (docs/REFERANS-ANALIZ.md): yerelde kalir, depoya girmez
+# Referans oyun kayitlari (Docs/ReferenceAnalysis.md): yerelde kalir, depoya girmez
 *.mp4
 
 # ---------------------------------------------------------------- imza
@@ -85,3 +85,6 @@ __pycache__/
 *.jks
 *.keystore
 signing.json
+
+# AudioCheck dinleme çıktısı (WAV): yeniden üretilebilir, depoya girmez
+/Tools/AudioCheck/Output/

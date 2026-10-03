@@ -94,14 +94,15 @@ Builds/
 - **Telefona kurarken:** farklı anahtarla imzalı eski bir APK varsa üstüne kurulmaz; önce kaldır (ilerleme silinir).
 - Build **gerçek projeden** alınır. Editor açıkken doğrulama gerekiyorsa yalnız **kısa bir yoldaki** kopyadan
   (`C:\pzb` gibi) — uzun yolda Gradle düşer (tuzak 9) — ve iş bitince kopya silinir.
-- `Builds/audio_layers/` build değil: `Tools/AudioCheck wav` dinleme çıktısı.
+- `Builds/` **yalnız sürüm klasörleri** içerir. Başka çıktı (dinleme WAV'ları, test görüntüleri) oraya konmaz;
+  `AudioCheck wav` çıktısı `Tools/AudioCheck/Output/` altında (git dışında).
 
 ### 2.2 Unity'siz araçlar (`Tools/`)
 
 | Araç | Ne zaman | Ne yapar |
 |---|---|---|
 | `CoreHarness` | Denge ya da kural değişince **önce bu** | `<Unity>/Editor/Data/DotNetSdk/dotnet.exe build Tools/CoreHarness -c Release`, sonra `Harness.dll tests` / `balance 40` / `levels 1 60` / `daily 28` / **`perf`** (dağıtım başına süre + bellek; aday ya da terim büyütünce koş) |
-| `AudioCheck` | Ses seviyesine ya da tarife dokununca | `measure`: tepe, yükseklik, telefon hoparlörü modeli, limiter. `wav <klasör>`: klipler + oyunun gerçek zamanlamasıyla dizi (before / after / phone presence) + hoparlör simülasyonu — **diziyi dinlet** |
+| `AudioCheck` | Ses seviyesine ya da tarife dokununca | `wav Tools/AudioCheck/Output/audio_layers` · `measure`: tepe, yükseklik, telefon hoparlörü modeli, limiter. `wav <klasör>`: klipler + oyunun gerçek zamanlamasıyla dizi (before / after / phone presence) + hoparlör simülasyonu — **diziyi dinlet** |
 | `compile-check.ps1` | Her kod değişikliğinden sonra | Oyunu (normal + `PRIZMA_AUTOTEST`) ve editor kodunu Unity'nin argümanlarıyla derler; Editor kapalı/odakta değilken de |
 | `autotest.ps1` | Arayüz değişikliğinde | Projeyi `%TEMP%`'e kopyalar, `PRIZMA_AUTOTEST` Windows build'i alır, her ekranın görüntüsünü `%TEMP%\prizma_autotest\shots` altına yazar (~5 dk) |
 | `theme-check.py` | Palet değişince | Kontrast ve ΔE kuralları (§4.6) |
@@ -599,14 +600,14 @@ satır ve tahtayı sıfırlama · **Macera** (100 bölüm, 7 öğe, güçlendiri
 hatırlatıcı + paylaşım · başarımlar · kaldığın yerden devam · istatistikler · temalar · Spektrum · yazısız öğretici ·
 haptik · uygulama ikonu · animasyonlar (kırıklar, sarsıntı, şok halkası, konfeti) · TR/EN · 60 FPS ve zayıf telefon
 optimizasyonları · **yayın hattı** (imzalı AAB + APK, sürümlü klasörler, otomatik versionCode, build sonu kontrolleri) ·
-JSON dil dosyaları · gizlilik politikası metni (`docs/privacy-policy.html`).
+JSON dil dosyaları · gizlilik politikası metni (`Docs/PrivacyPolicy.html`).
 
 **Sırada — gerçek cihaz** (masaüstünde ölçülemeyenler): açılış süresi ve zayıf telefonda FPS · önizlemenin parmak altında
 okunurluğu · yardımın fark edilmezliği · seslerin telefon hoparlöründe tınısı (+ `AddPresence` kararı) · dokunma-ses
 gecikmesi · sürükleme mesafesi (`GameScreen._liftPixels`) · güç çubuğunun başparmak erişimi · bomba nişanı · haptik
 şiddeti · **hatırlatıcı bildirimi**.
 
-**Yayın için kullanıcıdan beklenenler** (ayrıntı `docs/YAYIN-HAZIRLIK.md`): geliştirici adı + e-posta (gizlilik metni) ·
+**Yayın için kullanıcıdan beklenenler** (ayrıntı `Docs/ReleaseReadiness.md`): geliştirici adı + e-posta (gizlilik metni) ·
 gizlilik politikasının kalıcı adresi (→ `ShareSheet.PrivacyLink`) · Play Console hesabı · anahtar yedeği · 12 kişi / 14 gün
 kapalı test · **isim kararı**: "Prizma Puzzle Prime" adlı yerleşik bir bulmaca serisi var (Xbox/Switch/Microsoft Store);
 mağaza başlığı her durumda "İsim: Block Puzzle" kalıbında olmalı.

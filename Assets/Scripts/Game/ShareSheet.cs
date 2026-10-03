@@ -12,7 +12,7 @@ namespace BlockPuzzle.Game
         public static string StoreLink => "https://play.google.com/store/apps/details?id=" + Application.identifier;
 
         /// <summary>
-        /// Where the privacy policy is published (docs/privacy-policy.html). Play asks for the link on
+        /// Where the privacy policy is published (Docs/PrivacyPolicy.html). Play asks for the link on
         /// the store page and for the policy to be reachable inside the app; settings shows a link
         /// to it once this is filled in.
         /// </summary>

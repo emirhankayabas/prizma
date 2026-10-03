@@ -419,7 +419,7 @@ namespace BlockPuzzle.EditorTools
 
         /// <summary>
         /// Opens the finished APK and checks what Play and the phone will see — the same checks
-        /// that were once done by hand (docs/YAYIN-HAZIRLIK.md), now on every build.
+        /// that were once done by hand (Docs/ReleaseReadiness.md), now on every build.
         /// </summary>
         static class Checks
         {

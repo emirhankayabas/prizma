@@ -16,7 +16,7 @@ günde kapanır. Asıl uzun süren kısım Google'ın zorunlu kapalı test süre
 | `submitAnalytics` + Engine Diagnostics | **Tamam.** Yayın build'i ikisini de kapatır |
 | Build sonu kontrolü | **Tamam.** Hedef API ≥ 36, izin listesi (`ReleaseBuild.Checks.Allowed`), debug imza yok, debuggable değil, 16 KB (zip + ELF), oyuna geliştirme derlemesi girmemiş. Biri tutmazsa dosyalar silinir, neden `Builds/PRIZMA-build.txt`'de |
 | INTERNET izni | **Karar değişti:** reklam gelecek, izin listesinde. Reklam SDK'sı eklenince onun izinleri de listeye, gizlilik metnine ve Veri güvenliği formuna aynı değişiklikte girer |
-| Gizlilik politikası | **Metin hazır:** `docs/privacy-policy.html` (TR + EN). Eksik: geliştirici adı, e-posta, kalıcı adres. Adres `ShareSheet.PrivacyLink`'e yazılınca ayarlarda bağlantı çıkar |
+| Gizlilik politikası | **Metin hazır:** `Docs/PrivacyPolicy.html` (TR + EN). Eksik: geliştirici adı, e-posta, kalıcı adres. Adres `ShareSheet.PrivacyLink`'e yazılınca ayarlarda bağlantı çıkar |
 | Ekran uykusu, sürüm etiketi | Zaten yapılmıştı |
 | Dil | TR + EN; diller artık `Assets/Resources/Lang/*.json` |
 
