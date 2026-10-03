@@ -74,7 +74,9 @@ Builds/
 └── 1.2.0-failed/           geçmeyen build: yalnız rapor; aktif sürüme dokunulmaz
 ```
 
-- **Sürüm adı** Player Settings → Version (`bundleVersion`); yeni bir sürümden önce **elle artır**. Aynı sürüm
+- **Sürüm adı** Player Settings → Version (`bundleVersion`), **semantik sürüm** `MAJOR.MINOR.PATCH`, ilk yayın
+  **1.0.0**. Hata düzeltme / küçük ayar → PATCH (1.0.1) · yeni özellik (dil, dünya, reklam) → MINOR (1.1.0) · büyük
+  yenilenme (yeni mod, kayıt formatı) → MAJOR (2.0.0). Yeni bir sürümden önce **elle artır**. Aynı sürüm
   yeniden build alınırsa o sürümün klasörü yenilenir. **versionCode** kendiliğinden: 1 Ocak 2026'dan beri geçen
   dakika (hep artar, dosya tutmaz).
 - **AAB** Play'e yüklenir; Play her telefona APK'yı kendi üretir ve kendi anahtarıyla imzalar (Play App Signing).

@@ -42,7 +42,7 @@ günde kapanır. Asıl uzun süren kısım Google'ın zorunlu kapalı test süre
    gerekiyor. Anahtar kaybolursa uygulama bir daha güncellenemez — **yedeklenmesi şart**.
 3. **Format APK.** Play yeni uygulamalar için AAB istiyor; `Editor/ReleaseBuild` şu an
    `buildAppBundle = false` yapıyor.
-4. **Sürüm `0.1.0` / versionCode `1`.** Her yüklemede versionCode artmalı; build betiği otomatik yapmalı.
+4. **Sürüm `1.0.0` (semantik sürüm) / versionCode otomatik.** Her yüklemede versionCode artmalı; build betiği otomatik yapmalı.
 5. **Geliştirme araçları oyunun içine giriyor** (APK açılıp incelendi):
    - `com.unity.pipeline` (deneysel): oyun açılırken sahneden önce `RuntimePipelineBootstrap` ve
      `ConsoleLogCapture` çalışıyor; her log satırı bir tampona kopyalanıyor. İçinde HTTP sunucusu
